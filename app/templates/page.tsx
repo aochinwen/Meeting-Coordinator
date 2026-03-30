@@ -57,7 +57,7 @@ export default function TemplatesPage() {
 
   const handleAddTask = () => {
     if (newTask.trim()) {
-      setTasks([...tasks, { id: Math.random().toString(), description: newTask.trim() }]);
+      setTasks([...tasks, { id: crypto.randomUUID(), description: newTask.trim() }]);
       setNewTask('');
     }
   };
