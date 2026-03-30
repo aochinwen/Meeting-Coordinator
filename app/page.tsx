@@ -66,10 +66,13 @@ export default async function DashboardPage() {
     
     // Get real attendees with names
     const participantIds = meeting.meeting_participants?.map(p => p.user_id) || [];
-    const attendees = participantIds.slice(0, 3).map(id => ({
-      name: profileMap.get(id) || '?',
-      initials: (profileMap.get(id) || '?').charAt(0).toUpperCase()
-    }));
+    const attendees = participantIds.slice(0, 3).map(id => {
+      const name = profileMap.get(id) || '?';
+      return {
+        name,
+        initials: name.charAt(0).toUpperCase()
+      };
+    });
     const remainingCount = Math.max(0, participantIds.length - 3);
     
     // Fallback icons based on meeting title hash
