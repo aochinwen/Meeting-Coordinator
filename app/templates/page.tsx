@@ -82,7 +82,6 @@ export default function TemplatesPage() {
         if (!existingUser) {
           // Create new user via auth (this would typically require admin privileges)
           // For now, we'll just log that a new user should be created
-          console.log('New user to create:', value.trim());
         }
       } catch (error) {
         console.error('Error checking/creating user:', error);
@@ -102,7 +101,6 @@ export default function TemplatesPage() {
           .single();
         
         if (!existingUser) {
-          console.log('New user to create:', value.trim());
         }
       } catch (error) {
         console.error('Error checking/creating user:', error);
@@ -133,7 +131,6 @@ export default function TemplatesPage() {
           chairmanId = chairmanProfile.id;
         } else {
           // Chairman not found - could create new user here
-          console.log('Chairman not found:', chairman.trim());
         }
       }
       
@@ -150,11 +147,8 @@ export default function TemplatesPage() {
           coordinatorId = coordinatorProfile.id;
         } else {
           // Coordinator not found - could create new user here
-          console.log('Coordinator not found:', coordinator.trim());
         }
       }
-
-      console.log('Saving template with:', { chairmanId, coordinatorId });
 
       // Save template
       const { data: templateData, error: templateError } = await supabase
@@ -174,8 +168,6 @@ export default function TemplatesPage() {
         console.error('Template insert error:', templateError);
         throw templateError;
       }
-      
-      console.log('Template saved:', templateData);
       
       // Save tasks
       if (tasks.length > 0 && templateData) {
