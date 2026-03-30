@@ -216,37 +216,34 @@ export default function TemplatesPage() {
     setEditingTemplateId(template.id);
     setTemplateName(template.name);
     
-    // Load chairman and coordinator names
+    // Load chairman, coordinator names and tasks in parallel
+    const [chairmanRes, coordinatorRes, tasksRes] = await Promise.all([
+      template.chairman_id
+        ? supabase.from('profiles').select('name').eq('id', template.chairman_id).maybeSingle()
+        : Promise.resolve({ data: null }),
+      template.coordinator_id
+        ? supabase.from('profiles').select('name').eq('id', template.coordinator_id).maybeSingle()
+        : Promise.resolve({ data: null }),
+      supabase.from('template_checklist_tasks').select('*').eq('template_id', template.id)
+    ]);
+
+    // Update chairman name state
     if (template.chairman_id) {
-      const { data } = await supabase
-        .from('profiles')
-        .select('name')
-        .eq('id', template.chairman_id)
-        .single();
-      if (data) setChairman(data.name);
+      if (chairmanRes.data) setChairman(chairmanRes.data.name);
     } else {
       setChairman('');
     }
     
+    // Update coordinator name state
     if (template.coordinator_id) {
-      const { data } = await supabase
-        .from('profiles')
-        .select('name')
-        .eq('id', template.coordinator_id)
-        .single();
-      if (data) setCoordinator(data.name);
+      if (coordinatorRes.data) setCoordinator(coordinatorRes.data.name);
     } else {
       setCoordinator('');
     }
     
-    // Load tasks
-    const { data: tasksData } = await supabase
-      .from('template_checklist_tasks')
-      .select('*')
-      .eq('template_id', template.id);
-    
-    if (tasksData) {
-      setTasks(tasksData.map(t => ({ id: t.id, description: t.description })));
+    // Update tasks state
+    if (tasksRes.data) {
+      setTasks(tasksRes.data.map(t => ({ id: t.id, description: t.description })));
     } else {
       setTasks([]);
     }
