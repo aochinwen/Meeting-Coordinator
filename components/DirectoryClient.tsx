@@ -27,7 +27,7 @@ export function DirectoryClient({ initialUsers, activeTeamsCount }: DirectoryCli
 
   const filteredUsers = users.filter((u) => {
     const matchesSearch = u.name.toLowerCase().includes(search.toLowerCase()) ||
-                          u.division.toLowerCase().includes(search.toLowerCase());
+                          (u.division && u.division.toLowerCase().includes(search.toLowerCase()));
     const matchesRank = rankFilter === 'Filter by Rank' || u.rank === rankFilter;
     return matchesSearch && matchesRank;
   });
@@ -39,7 +39,8 @@ export function DirectoryClient({ initialUsers, activeTeamsCount }: DirectoryCli
     return `${name.toLowerCase().replace(/\s+/g, '.')}@example.com`;
   };
 
-  const getRankBadgeProps = (rank: string) => {
+  const getRankBadgeProps = (rank: string | null | undefined) => {
+    if (!rank) return { bg: 'bg-gray-100', text: 'text-gray-800' };
     const lowerRank = rank.toLowerCase();
     if (lowerRank.includes('exec')) return { bg: 'bg-amber', text: 'text-status-amber' };
     if (lowerRank.includes('manager')) return { bg: 'bg-warm', text: 'text-text-primary' };
@@ -66,6 +67,7 @@ export function DirectoryClient({ initialUsers, activeTeamsCount }: DirectoryCli
       .from('profiles')
       .insert([
         {
+          id: crypto.randomUUID(), // Mock ID, real implementation uses auth triggers
           name: newUser.name,
           division: newUser.division,
           rank: newUser.rank,

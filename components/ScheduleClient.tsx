@@ -29,7 +29,7 @@ interface Template {
 interface UserData {
   id: string;
   name: string;
-  division: string;
+  division: string | null;
 }
 
 export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleClientProps) {

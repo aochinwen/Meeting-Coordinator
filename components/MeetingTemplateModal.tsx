@@ -7,8 +7,8 @@ import { cn } from '@/lib/utils';
 interface Template {
   id: string;
   name: string;
-  description?: string;
-  defaultDuration?: number;
+  description?: string | null;
+  defaultDuration?: number | null;
 }
 
 interface MeetingTemplateModalProps {
