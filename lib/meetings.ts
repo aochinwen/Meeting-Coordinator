@@ -115,15 +115,15 @@ export async function generateSeriesInstances(
       template_id: series.template_id || undefined,
       title: series.title,
       description: series.description || undefined,
-      frequency: series.frequency,
+      frequency: series.frequency as "daily" | "weekly" | "bi-weekly" | "monthly",
       days_of_week: series.days_of_week || undefined,
       start_date: series.start_date,
       end_date: series.end_date || undefined,
       start_time: series.start_time || undefined,
       end_time: series.end_time || undefined,
-      duration_minutes: series.duration_minutes,
-      buffer_minutes: series.buffer_minutes,
-      timezone: series.timezone,
+      duration_minutes: series.duration_minutes ?? 30,
+      buffer_minutes: series.buffer_minutes ?? 0,
+      timezone: series.timezone ?? undefined,
     };
   }
   
@@ -220,7 +220,7 @@ export async function copyTemplateTasksToMeetings(
     .from('meetings')
     .select('id')
     .in('date', meetings.map(m => m.date))
-    .eq('series_id', meetings[0].series_id);
+    .eq('series_id', meetings[0].series_id || '');
   
   if (!createdMeetings || createdMeetings.length === 0) {
     return;

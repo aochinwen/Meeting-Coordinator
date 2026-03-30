@@ -8,7 +8,7 @@ import { createClient } from '@/utils/supabase/client';
 interface User {
   id: string;
   name: string;
-  division?: string;
+  division?: string | null;
 }
 
 interface UserSelectInputProps {
@@ -56,11 +56,15 @@ export function UserSelectInput({
   useEffect(() => {
     if (value) {
       const found = users.find(u => u.name === value || u.id === value);
-      setSelectedUser(found || null);
-    } else {
+      if (found && found.id !== selectedUser?.id) {
+          setSelectedUser(found);
+      } else if (!found && selectedUser !== null) {
+          setSelectedUser(null);
+      }
+    } else if (selectedUser !== null) {
       setSelectedUser(null);
     }
-  }, [value, users]);
+  }, [value, users, selectedUser]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -201,7 +205,7 @@ export function UserSelectInput({
                     </div>
                     <div className="flex-1">
                       <p className="text-sm font-medium text-text-primary">
-                        Create "{searchQuery.trim()}"
+                        Create &quot;{searchQuery.trim()}&quot;
                       </p>
                       <p className="text-xs text-text-tertiary">Add as new user</p>
                     </div>

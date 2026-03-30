@@ -1,14 +1,13 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
-import { cn } from '@/lib/utils';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { Search } from 'lucide-react';
 import { createClient } from '@/utils/supabase/client';
 
 interface User {
   id: string;
   name: string;
-  division: string;
+  division: string | null;
 }
 
 export function UserTaggingInput({ 
@@ -21,17 +20,13 @@ export function UserTaggingInput({
   onEnter: () => void; 
 }) {
   const supabase = createClient();
-  const [showDropdown, setShowDropdown] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
   const [cursorPos, setCursorPos] = useState<number | null>(null);
   const [users, setUsers] = useState<User[]>([]);
-  const [loading, setLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Fetch users from Supabase
   useEffect(() => {
     async function fetchUsers() {
-      setLoading(true);
       const { data, error } = await supabase
         .from('profiles')
         .select('id, name, division')
@@ -42,30 +37,25 @@ export function UserTaggingInput({
       } else {
         setUsers(data || []);
       }
-      setLoading(false);
     }
     
     fetchUsers();
-  }, []);
+  }, [supabase]);
 
-  useEffect(() => {
-    if (cursorPos === null) return;
+  const { showDropdown, searchQuery } = useMemo(() => {
+    if (cursorPos === null) return { showDropdown: false, searchQuery: '' };
     
     // Look backwards from cursor to find an '@' symbol
     const textBeforeCursor = value.substring(0, cursorPos);
     const lastAtIndex = textBeforeCursor.lastIndexOf('@');
     
     if (lastAtIndex !== -1) {
-      // Check if there's a space after the '@' before the cursor
-      // If there's a space, we stop the search (usually tags don't have spaces inside)
       const textAfterAt = textBeforeCursor.substring(lastAtIndex + 1);
       if (!textAfterAt.includes(' ')) {
-        setSearchQuery(textAfterAt);
-        setShowDropdown(true);
-        return;
+        return { showDropdown: true, searchQuery: textAfterAt };
       }
     }
-    setShowDropdown(false);
+    return { showDropdown: false, searchQuery: '' };
   }, [value, cursorPos]);
 
   const handleSelectUser = (user: User) => {
@@ -81,7 +71,6 @@ export function UserTaggingInput({
       value.substring(cursorPos);
       
     onChange(newText);
-    setShowDropdown(false);
     
     // Refocus input
     if (inputRef.current) {
@@ -118,7 +107,7 @@ export function UserTaggingInput({
         <div className="absolute left-0 top-full mt-1 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-50 overflow-hidden">
           <div className="p-2 border-b border-gray-100 bg-gray-50 flex items-center gap-2 text-xs text-gray-500 font-medium">
             <Search className="h-3 w-3" />
-            Members matching "{searchQuery}"
+            Members matching &quot;{searchQuery}&quot;
           </div>
           <ul className="max-h-48 overflow-y-auto">
             {filteredUsers.map((user) => (

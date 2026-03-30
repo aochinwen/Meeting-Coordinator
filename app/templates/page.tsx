@@ -10,9 +10,9 @@ import { cn } from '@/lib/utils';
 interface Template {
   id: string;
   name: string;
-  description?: string;
-  chairman_id?: string;
-  coordinator_id?: string;
+  description?: string | null;
+  chairman_id?: string | null;
+  coordinator_id?: string | null;
   created_at: string;
 }
 
