@@ -1,0 +1,44 @@
+@import "tailwindcss";
+
+@theme {
+  --color-board: #faf6f0; /* Warm default background */
+  --color-surface: #f5f1ea; /* Cards and bento boxes */
+  --color-primary: #4a7c59; /* Forest green */
+  --color-primary-hover: #3f664a;
+  --color-text-primary: #2e3230; /* Dark slate */
+  --color-text-secondary: #4a4e4a;
+  --color-text-tertiary: #78716c;
+  --color-border: rgba(196,200,188,0.3);
+  
+  --color-status-green: #2a6038;
+  --color-status-green-bg: #d8f0de;
+  --color-status-amber: #705c30;
+  --color-status-amber-bg: rgba(248, 224, 168, 0.3);
+  --color-status-grey: #4a4e4a;
+  --color-status-grey-bg: #f0ece4;
+
+  /* Extended palette for component consistency */
+  --color-amber: #f8e0a8;
+  --color-amber-border: #c4a66a;
+  --color-mint: #c8e8d0;
+  --color-sage: #78a886;
+  --color-warm: #f0e8db;
+  --color-cream: #e4e0d8;
+  --color-border-hover: #dcd8d0;
+  --color-coral-bg: #ffdad8;
+  --color-coral-text: #690005;
+  --color-taupe: #dbd7cf;
+  
+  /* Font families */
+  --font-sans: 'Inter', system-ui, sans-serif;
+  --font-literata: 'Literata', serif;
+  --font-nunito: 'Nunito Sans', sans-serif;
+}
+
+@layer base {
+  body {
+    background-color: var(--color-board);
+    color: var(--color-text-primary);
+    font-family: var(--font-sans);
+  }
+}

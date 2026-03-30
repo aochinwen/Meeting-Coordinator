@@ -1,0 +1,154 @@
+Product Requirement Document: Meeting Coordination & Agenda Platform
+
+Date: 10 Feb 2026
+Status: Draft / In-Review
+Product Manager: [User] & Gemini (Senior PM Assistant)
+
+1. Introduction & Goals
+
+Executive Summary
+
+A centralized workflow platform designed to automate and track the administrative lifecycle of recurring high-stakes meetings and ad-hoc sessions. It allows users to create standardized templates for different meeting types (e.g., Senior Management, Project Meetings, Internal Updates) and schedule them as either one-off events or recurring series, ensuring all coordination steps—like pre-reads and agenda confirmations—are executed consistently.
+
+Background
+
+Currently, meeting coordinators rely on manual checklists and disparate tools. This leads to "coordination debt": forgotten pre-reads, unconfirmed agendas, and missing attendees, which decreases the efficiency of leadership teams.
+
+Strategic Goals & Objectives
+
+Goal: Reduce the manual effort required for meeting coordination.
+
+Objective (SMART): Reduce the time spent on "pre-meeting prep" by 40% for coordinators within 3 months of launch.
+
+Objective (SMART): Achieve 100% "on-time" delivery for meeting pre-reads for Senior Management meetings by Q3.
+
+2. Problem Statement
+
+User Problem
+
+Meeting coordinators (e.g., EAs, Project Leads) struggle to keep track of various "to-dos" across different meeting formats. There is no single source of truth to see if an agenda has been confirmed or if the chairman has approved the materials before they are sent to the wider group.
+
+Business Impact
+
+Inefficient meetings cost the organization thousands in "wasted hourly rates" of senior executives. Poor coordination leads to meetings being rescheduled or spent "getting up to speed" rather than making decisions.
+
+3. User Personas & Stories
+
+User Personas
+
+"The Organizer" (Primary): A meeting coordinator or EA who manages the logistics and workflow.
+
+"The Template Creator": A power user or lead coordinator who defines the standards for different meeting types.
+
+"The Admin/Manager": Responsible for maintaining the directory of people and organizational attributes.
+
+User Stories (MoSCoW)
+
+(Must-have) As an Organizer, I want to view meeting descriptions via a "More Info" icon in the list view so that the dashboard remains clean and uncluttered.
+
+(Must-have) As an Admin, I want to manually add users to the directory with their name, email, rank, and division so they can be tagged in coordination tasks.
+
+(Must-have) As an Organizer, I want to tag a colleague (e.g., @john) in a checklist item so that it is clear who is responsible for that specific task.
+
+(Must-have) As an Organizer, I want to cancel a meeting (occurrence or series) and have it remain in history as "Cancelled" and greyed out.
+
+(Must-have) As an Organizer, I want to switch between a List view and a Calendar view with filtering for status and history.
+
+(Must-have) As an Organizer, I want to see a warning badge for holiday conflicts.
+
+4. Business Requirements
+
+Stakeholder Requirements:
+
+Security: User data in the people directory must be protected and restricted to internal platform users.
+
+Audit: Tracking changes to user profiles (who added/edited a user).
+
+Operational Needs:
+
+Manual Entry (v1): The system must provide a UI for adding and managing users since no automated directory sync is planned for the initial release.
+
+5. Solution Development
+
+Functional Requirements
+
+FR1: Template Builder Interface:
+
+FR1.1 Attribute Lookup & Metadata: Attributes like "Chairman" or "Coordinator" are searchable lookups.
+
+FR1.2 Default Description: Templates can include a default description statement that auto-populates when a meeting is scheduled.
+
+FR2: Scheduling & Frequency Engine:
+
+FR2.1 Ad-hoc & Recurring Setup: Support for one-off and repeating series.
+
+FR2.2 Meeting Description Field: Every meeting instance contains a rich-text description field.
+
+FR2.3 Holiday & Cancellation Logic: Warning flags for holidays and "greyed out" permanent cancellation status.
+
+FR3: Dynamic Coordination Checklist:
+
+FR3.1 Inline Tagging: Users can type @ in any checklist task or comment field to trigger a user search dropdown.
+
+FR4: Dual-View Dashboard (Control Center):
+
+FR4.1 List View Columns: Includes Meeting Name (with Recurrence Icon), "More Info" (Description Icon), Date, Progress, and Status.
+
+FR4.2 Global Filter: Filter by "Tagged User", "Division", or "Organization" to see relevant meeting coordination work.
+
+FR5: Manual People Directory & User Management:
+
+FR5.1 User Creation Form: A UI to add new individuals to the platform database.
+
+FR5.2 Profile Attributes: Name (Req), Email, Organization, Division, Rank.
+
+Design & UX/UI Requirements
+
+User Flow (Viewing Description): 1. Organizer navigates to List View. 2. Organizer hovers over or clicks the "Info" icon next to a meeting name. 3. A popover or tooltip displays the full Meeting Description and context.
+
+User Flow (Tagging): Types "@" -> Autocomplete searches across Name, Division, and Rank.
+
+Non-Functional Requirements (NFRs)
+
+Performance: Autocomplete results for tagging must appear in <200ms.
+
+Usability: The "Add User" form should be streamlined for quick entry.
+
+6. Logging and Metrics
+
+Primary Metric: Coordination Completion Rate.
+
+Secondary Metric: Directory Size (Total users added).
+
+Logging: Track user_profile_created, info_icon_clicked.
+
+7. Go-to-Market & Release Plan
+
+Phase 1 (Alpha): Rollout with manual user management to 2 internal project teams.
+
+Phase 2 (Beta): Expand to EAs with full directory management capabilities.
+
+Phase 3 (GA): Company-wide availability.
+
+8. Out of Scope & Future Considerations
+
+Out of Scope: Automated sync with Azure AD/Okta for v1.
+
+Future Work: Bulk import via CSV/Excel for the user directory.
+
+9. References
+
+Implement this design from Figma.
+@https://www.figma.com/design/R7IWBnzChAtUJ5KKpldbLZ/Meeting-Coordinator?node-id=1-4120&m=dev
+
+Implement this design from Figma.
+@https://www.figma.com/design/R7IWBnzChAtUJ5KKpldbLZ/Meeting-Coordinator?node-id=1-2231&m=dev
+Implement this design from Figma.
+@https://www.figma.com/design/R7IWBnzChAtUJ5KKpldbLZ/Meeting-Coordinator?node-id=1-2718&m=dev
+Implement this design from Figma.
+@https://www.figma.com/design/R7IWBnzChAtUJ5KKpldbLZ/Meeting-Coordinator?node-id=1-2975&m=dev
+Implement this design from Figma.
+@https://www.figma.com/design/R7IWBnzChAtUJ5KKpldbLZ/Meeting-Coordinator?node-id=1-3237&m=dev
+Implement this design from Figma.
+@https://www.figma.com/design/R7IWBnzChAtUJ5KKpldbLZ/Meeting-Coordinator?node-id=1-3686&m=dev
+
