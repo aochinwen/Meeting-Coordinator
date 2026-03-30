@@ -2,7 +2,8 @@
 create extension if not exists "uuid-ossp";
 
 -- 1. Profiles (extends auth.users with app-specific data)
-create table public.profiles (
+-- 1. Users (replaces profiles, extends auth.users with app-specific data)
+create table public.users (
   id uuid primary key references auth.users(id) on delete cascade,
   name text not null,
   division text,
@@ -11,13 +12,16 @@ create table public.profiles (
   updated_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
+-- Backward compatibility for frontend queries that might use profiles
+create view public.profiles with (security_invoker = true) as select * from public.users;
+
 -- 2. Templates
 create table public.templates (
   id uuid primary key default uuid_generate_v4(),
   name text not null,
   description text,
-  chairman_id uuid references auth.users(id),
-  coordinator_id uuid references auth.users(id),
+  chairman_id uuid references public.users(id),
+  coordinator_id uuid references public.users(id),
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
   updated_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
@@ -73,7 +77,7 @@ create table public.meetings (
 create table public.meeting_participants (
   id uuid primary key default uuid_generate_v4(),
   meeting_id uuid references public.meetings(id) on delete cascade not null,
-  user_id uuid references auth.users(id) on delete cascade not null,
+  user_id uuid references public.users(id) on delete cascade not null,
   status text check (status in ('invited', 'accepted', 'declined', 'tentative')) default 'invited',
   is_required boolean default true,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
@@ -84,7 +88,7 @@ create table public.meeting_checklist_tasks (
   id uuid primary key default uuid_generate_v4(),
   meeting_id uuid references public.meetings(id) on delete cascade not null,
   description text not null,
-  assigned_user_id uuid references auth.users(id) on delete set null,
+  assigned_user_id uuid references public.users(id) on delete set null,
   is_completed boolean default false not null,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
   updated_at timestamp with time zone default timezone('utc'::text, now()) not null
@@ -101,7 +105,7 @@ create table public.holidays (
 create table public.meeting_activities (
   id uuid primary key default uuid_generate_v4(),
   meeting_id uuid references public.meetings(id) on delete cascade not null,
-  user_id uuid references auth.users(id) on delete set null,
+  user_id uuid references public.users(id) on delete set null,
   activity_type text check (activity_type in ('task_created', 'task_completed', 'task_assigned', 'comment_added', 'file_uploaded', 'meeting_updated')) not null,
   content text not null,
   metadata jsonb default '{}',
@@ -112,14 +116,14 @@ create table public.meeting_activities (
 create table public.comments (
   id uuid primary key default uuid_generate_v4(),
   task_id uuid references public.meeting_checklist_tasks(id) on delete cascade not null,
-  user_id uuid references auth.users(id) on delete set null,
+  user_id uuid references public.users(id) on delete set null,
   content text not null,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
   updated_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
 -- Enable RLS
-alter table public.profiles enable row level security;
+alter table public.users enable row level security;
 alter table public.templates enable row level security;
 alter table public.template_checklist_tasks enable row level security;
 alter table public.meeting_series enable row level security;
@@ -131,8 +135,8 @@ alter table public.meeting_activities enable row level security;
 alter table public.comments enable row level security;
 
 -- Basic open policies (Update these in a real production environment)
-create policy "Allow public read access on profiles" on public.profiles for select using (true);
-create policy "Allow authenticated insert/update own profile" on public.profiles for all using (auth.uid() = id) with check (auth.uid() = id);
+create policy "Allow public read access on users" on public.users for select using (true);
+create policy "Allow authenticated insert/update own user" on public.users for all using (auth.uid() = id) with check (auth.uid() = id);
 create policy "Allow true on all for now" on public.templates for all using (true);
 create policy "Allow true on all for now" on public.template_checklist_tasks for all using (true);
 create policy "Allow true on all for now" on public.meeting_series for all using (true);
@@ -147,7 +151,7 @@ create policy "Allow true on all for now" on public.comments for all using (true
 create or replace function public.handle_new_user()
 returns trigger as $$
 begin
-  insert into public.profiles (id, name, division, rank)
+  insert into public.users (id, name, division, rank)
   values (new.id, coalesce(new.raw_user_meta_data->>'name', new.email), 'General', 'Member');
   return new;
 end;
