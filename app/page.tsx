@@ -44,12 +44,7 @@ export default async function DashboardPage() {
   const profileMap = new Map<string, string>();
   profiles?.forEach(p => profileMap.set(p.id, p.name));
   
-  // Fetch active team members count
-  const { count: usersCount } = await supabase
-    .from('profiles')
-    .select('*', { count: 'exact', head: true });
-
-  const activeTeamMembers = usersCount || 18;
+  const activeTeamMembers = profiles?.length || 18;
 
   const meetings = (meetingsData as unknown as MeetingWithRelations[]) || [];
   const thisWeekMeetingsCount = meetings.length; // Simplified for now
