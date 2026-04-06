@@ -95,8 +95,6 @@ export async function generateSeriesInstances(
 ): Promise<void> {
   const supabase = createClient();
   
-  console.log('Generating series instances for series:', seriesId, 'weeks:', weeksToGenerate);
-  
   // Get series data if not provided
   let data = seriesData;
   if (!data) {
@@ -127,8 +125,6 @@ export async function generateSeriesInstances(
     };
   }
   
-  console.log('Series data for generation:', data);
-  
   // Get existing instances to avoid duplicates
   const { data: existingMeetings } = await supabase
     .from('meetings')
@@ -141,8 +137,6 @@ export async function generateSeriesInstances(
     ? new Date(existingMeetings[0].date)
     : new Date(data.start_date);
   
-  console.log('Generating from date:', lastDate);
-  
   // Generate occurrence dates
   const config: RecurrenceConfig = {
     frequency: data.frequency,
@@ -151,15 +145,10 @@ export async function generateSeriesInstances(
     endDate: data.end_date ? new Date(data.end_date) : null,
   };
   
-  console.log('Recurrence config:', config);
-  
   // Generate enough occurrences for the requested weeks
   const occurrences = generateOccurrences(config, weeksToGenerate * 7, lastDate);
   
-  console.log('Generated occurrences:', occurrences.length, occurrences);
-  
   if (occurrences.length === 0) {
-    console.log('No occurrences generated, returning early');
     return;
   }
   
@@ -176,8 +165,6 @@ export async function generateSeriesInstances(
     instance_number: existingMeetings?.length ? existingMeetings.length + index + 1 : index + 1,
   }));
   
-  console.log('Meetings to insert:', meetings);
-  
   // Insert meetings
   const { error: insertError } = await supabase
     .from('meetings')
@@ -187,8 +174,6 @@ export async function generateSeriesInstances(
     console.error('Error inserting meetings:', insertError);
     throw insertError;
   }
-  
-  console.log('Successfully inserted meetings');
   
   // Copy template checklist tasks to each meeting instance
   if (data.template_id) {
