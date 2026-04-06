@@ -267,8 +267,7 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
       });
       setShowCreatedModal(true);
     } catch (err: any) {
-      console.error('Error creating meeting:', err);
-      console.error('Error details:', err.message, err.stack);
+      console.error('Error creating meeting:', err.message);
       setError('Failed to create meeting: ' + (err.message || 'Please try again.'));
     } finally {
       setIsSubmitting(false);
