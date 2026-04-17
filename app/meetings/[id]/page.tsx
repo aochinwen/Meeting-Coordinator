@@ -7,10 +7,10 @@ export const metadata = {
   description: 'View and manage meeting details, participants, tasks, and activities.',
 };
 
-export default async function MeetingDetailPage({ params }: { params: { id: string } }) {
+export default async function MeetingDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const supabase = await createClient();
 
-  const resolvedParams = await Promise.resolve(params);
+  const resolvedParams = await params;
 
   const {
     data: { user },

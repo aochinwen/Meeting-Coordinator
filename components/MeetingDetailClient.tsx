@@ -148,7 +148,7 @@ export function MeetingDetailClient({ meetingId, currentUser }: MeetingDetailCli
       .from('meeting_participants')
       .select(`
         *,
-        user:user_id(name, division, rank)
+        profiles!user_id(name, division, rank)
       `)
       .eq('meeting_id', meetingId);
 
@@ -157,7 +157,11 @@ export function MeetingDetailClient({ meetingId, currentUser }: MeetingDetailCli
       return;
     }
 
-    setParticipants(data as any || []);
+    const mappedParticipants = (data || []).map((p: any) => ({
+      ...p,
+      user: p.profiles
+    }));
+    setParticipants(mappedParticipants as any);
   }
 
   async function fetchTasks() {
@@ -165,7 +169,7 @@ export function MeetingDetailClient({ meetingId, currentUser }: MeetingDetailCli
       .from('meeting_checklist_tasks')
       .select(`
         *,
-        assignee:assigned_user_id(name)
+        profiles!assigned_user_id(name)
       `)
       .eq('meeting_id', meetingId)
       .order('created_at', { ascending: true });
@@ -175,7 +179,11 @@ export function MeetingDetailClient({ meetingId, currentUser }: MeetingDetailCli
       return;
     }
 
-    setTasks(data as any || []);
+    const mappedTasks = (data || []).map((t: any) => ({
+      ...t,
+      assignee: t.profiles
+    }));
+    setTasks(mappedTasks as any);
   }
 
   async function fetchActivities() {
@@ -183,7 +191,7 @@ export function MeetingDetailClient({ meetingId, currentUser }: MeetingDetailCli
       .from('meeting_activities')
       .select(`
         *,
-        user:user_id(name)
+        profiles!user_id(name)
       `)
       .eq('meeting_id', meetingId)
       .order('created_at', { ascending: false })
@@ -194,7 +202,11 @@ export function MeetingDetailClient({ meetingId, currentUser }: MeetingDetailCli
       return;
     }
 
-    setActivities(data as any || []);
+    const mappedActivities = (data || []).map((a: any) => ({
+      ...a,
+      user: a.profiles
+    }));
+    setActivities(mappedActivities as any);
   }
 
   async function toggleTask(taskId: string, currentStatus: boolean) {

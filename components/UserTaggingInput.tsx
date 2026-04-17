@@ -99,13 +99,13 @@ export function UserTaggingInput({
             onEnter();
           }
         }}
-        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
+        className="w-full px-4 py-3 border border-border rounded-2xl bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm font-light text-text-primary placeholder:text-text-tertiary"
         placeholder="Add a new checklist task... (Use @ to tag people)"
       />
       
       {showDropdown && filteredUsers.length > 0 && (
-        <div className="absolute left-0 top-full mt-1 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-50 overflow-hidden">
-          <div className="p-2 border-b border-gray-100 bg-gray-50 flex items-center gap-2 text-xs text-gray-500 font-medium">
+        <div className="absolute left-0 top-full mt-1 w-64 bg-white border border-border rounded-2xl shadow-lg z-50 overflow-hidden">
+          <div className="p-2 border-b border-border/30 bg-surface flex items-center gap-2 text-xs text-text-tertiary font-medium">
             <Search className="h-3 w-3" />
             Members matching &quot;{searchQuery}&quot;
           </div>
@@ -114,10 +114,10 @@ export function UserTaggingInput({
               <li 
                 key={user.id}
                 onClick={() => handleSelectUser(user)}
-                className="px-3 py-2 hover:bg-blue-50 cursor-pointer flex flex-col transition-colors border-l-2 border-transparent hover:border-primary"
+                className="px-3 py-2 hover:bg-surface cursor-pointer flex flex-col transition-colors border-l-2 border-transparent hover:border-primary"
               >
-                <span className="text-sm font-medium text-gray-900">{user.name}</span>
-                <span className="text-xs text-gray-500">{user.division}</span>
+                <span className="text-sm font-medium text-text-primary">{user.name}</span>
+                <span className="text-xs text-text-tertiary">{user.division}</span>
               </li>
             ))}
           </ul>

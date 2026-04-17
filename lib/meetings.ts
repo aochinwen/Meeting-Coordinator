@@ -261,7 +261,7 @@ export async function updateMeetingOccurrence(
   
   if (isOverride) {
     updateData.is_override = true;
-    updateData.override_fields = Object.keys(changes);
+    updateData.override_fields = Object.keys(changes) as unknown as typeof updateData.override_fields;
   }
   
   const { error } = await supabase
@@ -500,7 +500,7 @@ export async function checkConflicts(
         start_time,
         end_time
       ),
-      users(name)
+      profiles!user_id(name)
     `)
     .in('user_id', participantIds)
     .eq('meetings.date', date);
@@ -522,7 +522,7 @@ export async function checkConflicts(
     hasConflicts: conflicts.length > 0,
     conflicts: conflicts.map((c: any) => ({
       userId: c.user_id,
-      userName: c.users?.name || 'Unknown',
+      userName: c.profiles?.name || 'Unknown',
       meetingTitle: c.meetings.title,
       meetingDate: c.meetings.date,
       startTime: c.meetings.start_time,

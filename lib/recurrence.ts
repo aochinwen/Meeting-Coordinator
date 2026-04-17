@@ -171,7 +171,6 @@ function getNextDailyOccurrence(
   config: RecurrenceConfig
 ): Date | null {
   const nextDate = new Date(afterDate);
-  nextDate.setDate(nextDate.getDate() + 1);
   return nextDate;
 }
 
@@ -202,7 +201,7 @@ function getNextWeeklyOccurrence(
   
   // Check remaining days of this week including current day
   for (const targetDay of targetDays) {
-    if (targetDay >= currentDay) {
+    if (targetDay > currentDay) {
       daysToAdd = targetDay - currentDay;
       foundNextDay = true;
       break;

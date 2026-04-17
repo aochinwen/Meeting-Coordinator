@@ -138,7 +138,7 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
       }
     }
     detectConflicts();
-  }, [selectedParticipants, startDate, startTime]);
+  }, [selectedParticipants, startDate, startTime, endTime]);
   
   const toggleDay = (day: string) => {
     if (selectedDays.includes(day)) {

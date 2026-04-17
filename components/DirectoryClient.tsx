@@ -7,7 +7,7 @@ import { Database } from '@/types/supabase';
 import { createClient } from '@/utils/supabase/client';
 import { AddUserModal } from './AddUserModal';
 
-type User = Database['public']['Tables']['users']['Row'];
+type User = Database['public']['Tables']['profiles']['Row'];
 
 interface DirectoryClientProps {
   initialUsers: User[];

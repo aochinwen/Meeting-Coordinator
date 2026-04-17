@@ -98,7 +98,7 @@ export function ChecklistClient({ meetingId, currentUser }: ChecklistClientProps
       .from('meeting_checklist_tasks')
       .select(`
         *,
-        assignee:users(name)
+        assignee:profiles!assigned_user_id(name)
       `)
       .eq('meeting_id', meetingId)
       .order('created_at', { ascending: true });
@@ -125,7 +125,7 @@ export function ChecklistClient({ meetingId, currentUser }: ChecklistClientProps
       .from('meeting_activities')
       .select(`
         *,
-        user:users(name)
+        user:profiles!user_id(name)
       `)
       .eq('meeting_id', meetingId)
       .order('created_at', { ascending: false })

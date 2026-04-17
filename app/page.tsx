@@ -1,5 +1,5 @@
 import { createClient } from '@/utils/supabase/server';
-import { Calendar, ChevronRight, Info, Plus, Search, Filter, ArrowUpDown, Video, Target, User, Users, CalendarCheck2, Clock, CheckCircle2, CheckSquare } from 'lucide-react';
+import { ChevronRight, Plus, Search, Filter, ArrowUpDown, Video, Target, User, Users, CalendarCheck2, Clock, CheckCircle2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
 
