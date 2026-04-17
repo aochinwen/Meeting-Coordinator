@@ -23,31 +23,38 @@ interface Profile {
 export default async function DashboardPage() {
   const supabase = await createClient();
 
-  // Fetch meetings with participants and tasks
-  const { data: meetingsData } = await supabase
-    .from('meetings')
-    .select(`
-      *,
-      meeting_participants(user_id),
-      meeting_checklist_tasks(id, is_completed)
-    `)
-    .order('date', { ascending: true })
-    .limit(10);
-  
-  // Fetch all users for attendee names
-  const { data: profiles } = await supabase
-    .from('profiles')
-    .select('id, name')
-    .order('name', { ascending: true });
+  // Run independent database queries in parallel to reduce TTFB
+  const [
+    { data: meetingsData },
+    { data: profiles },
+    { count: usersCount }
+  ] = await Promise.all([
+    // Fetch meetings with participants and tasks
+    supabase
+      .from('meetings')
+      .select(`
+        *,
+        meeting_participants(user_id),
+        meeting_checklist_tasks(id, is_completed)
+      `)
+      .order('date', { ascending: true })
+      .limit(10),
+
+    // Fetch all users for attendee names
+    supabase
+      .from('profiles')
+      .select('id, name')
+      .order('name', { ascending: true }),
+
+    // Fetch active team members count
+    supabase
+      .from('profiles')
+      .select('*', { count: 'exact', head: true })
+  ]);
   
   // Create a profile map for quick lookup
   const profileMap = new Map<string, string>();
   profiles?.forEach(p => profileMap.set(p.id, p.name));
-  
-  // Fetch active team members count
-  const { count: usersCount } = await supabase
-    .from('profiles')
-    .select('*', { count: 'exact', head: true });
 
   const activeTeamMembers = usersCount || 18;
 

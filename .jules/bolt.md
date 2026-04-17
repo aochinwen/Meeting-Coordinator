@@ -1,0 +1,1 @@
+## 2024-05-18 - Parallelizing Dashboard DB Queries\n**Learning:** The dashboard (`app/page.tsx`) previously fetched `meetings`, `profiles`, and `usersCount` sequentially from Supabase, needlessly increasing TTFB.\n**Action:** Always group independent Server Component DB queries using `Promise.all` to fetch data concurrently.
