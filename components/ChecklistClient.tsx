@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { 
   ChevronRight, ArrowUpRight, CheckCircle2, Calendar, Users,
   MessageSquare, MoreHorizontal, FileText, Check, Plus,
@@ -49,10 +49,29 @@ export function ChecklistClient({ meetingId, currentUser }: ChecklistClientProps
   const [commentInput, setCommentInput] = useState('');
   const [newTaskInput, setNewTaskInput] = useState('');
 
-  // Fetch tasks and activities on mount
+  const profileMapRef = useRef<Map<string, { name: string }>>(new Map());
+
+  // Convenience wrappers that use the ref
+  function fetchTasks() { fetchTasksWithMap(profileMapRef.current); }
+  function fetchActivities() { fetchActivitiesWithMap(profileMapRef.current); }
+
+  // Build profile lookup map and fetch data on mount
   useEffect(() => {
-    fetchTasks();
-    fetchActivities();
+    async function init() {
+      // Fetch profiles for user name lookups (no FK constraints exist in the DB)
+      const { data: allProfiles } = await supabase
+        .from('profiles')
+        .select('id, name');
+      
+      const map = new Map<string, { name: string }>();
+      (allProfiles || []).forEach((p: any) => map.set(p.id, { name: p.name }));
+      profileMapRef.current = map;
+
+      fetchTasksWithMap(map);
+      fetchActivitiesWithMap(map);
+    }
+
+    init();
     
     // Subscribe to real-time changes
     const tasksSubscription = supabase
@@ -66,7 +85,7 @@ export function ChecklistClient({ meetingId, currentUser }: ChecklistClientProps
           filter: `meeting_id=eq.${meetingId}`,
         },
         () => {
-          fetchTasks();
+          fetchTasksWithMap(profileMapRef.current);
         }
       )
       .subscribe();
@@ -82,7 +101,7 @@ export function ChecklistClient({ meetingId, currentUser }: ChecklistClientProps
           filter: `meeting_id=eq.${meetingId}`,
         },
         () => {
-          fetchActivities();
+          fetchActivitiesWithMap(profileMapRef.current);
         }
       )
       .subscribe();
@@ -93,13 +112,10 @@ export function ChecklistClient({ meetingId, currentUser }: ChecklistClientProps
     };
   }, [meetingId]);
 
-  async function fetchTasks() {
+  async function fetchTasksWithMap(profileMap: Map<string, { name: string }>) {
     const { data, error } = await supabase
       .from('meeting_checklist_tasks')
-      .select(`
-        *,
-        assignee:profiles!assigned_user_id(name)
-      `)
+      .select('*')
       .eq('meeting_id', meetingId)
       .order('created_at', { ascending: true });
 
@@ -108,25 +124,25 @@ export function ChecklistClient({ meetingId, currentUser }: ChecklistClientProps
       return;
     }
 
-    const tasksWithAssignees = (data || []).map((task: any) => ({
-      ...task,
-      assignee: task.assignee ? {
-        name: task.assignee.name,
-        initials: task.assignee.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase(),
-      } : null,
-    }));
+    const tasksWithAssignees = (data || []).map((task: any) => {
+      const profile = task.assigned_user_id ? profileMap.get(task.assigned_user_id) : null;
+      return {
+        ...task,
+        assignee: profile ? {
+          name: profile.name,
+          initials: profile.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase(),
+        } : null,
+      };
+    });
 
     setTasks(tasksWithAssignees);
     setLoading(false);
   }
 
-  async function fetchActivities() {
+  async function fetchActivitiesWithMap(profileMap: Map<string, { name: string }>) {
     const { data, error } = await supabase
       .from('meeting_activities')
-      .select(`
-        *,
-        user:profiles!user_id(name)
-      `)
+      .select('*')
       .eq('meeting_id', meetingId)
       .order('created_at', { ascending: false })
       .limit(20);
@@ -136,13 +152,16 @@ export function ChecklistClient({ meetingId, currentUser }: ChecklistClientProps
       return;
     }
 
-    const activitiesWithUsers = (data || []).map((activity: any) => ({
-      ...activity,
-      user: activity.user ? {
-        name: activity.user.name,
-        initials: activity.user.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase(),
-      } : null,
-    }));
+    const activitiesWithUsers = (data || []).map((activity: any) => {
+      const profile = activity.user_id ? profileMap.get(activity.user_id) : null;
+      return {
+        ...activity,
+        user: profile ? {
+          name: profile.name,
+          initials: profile.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase(),
+        } : null,
+      };
+    });
 
     setActivities(activitiesWithUsers);
   }

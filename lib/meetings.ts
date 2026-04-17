@@ -489,6 +489,15 @@ export async function checkConflicts(
 }> {
   const supabase = createClient();
   
+  // Fetch profiles for name lookup (no FK from meeting_participants to profiles)
+  const { data: profilesData } = await supabase
+    .from('profiles')
+    .select('id, name')
+    .in('id', participantIds);
+  
+  const profileMap = new Map<string, string>();
+  (profilesData || []).forEach((p: any) => profileMap.set(p.id, p.name));
+
   // Get participants' existing meetings on the same date
   const { data: existingMeetings, error } = await supabase
     .from('meeting_participants')
@@ -499,8 +508,7 @@ export async function checkConflicts(
         date,
         start_time,
         end_time
-      ),
-      profiles!user_id(name)
+      )
     `)
     .in('user_id', participantIds)
     .eq('meetings.date', date);
@@ -522,7 +530,7 @@ export async function checkConflicts(
     hasConflicts: conflicts.length > 0,
     conflicts: conflicts.map((c: any) => ({
       userId: c.user_id,
-      userName: c.profiles?.name || 'Unknown',
+      userName: profileMap.get(c.user_id) || 'Unknown',
       meetingTitle: c.meetings.title,
       meetingDate: c.meetings.date,
       startTime: c.meetings.start_time,

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { 
   ChevronRight, Calendar, Clock, Users, MapPin, FileText, 
   CheckCircle2, MessageSquare, Plus, Check, Edit, Trash2,
@@ -77,6 +77,13 @@ export function MeetingDetailClient({ meetingId, currentUser }: MeetingDetailCli
   const [commentInput, setCommentInput] = useState('');
   const [copied, setCopied] = useState(false);
 
+  type ProfileInfo = { name: string; division?: string | null; rank?: string | null };
+  const profileMapRef = useRef<Map<string, ProfileInfo>>(new Map());
+
+  // No-arg wrappers for real-time callbacks and event handlers
+  function fetchTasks() { fetchTasksWithMap(profileMapRef.current); }
+  function fetchActivities() { fetchActivitiesWithMap(profileMapRef.current); }
+
   useEffect(() => {
     fetchMeetingData();
     
@@ -119,11 +126,20 @@ export function MeetingDetailClient({ meetingId, currentUser }: MeetingDetailCli
   }, [meetingId]);
 
   async function fetchMeetingData() {
+    // Fetch profiles once for all lookups (no FK constraints exist in the DB)
+    const { data: allProfiles } = await supabase
+      .from('profiles')
+      .select('id, name, division, rank');
+    
+    const profileMap = new Map<string, ProfileInfo>();
+    (allProfiles || []).forEach((p: any) => profileMap.set(p.id, { name: p.name, division: p.division, rank: p.rank }));
+    profileMapRef.current = profileMap;
+
     await Promise.all([
       fetchMeeting(),
-      fetchParticipants(),
-      fetchTasks(),
-      fetchActivities()
+      fetchParticipantsWithMap(profileMap),
+      fetchTasksWithMap(profileMap),
+      fetchActivitiesWithMap(profileMap)
     ]);
     setLoading(false);
   }
@@ -143,13 +159,10 @@ export function MeetingDetailClient({ meetingId, currentUser }: MeetingDetailCli
     setMeeting(data as any);
   }
 
-  async function fetchParticipants() {
+  async function fetchParticipantsWithMap(profileMap: Map<string, ProfileInfo>) {
     const { data, error } = await supabase
       .from('meeting_participants')
-      .select(`
-        *,
-        profiles!user_id(name, division, rank)
-      `)
+      .select('*')
       .eq('meeting_id', meetingId);
 
     if (error) {
@@ -159,18 +172,15 @@ export function MeetingDetailClient({ meetingId, currentUser }: MeetingDetailCli
 
     const mappedParticipants = (data || []).map((p: any) => ({
       ...p,
-      user: p.profiles
+      user: profileMap.get(p.user_id) || null
     }));
     setParticipants(mappedParticipants as any);
   }
 
-  async function fetchTasks() {
+  async function fetchTasksWithMap(profileMap: Map<string, ProfileInfo>) {
     const { data, error } = await supabase
       .from('meeting_checklist_tasks')
-      .select(`
-        *,
-        profiles!assigned_user_id(name)
-      `)
+      .select('*')
       .eq('meeting_id', meetingId)
       .order('created_at', { ascending: true });
 
@@ -181,18 +191,15 @@ export function MeetingDetailClient({ meetingId, currentUser }: MeetingDetailCli
 
     const mappedTasks = (data || []).map((t: any) => ({
       ...t,
-      assignee: t.profiles
+      assignee: t.assigned_user_id ? profileMap.get(t.assigned_user_id) || null : null
     }));
     setTasks(mappedTasks as any);
   }
 
-  async function fetchActivities() {
+  async function fetchActivitiesWithMap(profileMap: Map<string, ProfileInfo>) {
     const { data, error } = await supabase
       .from('meeting_activities')
-      .select(`
-        *,
-        profiles!user_id(name)
-      `)
+      .select('*')
       .eq('meeting_id', meetingId)
       .order('created_at', { ascending: false })
       .limit(20);
@@ -204,7 +211,7 @@ export function MeetingDetailClient({ meetingId, currentUser }: MeetingDetailCli
 
     const mappedActivities = (data || []).map((a: any) => ({
       ...a,
-      user: a.profiles
+      user: a.user_id ? profileMap.get(a.user_id) || null : null
     }));
     setActivities(mappedActivities as any);
   }

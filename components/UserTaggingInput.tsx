@@ -40,7 +40,8 @@ export function UserTaggingInput({
     }
     
     fetchUsers();
-  }, [supabase]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const { showDropdown, searchQuery } = useMemo(() => {
     if (cursorPos === null) return { showDropdown: false, searchQuery: '' };
