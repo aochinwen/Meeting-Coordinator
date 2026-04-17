@@ -10,7 +10,7 @@ export function Header() {
         </Link>
       </div>
       <div className="flex items-center gap-4">
-        <button className="p-2 rounded-full hover:bg-surface transition-colors relative">
+        <button className="p-2 rounded-full hover:bg-surface transition-colors relative" aria-label="Notifications">
           <Bell className="w-5 h-5 text-text-secondary" />
         </button>
         <div className="h-8 w-8 rounded-full border border-border bg-primary flex items-center justify-center overflow-hidden">
