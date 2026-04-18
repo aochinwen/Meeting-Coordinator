@@ -198,7 +198,7 @@ export default function TemplatesPage() {
       
     } catch (error: any) {
       console.error('Error saving template:', error);
-      alert('Failed to save template: ' + (error.message || 'Unknown error'));
+      alert('Failed to save template. Please try again later.');
     } finally {
       setIsSubmitting(false);
     }
@@ -270,7 +270,7 @@ export default function TemplatesPage() {
       
     } catch (error: any) {
       console.error('Error deleting template:', error);
-      alert('Failed to delete template: ' + (error.message || 'Unknown error'));
+      alert('Failed to delete template. Please try again later.');
     }
   };
 
