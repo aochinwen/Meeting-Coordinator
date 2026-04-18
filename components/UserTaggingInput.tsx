@@ -28,7 +28,7 @@ export function UserTaggingInput({
   useEffect(() => {
     async function fetchUsers() {
       const { data, error } = await supabase
-        .from('profiles')
+        .from('people')
         .select('id, name, division')
         .order('name');
       

@@ -97,7 +97,7 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
   useEffect(() => {
     async function loadUsers() {
       const { data, error } = await supabase
-        .from('profiles')
+        .from('people')
         .select('id, name, division')
         .order('name');
       
@@ -248,6 +248,7 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
                 meeting_id: seriesId,
                 description: task.description,
                 is_completed: false,
+                due_days_before: task.due_days_before ?? null,
               }))
             );
           if (taskError) console.error('Error adding tasks:', taskError);
@@ -276,18 +277,49 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
   };
   
   // Meeting checklist tasks
-  const [meetingTasks, setMeetingTasks] = useState<Array<{ id: string; description: string }>>([]);
+  const [meetingTasks, setMeetingTasks] = useState<Array<{ id: string; description: string; due_days_before: number | null; dueDateMode: 'days' | 'date' }>>([]);
   const [newMeetingTask, setNewMeetingTask] = useState('');
 
   const handleAddMeetingTask = () => {
     if (!newMeetingTask.trim()) return;
-    setMeetingTasks([...meetingTasks, { id: crypto.randomUUID(), description: newMeetingTask.trim() }]);
+    setMeetingTasks([...meetingTasks, { id: crypto.randomUUID(), description: newMeetingTask.trim(), due_days_before: null, dueDateMode: 'days' }]);
     setNewMeetingTask('');
   };
 
   const removeMeetingTask = (taskId: string) => {
     setMeetingTasks(meetingTasks.filter(t => t.id !== taskId));
   };
+
+  const updateTaskDueDays = (taskId: string, value: number | null) => {
+    setMeetingTasks(meetingTasks.map(t => t.id === taskId ? { ...t, due_days_before: value } : t));
+  };
+
+  const toggleTaskDueDateMode = (taskId: string) => {
+    setMeetingTasks(meetingTasks.map(t => {
+      if (t.id !== taskId) return t;
+      return { ...t, dueDateMode: t.dueDateMode === 'days' ? 'date' : 'days' };
+    }));
+  };
+
+  const handleTaskDatePickerChange = (taskId: string, dateStr: string) => {
+    if (!dateStr || !startDate) {
+      updateTaskDueDays(taskId, null);
+      return;
+    }
+    const meetingDate = new Date(startDate + 'T00:00:00');
+    const pickedDate = new Date(dateStr + 'T00:00:00');
+    const diffMs = meetingDate.getTime() - pickedDate.getTime();
+    const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+    updateTaskDueDays(taskId, diffDays);
+  };
+
+  const computeTaskAbsoluteDate = (due_days_before: number | null, meetingDateStr: string): string => {
+    if (due_days_before === null || !meetingDateStr) return '';
+    const d = new Date(meetingDateStr + 'T00:00:00');
+    d.setDate(d.getDate() - due_days_before);
+    return d.toISOString().split('T')[0];
+  };
+
   const handleTemplateSelect = async (templateId: string | null) => {
     setSelectedTemplate(templateId);
     
@@ -314,13 +346,15 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
         // Fetch checklist tasks
         const { data: tasksData } = await supabase
           .from('template_checklist_tasks')
-          .select('description')
+          .select('description, due_days_before')
           .eq('template_id', templateId);
         
         if (tasksData) {
-          setMeetingTasks(tasksData.map((task, index) => ({
+          setMeetingTasks((tasksData as any[]).map((task) => ({
             id: crypto.randomUUID(),
-            description: task.description
+            description: task.description,
+            due_days_before: task.due_days_before ?? null,
+            dueDateMode: 'days' as const,
           })));
         }
       } catch (error) {
@@ -704,17 +738,64 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
               {meetingTasks.map((task) => (
                 <div 
                   key={task.id} 
-                  className="flex items-center gap-4 p-4 bg-board border border-border/50 rounded-2xl hover:border-border transition-colors group"
+                  className="flex items-start gap-4 p-4 bg-board border border-border/50 rounded-2xl hover:border-border transition-colors group"
                 >
-                  <div className="w-6 h-6 rounded border border-border flex items-center justify-center text-transparent bg-white">
+                  <div className="w-6 h-6 rounded border border-border flex items-center justify-center text-transparent bg-white mt-1 shrink-0">
                     <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                     </svg>
                   </div>
-                  <span className="flex-1 text-base text-text-primary font-light">{task.description}</span>
+                  <div className="flex-1 flex flex-col gap-2">
+                    <span className="text-base text-text-primary font-light">{task.description}</span>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <button
+                        onClick={() => toggleTaskDueDateMode(task.id)}
+                        className="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border border-border bg-white text-text-tertiary hover:border-primary/50 hover:text-primary transition-colors shrink-0"
+                      >
+                        {task.dueDateMode === 'days' ? '# days' : 'pick date'}
+                      </button>
+                      {task.dueDateMode === 'days' ? (
+                        <>
+                          <input
+                            type="number"
+                            placeholder="days before meeting"
+                            value={task.due_days_before ?? ''}
+                            onChange={(e) => {
+                              const val = e.target.value === '' ? null : parseInt(e.target.value, 10);
+                              updateTaskDueDays(task.id, isNaN(val as number) ? null : val);
+                            }}
+                            className="w-36 px-2 py-1 text-xs border border-border rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-primary/30 text-text-primary placeholder:text-text-tertiary"
+                          />
+                          <span className="text-xs text-text-tertiary">
+                            {task.due_days_before === null
+                              ? 'no due date'
+                              : task.due_days_before >= 0
+                              ? `${task.due_days_before} day${task.due_days_before !== 1 ? 's' : ''} before`
+                              : `${Math.abs(task.due_days_before)} day${Math.abs(task.due_days_before) !== 1 ? 's' : ''} after`}
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <input
+                            type="date"
+                            value={computeTaskAbsoluteDate(task.due_days_before, startDate)}
+                            onChange={(e) => handleTaskDatePickerChange(task.id, e.target.value)}
+                            className="px-2 py-1 text-xs border border-border rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-primary/30 text-text-primary"
+                          />
+                          {task.due_days_before !== null && startDate && (
+                            <span className="text-xs text-text-tertiary">
+                              {task.due_days_before >= 0
+                                ? `${task.due_days_before} day${task.due_days_before !== 1 ? 's' : ''} before`
+                                : `${Math.abs(task.due_days_before)} day${Math.abs(task.due_days_before) !== 1 ? 's' : ''} after`}
+                            </span>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </div>
                   <button 
                     onClick={() => removeMeetingTask(task.id)}
-                    className="text-text-tertiary hover:text-coral-text transition-colors p-2 rounded-xl hover:bg-coral-text/10 opacity-0 group-hover:opacity-100"
+                    className="text-text-tertiary hover:text-coral-text transition-colors p-2 rounded-xl hover:bg-coral-text/10 opacity-0 group-hover:opacity-100 mt-0.5"
                   >
                     <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -933,8 +1014,9 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
         onSelectTemplate={(template) => {
           setShowTemplateModal(false);
           if (template) {
-            setSelectedTemplate(template.id);
-            setTitle(template.name);
+            handleTemplateSelect(template.id);
+          } else {
+            handleTemplateSelect(null);
           }
         }}
       />

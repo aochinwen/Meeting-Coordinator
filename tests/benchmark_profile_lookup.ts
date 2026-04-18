@@ -11,7 +11,7 @@ for (let i = 0; i < 10000; i++) {
   participantIds.push(id);
 }
 
-// Add some unknown IDs to simulate missing profiles
+// Add some unknown IDs to simulate missing people
 for (let i = 10000; i < 11000; i++) {
   participantIds.push(`unknown_user_${i}`);
 }

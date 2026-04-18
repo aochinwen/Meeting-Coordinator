@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo, memo } from 'react';
 import { 
   ChevronRight, ArrowUpRight, CheckCircle2, Calendar, Users,
   MessageSquare, MoreHorizontal, FileText, Check, Plus,
@@ -20,6 +20,7 @@ interface Task {
   description: string;
   assigned_user_id: string | null;
   is_completed: boolean;
+  due_days_before: number | null;
   created_at: string;
   assignee?: {
     name: string;
@@ -40,7 +41,7 @@ interface Activity {
   };
 }
 
-export function ChecklistClient({ meetingId, currentUser }: ChecklistClientProps) {
+function ChecklistClientComponent({ meetingId, currentUser }: ChecklistClientProps) {
   const supabase = createClient();
   const [filter, setFilter] = useState<'All' | 'Pending'>('All');
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -48,6 +49,7 @@ export function ChecklistClient({ meetingId, currentUser }: ChecklistClientProps
   const [loading, setLoading] = useState(true);
   const [commentInput, setCommentInput] = useState('');
   const [newTaskInput, setNewTaskInput] = useState('');
+  const [meetingDate, setMeetingDate] = useState<string | null>(null);
 
   const profileMapRef = useRef<Map<string, { name: string }>>(new Map());
 
@@ -58,9 +60,17 @@ export function ChecklistClient({ meetingId, currentUser }: ChecklistClientProps
   // Build profile lookup map and fetch data on mount
   useEffect(() => {
     async function init() {
+      // Fetch meeting date for due date computation
+      const { data: meetingData } = await supabase
+        .from('meetings')
+        .select('date')
+        .eq('id', meetingId)
+        .single();
+      if (meetingData) setMeetingDate(meetingData.date);
+
       // Fetch profiles for user name lookups (no FK constraints exist in the DB)
       const { data: allProfiles } = await supabase
-        .from('profiles')
+        .from('people')
         .select('id, name');
       
       const map = new Map<string, { name: string }>();
@@ -242,12 +252,12 @@ export function ChecklistClient({ meetingId, currentUser }: ChecklistClientProps
     fetchActivities();
   }
 
-  const completedCount = tasks.filter(t => t.is_completed).length;
-  const progress = tasks.length > 0 ? Math.round((completedCount / tasks.length) * 100) : 0;
-
-  const filteredTasks = filter === 'All' 
-    ? tasks 
-    : tasks.filter(t => !t.is_completed);
+  // Memoize expensive computations
+  const completedCount = useMemo(() => tasks.filter(t => t.is_completed).length, [tasks]);
+  const progress = useMemo(() => tasks.length > 0 ? Math.round((completedCount / tasks.length) * 100) : 0, [tasks.length, completedCount]);
+  const filteredTasks = useMemo(() => filter === 'All'
+    ? tasks
+    : tasks.filter(t => !t.is_completed), [tasks, filter]);
 
   if (loading) {
     return (
@@ -426,6 +436,33 @@ export function ChecklistClient({ meetingId, currentUser }: ChecklistClientProps
                         </span>
                       </div>
 
+                      {meetingDate && task.due_days_before !== null && task.due_days_before !== undefined && (() => {
+                        const d = new Date(meetingDate + 'T00:00:00');
+                        d.setDate(d.getDate() - task.due_days_before);
+                        const today = new Date();
+                        today.setHours(0, 0, 0, 0);
+                        const isOverdue = d.getTime() < today.getTime() && !task.is_completed;
+                        const isToday = d.getTime() === today.getTime() && !task.is_completed;
+                        const label = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                        return (
+                          <div className={cn(
+                            "flex items-center gap-1 mt-1",
+                            task.is_completed ? "opacity-40" : ""
+                          )}>
+                            <Calendar className={cn(
+                              "h-3 w-3 shrink-0",
+                              isOverdue ? "text-coral-text" : isToday ? "text-status-amber" : "text-text-tertiary"
+                            )} />
+                            <span className={cn(
+                              "text-[11px] font-medium",
+                              isOverdue ? "text-coral-text" : isToday ? "text-status-amber" : "text-text-tertiary"
+                            )}>
+                              Due {label}{isOverdue ? ' · Overdue' : isToday ? ' · Today' : ''}
+                            </span>
+                          </div>
+                        );
+                      })()}
+
                       {task.assignee && (
                         <div className="flex items-center gap-2 mt-2">
                           <span className={cn(
@@ -586,3 +623,6 @@ export function ChecklistClient({ meetingId, currentUser }: ChecklistClientProps
     </div>
   );
 }
+
+// Export memoized version to prevent unnecessary re-renders
+export const ChecklistClient = memo(ChecklistClientComponent);

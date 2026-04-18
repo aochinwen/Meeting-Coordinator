@@ -10,7 +10,7 @@ describe('DirectoryClient', () => {
 
   it('renders users table properly', async () => {
     mockSupabaseClient.from.mockImplementation((table) => {
-      if (table === 'profiles') {
+      if (table === 'people') {
         return {
           select: vi.fn().mockReturnThis(),
           order: vi.fn().mockResolvedValue({

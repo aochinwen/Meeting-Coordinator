@@ -1,12 +1,17 @@
+import { Suspense } from 'react';
 import { createClient } from '@/utils/supabase/server';
 import { DirectoryClient } from '@/components/DirectoryClient';
+import { DirectorySkeleton } from '@/components/ui/loading-skeleton';
 
-export default async function PeopleDirectoryPage() {
+export const revalidate = 60; // Revalidate every 60 seconds
+
+// Component that fetches and displays data
+async function DirectoryContent() {
   const supabase = await createClient();
 
   // Fetch all users
   const { data: users, error } = await supabase
-    .from('profiles')
+    .from('people')
     .select('*')
     .order('name', { ascending: true });
 
@@ -19,11 +24,20 @@ export default async function PeopleDirectoryPage() {
   const activeTeamsCount = uniqueDivisions.size || 34;
 
   return (
+    <DirectoryClient
+      initialUsers={users || []}
+      activeTeamsCount={activeTeamsCount}
+    />
+  );
+}
+
+// Main page component with streaming
+export default function PeopleDirectoryPage() {
+  return (
     <div className="h-full">
-      <DirectoryClient 
-        initialUsers={users || []} 
-        activeTeamsCount={activeTeamsCount} 
-      />
+      <Suspense fallback={<DirectorySkeleton />}>
+        <DirectoryContent />
+      </Suspense>
     </div>
   );
 }

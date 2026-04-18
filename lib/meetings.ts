@@ -7,6 +7,7 @@
 
 import { createClient } from '@/utils/supabase/client';
 import { generateOccurrences, RecurrenceConfig } from './recurrence';
+import { format } from 'date-fns';
 import type { Database } from '@/types/supabase';
 
 export type MeetingSeries = Database['public']['Tables']['meeting_series']['Row'];
@@ -305,7 +306,7 @@ export async function updateSeriesPattern(
     .from('meetings')
     .delete()
     .eq('series_id', seriesId)
-    .gte('date', deleteFromDate.toISOString().split('T')[0])
+    .gte('date', format(deleteFromDate, 'yyyy-MM-dd'))
     .eq('is_override', false); // Don't delete overridden instances
   
   if (deleteError) {
@@ -371,28 +372,36 @@ export async function deleteSeriesFromDate(
   fromDate: Date
 ): Promise<void> {
   const supabase = createClient();
-  
+
+  // Format date as YYYY-MM-DD using local timezone
+  const dateStr = format(fromDate, 'yyyy-MM-dd');
+
+  // Calculate previous day for series end date
+  const prevDate = new Date(fromDate);
+  prevDate.setDate(prevDate.getDate() - 1);
+  const endDateStr = format(prevDate, 'yyyy-MM-dd');
+
   // Update series end date
   const { error: updateError } = await supabase
     .from('meeting_series')
     .update({
-      end_date: new Date(fromDate.getTime() - 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      end_date: endDateStr,
       updated_at: new Date().toISOString(),
     })
     .eq('id', seriesId);
-  
+
   if (updateError) {
     console.error('Error updating series end date:', updateError);
     throw updateError;
   }
-  
+
   // Delete future instances
   const { error: deleteError } = await supabase
     .from('meetings')
     .delete()
     .eq('series_id', seriesId)
-    .gte('date', fromDate.toISOString().split('T')[0]);
-  
+    .gte('date', dateStr);
+
   if (deleteError) {
     console.error('Error deleting future instances:', deleteError);
     throw deleteError;
@@ -489,14 +498,14 @@ export async function checkConflicts(
 }> {
   const supabase = createClient();
   
-  // Fetch profiles for name lookup (no FK from meeting_participants to profiles)
-  const { data: profilesData } = await supabase
-    .from('profiles')
+  // Fetch people for name lookup
+  const { data: peopleData } = await supabase
+    .from('people')
     .select('id, name')
     .in('id', participantIds);
   
-  const profileMap = new Map<string, string>();
-  (profilesData || []).forEach((p: any) => profileMap.set(p.id, p.name));
+  const peopleMap = new Map<string, string>();
+  (peopleData || []).forEach((p: any) => peopleMap.set(p.id, p.name));
 
   // Get participants' existing meetings on the same date
   const { data: existingMeetings, error } = await supabase
@@ -530,7 +539,7 @@ export async function checkConflicts(
     hasConflicts: conflicts.length > 0,
     conflicts: conflicts.map((c: any) => ({
       userId: c.user_id,
-      userName: profileMap.get(c.user_id) || 'Unknown',
+      userName: peopleMap.get(c.user_id) || 'Unknown',
       meetingTitle: c.meetings.title,
       meetingDate: c.meetings.date,
       startTime: c.meetings.start_time,

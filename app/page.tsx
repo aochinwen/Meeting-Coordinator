@@ -1,7 +1,10 @@
 import { createClient } from '@/utils/supabase/server';
-import { ChevronRight, Plus, Search, Filter, ArrowUpDown, Video, Target, User, Users, CalendarCheck2, Clock, CheckCircle2 } from 'lucide-react';
+import { Suspense } from 'react';
+import { ChevronRight, Plus, Search, Video, Target, User, Users, CalendarCheck2, Clock, CheckCircle2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
+import { DashboardSkeleton } from '@/components/ui/loading-skeleton';
+import { FilterDropdown, SortDropdown } from '@/components/DropdownFilter';
 
 interface MeetingWithRelations {
   id: string;
@@ -20,51 +23,118 @@ interface Profile {
   name: string;
 }
 
-export default async function DashboardPage() {
+export const revalidate = 60; // Revalidate every 60 seconds
+
+// Component that fetches and displays data
+const PAGE_SIZE = 10;
+
+async function DashboardContent({
+  page,
+  search,
+  filter,
+  sortBy,
+  sortOrder,
+}: {
+  page: number;
+  search: string;
+  filter: string;
+  sortBy: string;
+  sortOrder: 'asc' | 'desc';
+}) {
   const supabase = await createClient();
 
-  // Fetch meetings with participants and tasks
-  const { data: meetingsData } = await supabase
+  const from = (page - 1) * PAGE_SIZE;
+  const to = from + PAGE_SIZE - 1;
+
+  // Calculate default date range (today to 1 month from today)
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const oneMonthFromToday = new Date(today);
+  oneMonthFromToday.setMonth(oneMonthFromToday.getMonth() + 1);
+
+  const defaultStartDate = today.toISOString().split('T')[0];
+  const defaultEndDate = oneMonthFromToday.toISOString().split('T')[0];
+
+  // Parse filter param
+  let dateRangeStart = defaultStartDate;
+  let dateRangeEnd = defaultEndDate;
+  if (filter === 'all') {
+    dateRangeStart = '1900-01-01';
+    dateRangeEnd = '2099-12-31';
+  } else if (filter === 'today') {
+    dateRangeStart = defaultStartDate;
+    dateRangeEnd = defaultStartDate;
+  } else if (filter === 'week') {
+    const oneWeekFromToday = new Date(today);
+    oneWeekFromToday.setDate(oneWeekFromToday.getDate() + 7);
+    dateRangeStart = defaultStartDate;
+    dateRangeEnd = oneWeekFromToday.toISOString().split('T')[0];
+  } else if (filter === 'month') {
+    // Default 1 month range already set
+  }
+
+  // Build the query
+  let meetingsQuery = supabase
     .from('meetings')
     .select(`
       *,
       meeting_participants(user_id),
       meeting_checklist_tasks(id, is_completed)
-    `)
-    .order('date', { ascending: true })
-    .limit(10);
-  
-  // Fetch all users for attendee names
-  const { data: profiles } = await supabase
-    .from('profiles')
-    .select('id, name')
-    .order('name', { ascending: true });
-  
+    `, { count: 'exact' })
+    .gte('date', dateRangeStart)
+    .lte('date', dateRangeEnd);
+
+  // Apply search filter
+  if (search) {
+    meetingsQuery = meetingsQuery.or(`title.ilike.%${search}%,description.ilike.%${search}%`);
+  }
+
+  // Apply sorting
+  const validSortColumns = ['date', 'title', 'status'];
+  const sortColumn = validSortColumns.includes(sortBy) ? sortBy : 'date';
+  meetingsQuery = meetingsQuery.order(sortColumn, { ascending: sortOrder === 'asc' });
+
+  // Fetch all data in parallel for better performance
+  const [
+    { data: meetingsData, count: meetingsCount },
+    { data: profiles },
+    { count: usersCount }
+  ] = await Promise.all([
+    meetingsQuery.range(from, to),
+    // Fetch all users for attendee names
+    supabase
+      .from('people')
+      .select('id, name')
+      .order('name', { ascending: true }),
+    // Fetch active team members count
+    supabase
+      .from('people')
+      .select('*', { count: 'exact', head: true })
+  ]);
+
+  const totalMeetings = meetingsCount || 0;
+  const totalPages = Math.max(1, Math.ceil(totalMeetings / PAGE_SIZE));
+  const currentPage = Math.min(Math.max(1, page), totalPages);
+
   // Create a profile map for quick lookup
   const profileMap = new Map<string, string>();
   profiles?.forEach(p => profileMap.set(p.id, p.name));
-  
-  // Fetch active team members count
-  const { count: usersCount } = await supabase
-    .from('profiles')
-    .select('*', { count: 'exact', head: true });
 
-  const activeTeamMembers = usersCount || 18;
+  const activeTeamMembers = usersCount || 0;
 
   const meetings = (meetingsData as unknown as MeetingWithRelations[]) || [];
-  const thisWeekMeetingsCount = meetings.length; // Simplified for now
-  
-  // Create formatted meetings list with real data
+  const thisWeekMeetingsCount = meetings.length;
+
+  const rangeStart = totalMeetings === 0 ? 0 : from + 1;
+  const rangeEnd = from + meetings.length;
+
+  // Pre-format meeting data for rendering
   const formattedMeetings = meetings.map((meeting) => {
-    // Determine status (Live vs Upcoming based on Mock logic)
     const isLive = meeting.status === 'scheduled' && meeting.date === new Date().toISOString().split('T')[0];
-    
-    // Calculate task progress
     const totalTasks = meeting.meeting_checklist_tasks?.length || 0;
     const completedTasks = meeting.meeting_checklist_tasks?.filter(t => t.is_completed).length || 0;
     const progress = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
-    
-    // Get real attendees with names
+
     const participantIds = meeting.meeting_participants?.map(p => p.user_id) || [];
     const attendees = participantIds.slice(0, 3).map(id => {
       const name = profileMap.get(id) || '?';
@@ -74,13 +144,12 @@ export default async function DashboardPage() {
       };
     });
     const remainingCount = Math.max(0, participantIds.length - 3);
-    
-    // Fallback icons based on meeting title hash
+
     const icons = [Video, Target, User];
     const bgs = ['bg-status-green-bg/30', 'bg-amber/30', 'bg-status-grey-bg/50'];
     const colors = ['text-primary', 'text-status-amber', 'text-text-secondary'];
     const randomIdx = Math.abs(meeting.id.charCodeAt(0) % 3);
-    
+
     return {
       id: meeting.id,
       title: meeting.title,
@@ -100,7 +169,7 @@ export default async function DashboardPage() {
   });
 
   return (
-    <div className="max-w-[1280px] mx-auto space-y-8 pb-12 h-full flex flex-col pt-8">
+    <div className="max-w-[1280px] mx-auto space-y-8 pb-12 pt-8">
       <div className="flex items-end justify-between">
         <div className="flex flex-col gap-2">
           <h1 className="text-4xl font-bold tracking-tight text-text-primary font-literata">
@@ -126,7 +195,7 @@ export default async function DashboardPage() {
               <CalendarCheck2 className="h-5 w-5 text-primary" />
             </div>
             <div className="bg-status-green-bg/30 px-3 py-1 rounded-full">
-              <span className="text-xs text-primary font-light">+12% vs last week</span>
+              <span className="text-xs text-primary font-light">This week</span>
             </div>
           </div>
           <div className="space-y-1">
@@ -146,7 +215,7 @@ export default async function DashboardPage() {
           </div>
           <div className="space-y-1">
             <h3 className="text-sm tracking-wide text-text-tertiary uppercase font-light">Pending Invitations</h3>
-            <p className="text-4xl font-bold text-text-primary leading-none font-literata">07</p>
+            <p className="text-4xl font-bold text-text-primary leading-none font-literata">—</p>
           </div>
         </div>
 
@@ -156,8 +225,11 @@ export default async function DashboardPage() {
               <Users className="h-5 w-5 text-text-secondary" />
             </div>
             <div className="flex -space-x-2">
-              <div className="h-8 w-8 rounded-full border-2 border-surface bg-status-amber flex items-center justify-center text-[10px] text-white">AM</div>
-              <div className="h-8 w-8 rounded-full border-2 border-surface bg-cream flex items-center justify-center text-[10px] text-text-primary">+{activeTeamMembers - 1}</div>
+              {activeTeamMembers > 0 && (
+                <div className="h-8 w-8 rounded-full border-2 border-surface bg-cream flex items-center justify-center text-[10px] text-text-primary">
+                  {activeTeamMembers}
+                </div>
+              )}
             </div>
           </div>
           <div className="space-y-1">
@@ -168,27 +240,26 @@ export default async function DashboardPage() {
       </div>
 
       <div className="bg-status-grey-bg rounded-3xl p-4 flex gap-4 items-center shrink-0">
-        <div className="flex-1 bg-board rounded-2xl flex items-center px-4 py-3 relative overflow-hidden group focus-within:ring-2 focus-within:ring-primary/20 transition-all">
+        <form className="flex-1 bg-board rounded-2xl flex items-center px-4 py-3 relative overflow-hidden group focus-within:ring-2 focus-within:ring-primary/20 transition-all" action="/" method="GET">
           <Search className="h-5 w-5 text-gray-500 shrink-0" />
-          <input 
-            type="text" 
-            placeholder="Search meetings, attendees, or topics..." 
+          <input
+            type="text"
+            name="search"
+            defaultValue={search}
+            placeholder="Search meetings, attendees, or topics..."
             className="w-full bg-transparent border-none outline-none pl-3 text-text-secondary placeholder-gray-500 font-light text-base"
           />
-        </div>
+          <input type="hidden" name="filter" value={filter} />
+          <input type="hidden" name="sortBy" value={sortBy} />
+          <input type="hidden" name="sortOrder" value={sortOrder} />
+        </form>
         <div className="flex gap-2 shrink-0">
-          <button className="bg-board border border-border rounded-2xl px-4 py-3 flex items-center gap-2 hover:bg-white transition-colors">
-            <Filter className="h-4 w-4 text-text-secondary" />
-            <span className="text-sm font-light text-text-secondary">Filter</span>
-          </button>
-          <button className="bg-board border border-border rounded-2xl px-4 py-3 flex items-center gap-2 hover:bg-white transition-colors">
-            <ArrowUpDown className="h-4 w-4 text-text-secondary" />
-            <span className="text-sm font-light text-text-secondary">Sort</span>
-          </button>
+          <FilterDropdown search={search} filter={filter} sortBy={sortBy} sortOrder={sortOrder} />
+          <SortDropdown search={search} filter={filter} sortBy={sortBy} sortOrder={sortOrder} />
         </div>
       </div>
 
-      <div className="bg-white rounded-[24px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] border border-[rgba(196,200,188,0.2)] overflow-hidden flex-1 flex flex-col min-h-0">
+      <div className="bg-white rounded-[24px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] border border-[rgba(196,200,188,0.2)] overflow-hidden">
         {/* Header */}
         <div className="grid grid-cols-12 gap-4 px-6 py-4 bg-[rgba(234,230,222,0.5)] border-b border-[rgba(196,200,188,0.2)] text-xs tracking-[1.2px] uppercase text-text-secondary font-light shrink-0">
           <div className="col-span-4">Meeting Details</div>
@@ -199,7 +270,7 @@ export default async function DashboardPage() {
         </div>
 
         {/* Rows */}
-        <div className="divide-y divide-[rgba(196,200,188,0.1)] overflow-y-auto">
+        <div className="divide-y divide-[rgba(196,200,188,0.1)]">
           {formattedMeetings.length > 0 ? formattedMeetings.map((meeting) => (
             <Link 
               key={meeting.id} 
@@ -287,25 +358,85 @@ export default async function DashboardPage() {
       </div>
 
       <div className="flex items-center justify-between pt-2 shrink-0">
-        <span className="text-sm font-light text-text-tertiary">Showing 1-{Math.min(10, formattedMeetings.length)} of {formattedMeetings.length} meetings</span>
+        <span className="text-sm font-light text-text-tertiary">Showing {rangeStart}-{rangeEnd} of {totalMeetings} meetings</span>
         <div className="flex items-center gap-2">
-          <button className="h-10 w-10 flex items-center justify-center rounded-2xl bg-surface hover:bg-border-hover transition-colors">
-            <ChevronRight className="h-4 w-4 rotate-180" />
-          </button>
-          <button className="h-10 w-10 flex items-center justify-center rounded-2xl bg-primary text-white text-sm font-light shadow-sm">
-            1
-          </button>
-          <button className="h-10 w-10 flex items-center justify-center rounded-2xl bg-white border border-border/30 text-text-secondary text-sm font-light hover:bg-board transition-colors">
-            2
-          </button>
-          <button className="h-10 w-10 flex items-center justify-center rounded-2xl bg-white border border-border/30 text-text-secondary text-sm font-light hover:bg-board transition-colors">
-            3
-          </button>
-          <button className="h-10 w-10 flex items-center justify-center rounded-2xl bg-surface hover:bg-border-hover transition-colors">
-            <ChevronRight className="h-4 w-4" />
-          </button>
+          {currentPage > 1 ? (
+            <Link
+              href={`/?page=${currentPage - 1}&search=${encodeURIComponent(search)}&filter=${filter}&sortBy=${sortBy}&sortOrder=${sortOrder}`}
+              className="h-10 w-10 flex items-center justify-center rounded-2xl bg-surface hover:bg-border-hover transition-colors"
+              aria-label="Previous page"
+            >
+              <ChevronRight className="h-4 w-4 rotate-180" />
+            </Link>
+          ) : (
+            <button
+              disabled
+              aria-label="Previous page"
+              className="h-10 w-10 flex items-center justify-center rounded-2xl bg-surface opacity-40 cursor-not-allowed"
+            >
+              <ChevronRight className="h-4 w-4 rotate-180" />
+            </button>
+          )}
+          {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+            <Link
+              key={p}
+              href={`/?page=${p}&search=${encodeURIComponent(search)}&filter=${filter}&sortBy=${sortBy}&sortOrder=${sortOrder}`}
+              aria-current={p === currentPage ? 'page' : undefined}
+              className={cn(
+                "h-10 w-10 flex items-center justify-center rounded-2xl text-sm font-light transition-colors",
+                p === currentPage
+                  ? "bg-primary text-white shadow-sm"
+                  : "bg-white border border-border/30 text-text-secondary hover:bg-board"
+              )}
+            >
+              {p}
+            </Link>
+          ))}
+          {currentPage < totalPages ? (
+            <Link
+              href={`/?page=${currentPage + 1}&search=${encodeURIComponent(search)}&filter=${filter}&sortBy=${sortBy}&sortOrder=${sortOrder}`}
+              className="h-10 w-10 flex items-center justify-center rounded-2xl bg-surface hover:bg-border-hover transition-colors"
+              aria-label="Next page"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Link>
+          ) : (
+            <button
+              disabled
+              aria-label="Next page"
+              className="h-10 w-10 flex items-center justify-center rounded-2xl bg-surface opacity-40 cursor-not-allowed"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          )}
         </div>
       </div>
     </div>
+  );
+}
+
+// Main page component with streaming
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ page?: string; search?: string; filter?: string; sortBy?: string; sortOrder?: string }>;
+}) {
+  const { page: pageParam, search: searchParam, filter: filterParam, sortBy: sortByParam, sortOrder: sortOrderParam } = await searchParams;
+  const parsed = Number.parseInt(pageParam ?? '1', 10);
+  const page = Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
+  const search = searchParam ?? '';
+  const filter = filterParam ?? 'month'; // Default: show meetings within 1 month
+  const sortBy = sortByParam ?? 'date';
+  const sortOrder = sortOrderParam === 'desc' ? 'desc' : 'asc';
+  return (
+    <Suspense fallback={<DashboardSkeleton />}>
+      <DashboardContent
+        page={page}
+        search={search}
+        filter={filter}
+        sortBy={sortBy}
+        sortOrder={sortOrder}
+      />
+    </Suspense>
   );
 }

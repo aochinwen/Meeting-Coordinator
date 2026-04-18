@@ -1,43 +1,68 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo, memo } from 'react';
 import { Plus, Search, MoreHorizontal, ChevronDown, ChevronRight, Edit2, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Database } from '@/types/supabase';
 import { createClient } from '@/utils/supabase/client';
 import { AddUserModal } from './AddUserModal';
+import { EditUserModal } from './EditUserModal';
+import { DeleteUserModal } from './DeleteUserModal';
 
-type User = Database['public']['Tables']['profiles']['Row'];
+type User = Database['public']['Tables']['people']['Row'];
 
 interface DirectoryClientProps {
   initialUsers: User[];
   activeTeamsCount: number;
 }
 
-export function DirectoryClient({ initialUsers, activeTeamsCount }: DirectoryClientProps) {
+function DirectoryClientComponent({ initialUsers, activeTeamsCount }: DirectoryClientProps) {
   const [users, setUsers] = useState<User[]>(initialUsers);
   const [search, setSearch] = useState('');
   const [organizationFilter, setOrganizationFilter] = useState('All Organizations');
   const [rankFilter, setRankFilter] = useState('Filter by Rank');
   const [currentPage, setCurrentPage] = useState(1);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [deletingUser, setDeletingUser] = useState<User | null>(null);
   const supabase = createClient();
 
   const ITEMS_PER_PAGE = 4;
 
-  const filteredUsers = users.filter((u) => {
+  const totalMembers = users.length;
+  const activeTeams = useMemo(() => new Set(users.map(u => u.division).filter(Boolean)).size, [users]);
+
+  // Memoize filtered and paginated users to prevent unnecessary re-computation
+  const filteredUsers = useMemo(() => users.filter((u) => {
     const matchesSearch = u.name.toLowerCase().includes(search.toLowerCase()) ||
                           (u.division && u.division.toLowerCase().includes(search.toLowerCase()));
     const matchesRank = rankFilter === 'Filter by Rank' || u.rank === rankFilter;
     return matchesSearch && matchesRank;
-  });
+  }), [users, search, rankFilter]);
 
   const totalPages = Math.ceil(filteredUsers.length / ITEMS_PER_PAGE);
-  const paginatedUsers = filteredUsers.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+  const paginatedUsers = useMemo(() =>
+    filteredUsers.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE),
+    [filteredUsers, currentPage]
+  );
 
-  const formatEmail = (name: string) => {
-    return `${name.toLowerCase().replace(/\s+/g, '.')}@example.com`;
+  // Reset to first page when filters change
+  useMemo(() => {
+    setCurrentPage(1);
+  }, [search, rankFilter]);
+
+  const formatEmail = (user: User) => {
+    return user.email || `${user.name.toLowerCase().replace(/\s+/g, '.')}@example.com`;
   };
+
+  // Extract unique ranks from users for autocomplete
+  const existingRanks = useMemo(() => {
+    const ranks = new Set<string>();
+    users.forEach(u => {
+      if (u.rank) ranks.add(u.rank);
+    });
+    return Array.from(ranks).sort();
+  }, [users]);
 
   const getRankBadgeProps = (rank: string | null | undefined) => {
     if (!rank) return { bg: 'bg-gray-100', text: 'text-gray-800' };
@@ -55,19 +80,54 @@ export function DirectoryClient({ initialUsers, activeTeamsCount }: DirectoryCli
     return { bg: bgs[idx], textColor: textColors[idx] };
   };
 
-  // Mock organizations for presentation
-  const getOrganization = (id: string) => {
-    const orgs = ['Green Earth Initiative', 'Terra Foundations', 'Rooted Logistics'];
-    const idx = parseInt(id.replace(/\D/g, '') || '0', 10) % orgs.length;
-    return orgs[idx];
+  // TODO: Add organization field to users table and fetch real data
+  const getOrganization = (_id: string) => {
+    return '—';
   };
 
-  const handleAddUser = async (newUser: { name: string; division: string; rank: string }) => {
+  const handleEditUser = async (userId: string, updates: { name: string; email: string; division: string; rank: string }) => {
     const { data, error } = await supabase
-      .from('profiles')
+      .from('people')
+      .update({
+        name: updates.name,
+        email: updates.email,
+        division: updates.division,
+        rank: updates.rank,
+      })
+      .eq('id', userId)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Failed to update user', error);
+      throw error;
+    }
+
+    if (data) {
+      setUsers(prev => prev.map(u => u.id === userId ? data : u).sort((a, b) => a.name.localeCompare(b.name)));
+    }
+  };
+
+  const handleDeleteUser = async (userId: string) => {
+    const { error } = await supabase
+      .from('people')
+      .delete()
+      .eq('id', userId);
+
+    if (error) {
+      console.error('Failed to delete user', error);
+      throw error;
+    }
+
+    setUsers(prev => prev.filter(u => u.id !== userId));
+  };
+
+  const handleAddUser = async (newUser: { name: string; email: string; division: string; rank: string }) => {
+    const { data, error } = await supabase
+      .from('people')
       .insert([
         {
-          id: crypto.randomUUID(), // Mock ID, real implementation uses auth triggers
+          id: crypto.randomUUID(),
           name: newUser.name,
           division: newUser.division,
           rank: newUser.rank,
@@ -82,7 +142,7 @@ export function DirectoryClient({ initialUsers, activeTeamsCount }: DirectoryCli
     }
 
     if (data) {
-      setUsers([...users, data].sort((a, b) => a.name.localeCompare(b.name)));
+      setUsers(prev => [...prev, data].sort((a, b) => a.name.localeCompare(b.name)));
     }
   };
 
@@ -162,7 +222,7 @@ export function DirectoryClient({ initialUsers, activeTeamsCount }: DirectoryCli
                   </div>
                   <div className="flex flex-col min-w-0">
                     <h4 className="text-base font-bold text-text-primary truncate">{user.name}</h4>
-                    <p className="text-sm font-light text-text-secondary truncate">{formatEmail(user.name)}</p>
+                    <p className="text-sm font-light text-text-secondary truncate">{formatEmail(user)}</p>
                   </div>
                 </div>
                 
@@ -181,10 +241,16 @@ export function DirectoryClient({ initialUsers, activeTeamsCount }: DirectoryCli
                 </div>
                 
                 <div className="col-span-2 flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button className="p-2 text-text-secondary hover:bg-surface rounded-lg transition-colors">
+                  <button
+                    onClick={() => setEditingUser(user)}
+                    className="p-2 text-text-secondary hover:bg-surface rounded-lg transition-colors"
+                  >
                     <Edit2 className="h-4 w-4" />
                   </button>
-                  <button className="p-2 text-text-secondary hover:bg-red-50 hover:text-red-600 rounded-lg transition-colors">
+                  <button
+                    onClick={() => setDeletingUser(user)}
+                    className="p-2 text-text-secondary hover:bg-red-50 hover:text-red-600 rounded-lg transition-colors"
+                  >
                     <Trash2 className="h-4 w-4" />
                   </button>
                 </div>
@@ -242,33 +308,33 @@ export function DirectoryClient({ initialUsers, activeTeamsCount }: DirectoryCli
           <div className="flex items-start justify-between">
             <div>
               <h3 className="text-sm tracking-widest uppercase text-text-secondary font-light">Total Members</h3>
-              <p className="text-3xl font-bold text-primary font-literata">{initialUsers.length}</p>
+              <p className="text-3xl font-bold text-primary font-literata">{totalMembers}</p>
             </div>
             <UsersIcon className="h-6 w-6 text-status-green" />
           </div>
-          <p className="text-xs text-status-green font-medium">+12% from last quarter</p>
+          <p className="text-xs text-status-green font-medium">Active directory</p>
         </div>
         
         <div className="bg-amber/20 border border-status-amber/10 rounded-[24px] p-6 flex flex-col gap-4">
           <div className="flex items-start justify-between">
             <div>
               <h3 className="text-sm tracking-widest uppercase text-text-secondary font-light">Active Teams</h3>
-              <p className="text-3xl font-bold text-status-amber font-literata">{activeTeamsCount}</p>
+              <p className="text-3xl font-bold text-status-amber font-literata">{activeTeams}</p>
             </div>
             <ActivityIcon className="h-6 w-6 text-status-amber" />
           </div>
-          <p className="text-xs text-status-amber font-medium">Distributed across 6 continents</p>
+          <p className="text-xs text-status-amber font-medium">Across divisions</p>
         </div>
         
         <div className="bg-warm border border-text-secondary/10 rounded-[24px] p-6 flex flex-col gap-4">
           <div className="flex items-start justify-between">
             <div>
               <h3 className="text-sm tracking-widest uppercase text-text-secondary font-light">Pending Invites</h3>
-              <p className="text-3xl font-bold text-text-primary font-literata">18</p>
+              <p className="text-3xl font-bold text-text-primary font-literata">—</p>
             </div>
             <InviteIcon className="h-6 w-6 text-text-secondary" />
           </div>
-          <p className="text-xs text-text-secondary font-medium">Avg. acceptance time: 4 hours</p>
+          <p className="text-xs text-text-secondary font-medium">Invitation tracking</p>
         </div>
       </div>
 
@@ -277,9 +343,27 @@ export function DirectoryClient({ initialUsers, activeTeamsCount }: DirectoryCli
         onClose={() => setIsAddModalOpen(false)} 
         onAdd={handleAddUser} 
       />
+
+      <EditUserModal
+        isOpen={editingUser !== null}
+        onClose={() => setEditingUser(null)}
+        user={editingUser}
+        existingRanks={existingRanks}
+        onSave={handleEditUser}
+      />
+
+      <DeleteUserModal
+        isOpen={deletingUser !== null}
+        onClose={() => setDeletingUser(null)}
+        user={deletingUser}
+        onDelete={handleDeleteUser}
+      />
     </div>
   );
 }
+
+// Export memoized version to prevent unnecessary re-renders
+export const DirectoryClient = memo(DirectoryClientComponent);
 
 // Temporary icons until proper import
 function UsersIcon(props: any) {

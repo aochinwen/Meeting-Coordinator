@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo, memo } from 'react';
 import { 
   ChevronRight, Calendar, Clock, Users, MapPin, FileText, 
   CheckCircle2, MessageSquare, Plus, Check, Edit, Trash2,
@@ -11,10 +11,18 @@ import { User } from '@supabase/supabase-js';
 import { createClient } from '@/utils/supabase/client';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { DeleteMeetingModal } from './DeleteMeetingModal';
 
 interface MeetingDetailClientProps {
   meetingId: string;
   currentUser?: User;
+  initialData?: {
+    meeting: Meeting | null;
+    participants: Participant[];
+    tasks: Task[];
+    activities: Activity[];
+    profileMap: Record<string, { name: string; division?: string | null; rank?: string | null }>;
+  };
 }
 
 interface Meeting {
@@ -35,11 +43,11 @@ interface Participant {
   user_id: string;
   status: string | null;
   is_required: boolean | null;
-  user?: {
+  user: {
     name: string;
     division?: string | null;
     rank?: string | null;
-  };
+  } | null;
 }
 
 interface Task {
@@ -47,10 +55,11 @@ interface Task {
   description: string;
   assigned_user_id: string | null;
   is_completed: boolean;
+  due_days_before: number | null;
   created_at: string;
-  assignee?: {
+  assignee: {
     name: string;
-  };
+  } | null;
 }
 
 interface Activity {
@@ -58,35 +67,44 @@ interface Activity {
   user_id: string | null;
   activity_type: string;
   content: string;
-  metadata: Record<string, unknown>;
+  metadata: unknown;
   created_at: string;
-  user?: {
+  user: {
     name: string;
-  };
+  } | null;
 }
 
-export function MeetingDetailClient({ meetingId, currentUser }: MeetingDetailClientProps) {
+function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: MeetingDetailClientProps) {
   const supabase = createClient();
   const router = useRouter();
-  const [meeting, setMeeting] = useState<Meeting | null>(null);
-  const [participants, setParticipants] = useState<Participant[]>([]);
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [activities, setActivities] = useState<Activity[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [meeting, setMeeting] = useState<Meeting | null>(initialData?.meeting || null);
+  const [participants, setParticipants] = useState<Participant[]>(initialData?.participants || []);
+  const [tasks, setTasks] = useState<Task[]>(initialData?.tasks || []);
+  const [activities, setActivities] = useState<Activity[]>(initialData?.activities || []);
+  const [loading, setLoading] = useState(!initialData);
   const [newTaskInput, setNewTaskInput] = useState('');
   const [commentInput, setCommentInput] = useState('');
   const [copied, setCopied] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
 
   type ProfileInfo = { name: string; division?: string | null; rank?: string | null };
-  const profileMapRef = useRef<Map<string, ProfileInfo>>(new Map());
+  const profileMapRef = useRef<Map<string, ProfileInfo>>(
+    initialData?.profileMap
+      ? new Map(Object.entries(initialData.profileMap))
+      : new Map()
+  );
 
   // No-arg wrappers for real-time callbacks and event handlers
   function fetchTasks() { fetchTasksWithMap(profileMapRef.current); }
   function fetchActivities() { fetchActivitiesWithMap(profileMapRef.current); }
 
   useEffect(() => {
-    fetchMeetingData();
-    
+    // Only fetch if we don't have initial data (fallback for client-side navigation)
+    if (!initialData) {
+      fetchMeetingData();
+    }
+
+    // Real-time subscriptions for live updates
     const tasksSubscription = supabase
       .channel('meeting_checklist_tasks')
       .on(
@@ -123,12 +141,12 @@ export function MeetingDetailClient({ meetingId, currentUser }: MeetingDetailCli
       tasksSubscription.unsubscribe();
       activitiesSubscription.unsubscribe();
     };
-  }, [meetingId]);
+  }, [meetingId, initialData]);
 
   async function fetchMeetingData() {
     // Fetch profiles once for all lookups (no FK constraints exist in the DB)
     const { data: allProfiles } = await supabase
-      .from('profiles')
+      .from('people')
       .select('id, name, division, rank');
     
     const profileMap = new Map<string, ProfileInfo>();
@@ -303,7 +321,7 @@ export function MeetingDetailClient({ meetingId, currentUser }: MeetingDetailCli
 
   if (loading) {
     return (
-      <div className="max-w-[1280px] mx-auto pb-24 h-full flex flex-col pt-8 space-y-8 px-8">
+      <div className="max-w-[1280px] mx-auto pb-24 flex flex-col pt-8 space-y-8 px-8">
         <div className="flex items-center justify-center h-64">
           <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full"></div>
         </div>
@@ -313,26 +331,41 @@ export function MeetingDetailClient({ meetingId, currentUser }: MeetingDetailCli
 
   if (!meeting) {
     return (
-      <div className="max-w-[1280px] mx-auto pb-24 h-full flex flex-col pt-8 space-y-8 px-8">
+      <div className="max-w-[1280px] mx-auto pb-24 flex flex-col pt-8 space-y-8 px-8">
         <div className="text-center text-text-tertiary">Meeting not found</div>
       </div>
     );
   }
 
-  const completedTasks = tasks.filter(t => t.is_completed).length;
-  const progress = tasks.length > 0 ? Math.round((completedTasks / tasks.length) * 100) : 0;
-  const formattedDate = new Date(meeting.date).toLocaleDateString('en-US', { 
+  // Memoize expensive computations
+  const completedTasks = useMemo(() => tasks.filter(t => t.is_completed).length, [tasks]);
+  const progress = useMemo(() => tasks.length > 0 ? Math.round((completedTasks / tasks.length) * 100) : 0, [tasks.length, completedTasks]);
+  const formattedDate = useMemo(() => new Date(meeting.date).toLocaleDateString('en-US', {
     weekday: 'long',
-    day: 'numeric', 
-    month: 'long', 
-    year: 'numeric' 
-  });
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric'
+  }), [meeting.date]);
 
-  const getInitials = (name: string) => {
+  const getInitials = useMemo(() => (name: string) => {
     return name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
+  }, []);
+
+  const getTaskDueDateLabel = (due_days_before: number | null, meetingDate: string): { label: string; isOverdue: boolean; isToday: boolean } | null => {
+    if (due_days_before === null) return null;
+    const d = new Date(meetingDate + 'T00:00:00');
+    d.setDate(d.getDate() - due_days_before);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const dueMs = d.getTime();
+    const todayMs = today.getTime();
+    const isOverdue = dueMs < todayMs;
+    const isToday = dueMs === todayMs;
+    const label = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    return { label, isOverdue, isToday };
   };
 
-  const getStatusColor = (status: string | null) => {
+  const getStatusColor = useMemo(() => (status: string | null) => {
     switch (status) {
       case 'accepted':
         return 'bg-mint text-status-green';
@@ -343,10 +376,10 @@ export function MeetingDetailClient({ meetingId, currentUser }: MeetingDetailCli
       default:
         return 'bg-status-grey-bg text-text-secondary';
     }
-  };
+  }, []);
 
   return (
-    <div className="max-w-[1280px] mx-auto pb-24 h-full flex flex-col pt-8 space-y-8 px-8">
+    <div className="max-w-[1280px] mx-auto pb-24 flex flex-col pt-8 space-y-8 px-8">
       {/* Header */}
       <div className="flex items-start justify-between shrink-0">
         <div className="flex flex-col gap-3">
@@ -383,6 +416,14 @@ export function MeetingDetailClient({ meetingId, currentUser }: MeetingDetailCli
           <button className="px-5 py-2.5 bg-primary text-white rounded-full text-sm font-medium shadow-md transition-all active:scale-95 hover:bg-primary/90 flex items-center gap-2">
             <Mail className="h-4 w-4" />
             Send Invites
+          </button>
+          
+          <button 
+            onClick={() => setIsDeleteModalOpen(true)}
+            className="px-5 py-2.5 bg-coral-bg text-coral-text border border-coral-text/30 rounded-full text-sm font-medium transition-all active:scale-95 hover:bg-coral-text/10 flex items-center gap-2"
+          >
+            <Trash2 className="h-4 w-4" />
+            Delete
           </button>
         </div>
       </div>
@@ -505,6 +546,28 @@ export function MeetingDetailClient({ meetingId, currentUser }: MeetingDetailCli
                           {task.is_completed ? 'Done' : 'Pending'}
                         </span>
                       </div>
+
+                      {(() => {
+                        const due = getTaskDueDateLabel(task.due_days_before, meeting.date);
+                        if (!due) return null;
+                        return (
+                          <div className={cn(
+                            "flex items-center gap-1 mt-1",
+                            task.is_completed ? "opacity-40" : ""
+                          )}>
+                            <Calendar className={cn(
+                              "h-3 w-3 shrink-0",
+                              due.isOverdue && !task.is_completed ? "text-coral-text" : due.isToday && !task.is_completed ? "text-status-amber" : "text-text-tertiary"
+                            )} />
+                            <span className={cn(
+                              "text-[11px] font-medium",
+                              due.isOverdue && !task.is_completed ? "text-coral-text" : due.isToday && !task.is_completed ? "text-status-amber" : "text-text-tertiary"
+                            )}>
+                              Due {due.label}{due.isOverdue && !task.is_completed ? ' · Overdue' : due.isToday && !task.is_completed ? ' · Today' : ''}
+                            </span>
+                          </div>
+                        );
+                      })()}
 
                       {task.assignee && (
                         <div className="flex items-center gap-2 mt-2">
@@ -691,6 +754,24 @@ export function MeetingDetailClient({ meetingId, currentUser }: MeetingDetailCli
           </div>
         </div>
       </div>
+
+      {/* Delete Meeting Modal */}
+      {meeting && (
+        <DeleteMeetingModal
+          isOpen={isDeleteModalOpen}
+          onClose={() => setIsDeleteModalOpen(false)}
+          meetingId={meeting.id}
+          seriesId={meeting.series_id}
+          meetingDate={meeting.date}
+          meetingTitle={meeting.title}
+          onSuccess={() => {
+            router.push('/');
+          }}
+        />
+      )}
     </div>
   );
 }
+
+// Export memoized version to prevent unnecessary re-renders
+export const MeetingDetailClient = memo(MeetingDetailClientComponent);

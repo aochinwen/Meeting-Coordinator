@@ -7,11 +7,15 @@ import { Header } from "@/components/Header";
 const literata = Literata({ 
   subsets: ["latin"],
   variable: '--font-literata',
+  display: 'swap',
+  preload: true,
 });
 
 const nunitoSans = Nunito_Sans({ 
   subsets: ["latin"],
   variable: '--font-nunito-sans',
+  display: 'swap',
+  preload: true,
 });
 
 export const metadata: Metadata = {
@@ -26,6 +30,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${literata.variable} ${nunitoSans.variable} h-full antialiased`}>
+      <head>
+        <link rel="preconnect" href={process.env.NEXT_PUBLIC_SUPABASE_URL || ''} />
+      </head>
       <body className="h-full flex flex-col bg-board text-text-primary font-nunito">
         <Header />
         <div className="flex flex-1 pt-16 overflow-hidden">
