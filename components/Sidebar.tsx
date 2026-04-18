@@ -1,7 +1,5 @@
-'use client';
-
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { headers } from 'next/headers';
 import { 
   LayoutDashboard, 
   FileText, 
@@ -10,12 +8,20 @@ import {
   BarChart2, 
   Settings, 
   HelpCircle,
-  DoorOpen
+  DoorOpen,
+  ShieldCheck
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { createClient } from '@/utils/supabase/server';
 
-export function Sidebar() {
-  const pathname = usePathname();
+export async function Sidebar() {
+  const headersList = await headers();
+  const pathname = headersList.get('x-pathname') ?? '/';
+  
+  // Check if user is admin
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  const isAdmin = user?.email === 'chinwen.ao@gmail.com';
 
   const mainRoutes = [
     { label: 'Dashboard', icon: LayoutDashboard, href: '/', active: pathname === '/' },
@@ -24,6 +30,8 @@ export function Sidebar() {
     { label: 'Rooms', icon: DoorOpen, href: '/rooms', active: pathname?.startsWith('/rooms') },
     { label: 'Directory', icon: Users, href: '/directory', active: pathname?.startsWith('/directory') },
     { label: 'Reports', icon: BarChart2, href: '/reports', active: pathname?.startsWith('/reports') },
+    // Admin-only route
+    ...(isAdmin ? [{ label: 'User Approvals', icon: ShieldCheck, href: '/admin/approvals', active: pathname?.startsWith('/admin/approvals') }] : []),
   ];
 
   const bottomRoutes = [
