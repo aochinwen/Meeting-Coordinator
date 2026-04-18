@@ -49,26 +49,42 @@ export type Database = {
         Relationships: [{ foreignKeyName: "meeting_series_chairman_id_fkey"; columns: ["chairman_id"]; isOneToOne: false; referencedRelation: "people"; referencedColumns: ["id"] }, { foreignKeyName: "meeting_series_coordinator_id_fkey"; columns: ["coordinator_id"]; isOneToOne: false; referencedRelation: "people"; referencedColumns: ["id"] }, { foreignKeyName: "meeting_series_template_id_fkey"; columns: ["template_id"]; isOneToOne: false; referencedRelation: "templates"; referencedColumns: ["id"] }]
       }
       meetings: {
-        Row: { chairman_id: string | null; coordinator_id: string | null; created_at: string; date: string; description: string | null; end_time: string | null; id: string; instance_number: number | null; is_override: boolean | null; override_fields: Json | null; series_id: string | null; start_time: string | null; status: string; template_id: string | null; title: string; updated_at: string }
-        Insert: { chairman_id?: string | null; coordinator_id?: string | null; created_at?: string; date: string; description?: string | null; end_time?: string | null; id?: string; instance_number?: number | null; is_override?: boolean | null; override_fields?: Json | null; series_id?: string | null; start_time?: string | null; status?: string; template_id?: string | null; title: string; updated_at?: string }
-        Update: { chairman_id?: string | null; coordinator_id?: string | null; created_at?: string; date?: string; description?: string | null; end_time?: string | null; id?: string; instance_number?: number | null; is_override?: boolean | null; override_fields?: Json | null; series_id?: string | null; start_time?: string | null; status?: string; template_id?: string | null; title?: string; updated_at?: string }
+        Row: { chairman_id: string | null; coordinator_id: string | null; created_at: string; date: string; description: string | null; end_time: string | null; id: string; instance_number: number | null; is_override: boolean | null; override_fields: Json | null; room_id: string | null; series_id: string | null; start_time: string | null; status: string; template_id: string | null; title: string; updated_at: string }
+        Insert: { chairman_id?: string | null; coordinator_id?: string | null; created_at?: string; date: string; description?: string | null; end_time?: string | null; id?: string; instance_number?: number | null; is_override?: boolean | null; override_fields?: Json | null; room_id?: string | null; series_id?: string | null; start_time?: string | null; status?: string; template_id?: string | null; title: string; updated_at?: string }
+        Update: { chairman_id?: string | null; coordinator_id?: string | null; created_at?: string; date?: string; description?: string | null; end_time?: string | null; id?: string; instance_number?: number | null; is_override?: boolean | null; override_fields?: Json | null; room_id?: string | null; series_id?: string | null; start_time?: string | null; status?: string; template_id?: string | null; title?: string; updated_at?: string }
         Relationships: [
           { foreignKeyName: "meetings_chairman_id_fkey"; columns: ["chairman_id"]; isOneToOne: false; referencedRelation: "people"; referencedColumns: ["id"] },
           { foreignKeyName: "meetings_coordinator_id_fkey"; columns: ["coordinator_id"]; isOneToOne: false; referencedRelation: "people"; referencedColumns: ["id"] },
+          { foreignKeyName: "meetings_room_id_fkey"; columns: ["room_id"]; isOneToOne: false; referencedRelation: "rooms"; referencedColumns: ["id"] },
           { foreignKeyName: "meetings_series_id_fkey"; columns: ["series_id"]; isOneToOne: false; referencedRelation: "meeting_series"; referencedColumns: ["id"] },
           { foreignKeyName: "meetings_template_id_fkey"; columns: ["template_id"]; isOneToOne: false; referencedRelation: "templates"; referencedColumns: ["id"] }
         ]
       }
       people: {
-        Row: { created_at: string; division: string | null; email: string | null; id: string; name: string; rank: string | null; updated_at: string }
-        Insert: { created_at?: string; division?: string | null; email?: string | null; id?: string; name: string; rank?: string | null; updated_at?: string }
-        Update: { created_at?: string; division?: string | null; email?: string | null; id?: string; name?: string; rank?: string | null; updated_at?: string }
+        Row: { created_at: string; division: string | null; email: string | null; id: string; name: string; organization: string | null; rank: string | null; updated_at: string }
+        Insert: { created_at?: string; division?: string | null; email?: string | null; id?: string; name: string; organization?: string | null; rank?: string | null; updated_at?: string }
+        Update: { created_at?: string; division?: string | null; email?: string | null; id?: string; name?: string; organization?: string | null; rank?: string | null; updated_at?: string }
+        Relationships: []
+      }
+      room_bookings: {
+        Row: { created_at: string; date: string; end_time: string; id: string; meeting_id: string | null; room_id: string; start_time: string; status: string | null; updated_at: string }
+        Insert: { created_at?: string; date: string; end_time: string; id?: string; meeting_id?: string | null; room_id: string; start_time: string; status?: string | null; updated_at?: string }
+        Update: { created_at?: string; date?: string; end_time?: string; id?: string; meeting_id?: string | null; room_id?: string; start_time?: string; status?: string | null; updated_at?: string }
+        Relationships: [
+          { foreignKeyName: "room_bookings_meeting_id_fkey"; columns: ["meeting_id"]; isOneToOne: false; referencedRelation: "meetings"; referencedColumns: ["id"] },
+          { foreignKeyName: "room_bookings_room_id_fkey"; columns: ["room_id"]; isOneToOne: false; referencedRelation: "rooms"; referencedColumns: ["id"] }
+        ]
+      }
+      rooms: {
+        Row: { capacity: number; created_at: string; id: string; name: string; updated_at: string }
+        Insert: { capacity?: number; created_at?: string; id?: string; name: string; updated_at?: string }
+        Update: { capacity?: number; created_at?: string; id?: string; name?: string; updated_at?: string }
         Relationships: []
       }
       template_checklist_tasks: {
-        Row: { created_at: string; description: string; id: string; template_id: string; updated_at: string }
-        Insert: { created_at?: string; description: string; id?: string; template_id: string; updated_at?: string }
-        Update: { created_at?: string; description?: string; id?: string; template_id?: string; updated_at?: string }
+        Row: { created_at: string; description: string; due_days_before: number | null; id: string; template_id: string; updated_at: string }
+        Insert: { created_at?: string; description: string; due_days_before?: number | null; id?: string; template_id: string; updated_at?: string }
+        Update: { created_at?: string; description?: string; due_days_before?: number | null; id?: string; template_id?: string; updated_at?: string }
         Relationships: [{ foreignKeyName: "template_checklist_tasks_template_id_fkey"; columns: ["template_id"]; isOneToOne: false; referencedRelation: "templates"; referencedColumns: ["id"] }]
       }
       template_participants: {
@@ -89,13 +105,52 @@ export type Database = {
     }
     Views: {
       users: {
-        Row: { created_at: string | null; division: string | null; email: string | null; id: string | null; name: string | null; rank: string | null; updated_at: string | null }
-        Insert: { created_at?: string | null; division?: string | null; email?: string | null; id?: string | null; name?: string | null; rank?: string | null; updated_at?: string | null }
-        Update: { created_at?: string | null; division?: string | null; email?: string | null; id?: string | null; name?: string | null; rank?: string | null; updated_at?: string | null }
+        Row: { created_at: string | null; division: string | null; email: string | null; id: string | null; name: string | null; organization: string | null; rank: string | null; updated_at: string | null }
+        Insert: { created_at?: string | null; division?: string | null; email?: string | null; id?: string | null; name?: string | null; organization?: string | null; rank?: string | null; updated_at?: string | null }
+        Update: { created_at?: string | null; division?: string | null; email?: string | null; id?: string | null; name?: string | null; organization?: string | null; rank?: string | null; updated_at?: string | null }
         Relationships: []
       }
     }
-    Functions: { [_ in never]: never }
+    Functions: {
+      check_room_availability: {
+        Args: {
+          p_date: string
+          p_end_time: string
+          p_exclude_meeting_id?: string
+          p_room_id: string
+          p_start_time: string
+        }
+        Returns: boolean
+      }
+      get_available_rooms: {
+        Args: {
+          p_capacity?: number
+          p_date: string
+          p_end_time: string
+          p_exclude_meeting_id?: string
+          p_start_time: string
+        }
+        Returns: {
+          room_capacity: number
+          room_id: string
+          room_name: string
+        }[]
+      }
+      suggest_alternative_slots: {
+        Args: {
+          p_date: string
+          p_duration_minutes: number
+          p_room_id: string
+          p_search_range_hours?: number
+          p_start_time: string
+        }
+        Returns: {
+          suggested_date: string
+          suggested_end_time: string
+          suggested_start_time: string
+        }[]
+      }
+    }
     Enums: { [_ in never]: never }
     CompositeTypes: { [_ in never]: never }
   }

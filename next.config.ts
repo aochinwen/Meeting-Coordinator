@@ -48,12 +48,12 @@ const nextConfig: NextConfig = {
         ],
       },
       {
-        // Cache static assets aggressively
+        // Cache static assets with revalidation support
         source: '/:path*.js',
         headers: [
           {
             key: 'Cache-Control',
-            value: 'public, max-age=31536000, immutable',
+            value: 'public, max-age=31536000, must-revalidate',
           },
         ],
       },
@@ -62,7 +62,7 @@ const nextConfig: NextConfig = {
         headers: [
           {
             key: 'Cache-Control',
-            value: 'public, max-age=31536000, immutable',
+            value: 'public, max-age=31536000, must-revalidate',
           },
         ],
       },

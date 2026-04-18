@@ -11,8 +11,10 @@ import { User } from '@supabase/supabase-js';
 import { createClient } from '@/utils/supabase/client';
 import { createMeetingSeries, checkConflicts } from '@/lib/meetings';
 import { formatRecurrencePattern, calculateEndTime, generateOccurrences, getEndDateForCount, RecurrenceConfig } from '@/lib/recurrence';
+import { bookRoom, bookRoomForRecurrentMeetings, Room } from '@/lib/rooms';
 import { MeetingTemplateModal } from '@/components/MeetingTemplateModal';
 import { MeetingCreatedModal } from '@/components/MeetingCreatedModal';
+import { RoomSelector } from '@/components/RoomSelector';
 
 interface ScheduleClientProps {
   initialTemplates?: Template[];
@@ -42,16 +44,47 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
   // Users for participant selection
   const [users, setUsers] = useState<UserData[]>([]);
   
+  // Read URL params synchronously at mount so initial state is prefilled when
+  // arriving from the Room Calendar drag flow. Using window.location here
+  // (instead of `useSearchParams` + a post-mount effect) avoids a flash of
+  // default values between first paint and the effect running, and sidesteps
+  // any Next 16 prerendering/Suspense quirks around the `useSearchParams` hook.
+  const prefill = (() => {
+    if (typeof window === 'undefined') return null;
+    const sp = new URLSearchParams(window.location.search);
+    const room = sp.get('room');
+    const date = sp.get('date');
+    const time = sp.get('time');
+    const endTime = sp.get('endTime');
+    if (!room && !date && !time) return null;
+    let durationMins: number | null = null;
+    if (time && endTime) {
+      const [sh, sm] = time.split(':').map(Number);
+      const [eh, em] = endTime.split(':').map(Number);
+      const m = (eh - sh) * 60 + (em - sm);
+      if (Number.isFinite(m) && m > 0) durationMins = m;
+    }
+    return { room, date, time, endTime, durationMins };
+  })();
+
   // Form state
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [schedulingMode, setSchedulingMode] = useState<'smart' | 'manual'>('smart');
-  const [duration, setDuration] = useState(30);
+  const [duration, setDuration] = useState<number>(prefill?.durationMins ?? 30);
+  const [isCustomDuration, setIsCustomDuration] = useState(false);
+  const [customEndTime, setCustomEndTime] = useState<string>(() => {
+    const [hours, minutes] = (prefill?.time ?? '10:00').split(':').map(Number);
+    const totalMinutes = hours * 60 + minutes + (prefill?.durationMins ?? 30);
+    const endHours = Math.floor(totalMinutes / 60) % 24;
+    const endMinutes = totalMinutes % 60;
+    return `${endHours.toString().padStart(2, '0')}:${endMinutes.toString().padStart(2, '0')}`;
+  });
   const [bufferTime, setBufferTime] = useState(5);
-  const [frequency, setFrequency] = useState<'weekly' | 'bi-weekly' | 'monthly'>('weekly');
+  const [frequency, setFrequency] = useState<'daily' | 'weekly' | 'bi-weekly' | 'monthly'>('weekly');
   const [selectedDays, setSelectedDays] = useState<string[]>(['M', 'W']);
-  const [isRecurring, setIsRecurring] = useState(true);
+  // A dragged range represents a one-off booking, not a series.
+  const [isRecurring, setIsRecurring] = useState(prefill ? false : true);
   const [endRule, setEndRule] = useState<'never' | 'count' | 'date'>('date');
   const [endCount, setEndCount] = useState(10);
   const [endDate, setEndDate] = useState<string>(() => {
@@ -60,18 +93,24 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
     return d.toISOString().split('T')[0];
   });
   const [startDate, setStartDate] = useState(() => {
+    if (prefill?.date) return prefill.date;
     const today = new Date();
     return today.toISOString().split('T')[0];
   });
-  const [startTime, setStartTime] = useState('10:00');
+  const [startTime, setStartTime] = useState(prefill?.time ?? '10:00');
   const [selectedParticipants, setSelectedParticipants] = useState<string[]>([]);
   
   // Meeting Roles - Chairman and Coordinator
   const [chairmanId, setChairmanId] = useState<string>('');
   const [coordinatorId, setCoordinatorId] = useState<string>('');
   
+  // Room selection
+  const [selectedRoomId, setSelectedRoomId] = useState<string | null>(prefill?.room ?? null);
+  const [roomBookingErrors, setRoomBookingErrors] = useState<string[]>([]);
+  
   // Derived state for UI
-  const endTime = calculateEndTime(startTime, duration);
+  const calculatedEndTime = calculateEndTime(startTime, duration);
+  const endTime = isCustomDuration ? customEndTime : calculatedEndTime;
   
   // Preview occurrences
   const [previewDates, setPreviewDates] = useState<Date[]>([]);
@@ -88,7 +127,9 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
   }>>([]);
   
   // Modal states
-  const [showTemplateModal, setShowTemplateModal] = useState(true);
+  // Skip the template picker when the user arrived via a drag-selected
+  // timeslot — they've already expressed intent for a specific slot/room.
+  const [showTemplateModal, setShowTemplateModal] = useState(!prefill);
   const [showCreatedModal, setShowCreatedModal] = useState(false);
   const [createdMeeting, setCreatedMeeting] = useState<{
     id: string;
@@ -100,6 +141,35 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
     occurrencesCount?: number;
   } | null>(null);
   
+  // Apply URL prefill after mount. The lazy `useState` initializers above
+  // cover client-only navigation, but under Next.js SSR the initializers
+  // run on the server (where `window` is undefined) and React does NOT
+  // re-run them during client hydration — so without this effect the form
+  // would hydrate to defaults even when query params are present.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const sp = new URLSearchParams(window.location.search);
+    const room = sp.get('room');
+    const date = sp.get('date');
+    const time = sp.get('time');
+    const endTimeParam = sp.get('endTime');
+    if (!room && !date && !time) return;
+    if (room) setSelectedRoomId(room);
+    if (date) setStartDate(date);
+    if (time) setStartTime(time);
+    if (time && endTimeParam) {
+      const [sh, sm] = time.split(':').map(Number);
+      const [eh, em] = endTimeParam.split(':').map(Number);
+      const mins = (eh - sh) * 60 + (em - sm);
+      if (Number.isFinite(mins) && mins > 0) setDuration(mins);
+    }
+    setIsRecurring(false);
+    setShowTemplateModal(false);
+    // Empty deps — run once on mount. We deliberately ignore later URL
+    // changes so user edits to form fields aren't overwritten.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Load users on mount
   useEffect(() => {
     async function loadUsers() {
@@ -245,6 +315,35 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
           chairman_id: chairmanId || undefined,
           coordinator_id: coordinatorId || undefined,
         }, currentUser?.id);
+        
+        // Book room for recurring meetings if selected
+        if (selectedRoomId) {
+          const { data: seriesMeetings } = await supabase
+            .from('meetings')
+            .select('id, date, start_time, end_time')
+            .eq('series_id', seriesId)
+            .order('date');
+          
+          if (seriesMeetings && seriesMeetings.length > 0) {
+            const bookingResult = await bookRoomForRecurrentMeetings(
+              selectedRoomId,
+              seriesMeetings.map(m => ({
+                meetingId: m.id,
+                date: m.date,
+                startTime: m.start_time || startTime,
+                endTime: m.end_time || endTime,
+              }))
+            );
+            
+            if (!bookingResult.success && bookingResult.failedDates.length > 0) {
+              setRoomBookingErrors(
+                bookingResult.failedDates.map(f => 
+                  `${f.date}: ${f.error}${f.suggestions ? ` (Alternatives: ${f.suggestions.slice(0, 3).map(s => `${s.startTime}-${s.endTime}`).join(', ')})` : ''}`
+                )
+              );
+            }
+          }
+        }
       } else {
         // Create single one-time meeting directly
         const { data: meeting, error } = await supabase
@@ -296,6 +395,23 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
               }))
             );
           if (taskError) console.error('Error adding tasks:', taskError);
+        }
+        
+        // Book room for single meeting if selected
+        if (selectedRoomId) {
+          const bookingResult = await bookRoom({
+            roomId: selectedRoomId,
+            meetingId: seriesId,
+            date: startDate,
+            startTime: startTime,
+            endTime: endTime,
+          });
+          
+          if (!bookingResult.success) {
+            setRoomBookingErrors([
+              `Room booking failed: ${bookingResult.error}${bookingResult.suggestions ? ` (Alternatives: ${bookingResult.suggestions.slice(0, 3).map(s => `${s.startTime}-${s.endTime}`).join(', ')})` : ''}`
+            ]);
+          }
         }
       }
       
@@ -438,6 +554,29 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
               </div>
             )}
 
+            {roomBookingErrors.length > 0 && (
+              <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4">
+                <div className="flex items-start gap-3">
+                  <AlertCircle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-amber-800 mb-2">
+                      Some room bookings could not be completed:
+                    </p>
+                    <ul className="space-y-1">
+                      {roomBookingErrors.map((err, idx) => (
+                        <li key={idx} className="text-sm text-amber-700 font-light">
+                          {err}
+                        </li>
+                      ))}
+                    </ul>
+                    <p className="text-xs text-amber-600 mt-2">
+                      The meetings were created successfully. You can modify room bookings individually from the meeting details.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="flex gap-4">
               <button 
                 onClick={handleSubmit}
@@ -451,10 +590,44 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
 
       {/* Grid Layout */}
       <div className="grid grid-cols-12 gap-8 shrink-0">
-        
+
         {/* Left Column - Configuration */}
         <div className="col-span-8 flex flex-col gap-8">
-          
+
+          {/* Meeting Details */}
+          <div className="bg-white border border-border/20 rounded-[24px] p-6 flex flex-col gap-6 shadow-sm">
+            <div className="flex items-center gap-3">
+              <CalendarIcon className="h-5 w-5 text-text-primary" />
+              <h2 className="text-xl font-bold text-text-primary font-literata">
+                Meeting Details
+              </h2>
+            </div>
+
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-2">
+                <label className="text-sm font-bold text-text-primary">Meeting Name <span className="text-coral-text">*</span></label>
+                <input
+                  type="text"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="Enter meeting name..."
+                  className="w-full px-4 py-3 bg-surface border-none rounded-2xl text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/20 text-sm font-light"
+                />
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <label className="text-sm font-bold text-text-primary">Description</label>
+                <textarea
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Add meeting description or agenda..."
+                  rows={3}
+                  className="w-full px-4 py-3 bg-surface border-none rounded-2xl text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/20 text-sm font-light resize-none"
+                />
+              </div>
+            </div>
+          </div>
+
           {/* Recurrence Settings */}
           <div className="bg-white border border-border/20 rounded-[24px] p-6 flex flex-col gap-6 shadow-sm">
             <div className="flex items-center justify-between">
@@ -487,7 +660,7 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
                   <div className="flex flex-col gap-3">
                     <label className="text-xs font-bold text-text-secondary uppercase tracking-widest">Frequency</label>
                     <div className="flex bg-status-grey-bg rounded-[16px] p-1">
-                      {(['weekly', 'bi-weekly', 'monthly'] as const).map((freq) => (
+                      {(['daily', 'weekly', 'bi-weekly', 'monthly'] as const).map((freq) => (
                         <button
                           key={freq}
                           onClick={() => setFrequency(freq)}
@@ -498,7 +671,7 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
                               : "text-text-primary hover:bg-white/50"
                           )}
                         >
-                          {freq === 'weekly' ? 'Weekly' : freq === 'bi-weekly' ? 'Bi-Weekly' : 'Monthly'}
+                          {freq === 'daily' ? 'Daily' : freq === 'weekly' ? 'Weekly' : freq === 'bi-weekly' ? 'Bi-Weekly' : 'Monthly'}
                         </button>
                       ))}
                     </div>
@@ -629,63 +802,39 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
               </h2>
             </div>
             
-            <div className="grid grid-cols-2 gap-8">
-              {/* Left Side - Mode */}
-              <div className="flex flex-col gap-4">
-                <label className="text-sm font-bold text-text-primary">Scheduling Mode</label>
-                
-                <div 
-                  className={cn(
-                    "flex items-start gap-4 p-4 rounded-2xl border-2 cursor-pointer transition-all",
-                    schedulingMode === 'smart' ? "border-primary bg-surface/50" : "border-border/50 hover:border-primary/30"
-                  )}
-                  onClick={() => setSchedulingMode('smart')}
-                >
-                  <div className={cn("mt-1 h-5 w-5 rounded-full border-2 flex items-center justify-center shrink-0", schedulingMode === 'smart' ? "border-primary bg-primary" : "border-border/50")}>
-                    {schedulingMode === 'smart' && <div className="h-2 w-2 rounded-full bg-white" />}
-                  </div>
-                  <div>
-                    <h4 className="font-bold text-text-primary text-sm mb-1">Smart Availability</h4>
-                    <p className="text-xs font-light text-text-secondary">System finds best slots for everyone</p>
-                  </div>
-                </div>
-
-                <div 
-                  className={cn(
-                    "flex items-start gap-4 p-4 rounded-2xl border-2 cursor-pointer transition-all",
-                    schedulingMode === 'manual' ? "border-primary bg-surface/50" : "border-border/50 hover:border-primary/30"
-                  )}
-                  onClick={() => setSchedulingMode('manual')}
-                >
-                  <div className={cn("mt-1 h-5 w-5 rounded-full border-2 flex items-center justify-center shrink-0", schedulingMode === 'manual' ? "border-primary bg-primary" : "border-border/50")}>
-                    {schedulingMode === 'manual' && <div className="h-2 w-2 rounded-full bg-white" />}
-                  </div>
-                  <div>
-                    <h4 className="font-bold text-text-primary text-sm mb-1">Manual Slotting</h4>
-                    <p className="text-xs font-light text-text-secondary">Pick exact time and date manually</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Right Side - Timing */}
+            <div className="grid grid-cols-1 gap-8">
               <div className="flex flex-col gap-6">
                 <div className="flex flex-col gap-3">
                   <label className="text-sm font-bold text-text-primary">Duration</label>
                   <div className="flex items-center gap-2">
-                    {[15, 30, 60, 'custom'].map((dur) => (
+                    {[15, 30, 60].map((dur) => (
                       <button
                         key={dur}
-                        onClick={() => setDuration(typeof dur === 'number' ? dur : 30)}
+                        onClick={() => {
+                          setDuration(dur);
+                          setIsCustomDuration(false);
+                        }}
                         className={cn(
                           "px-4 py-2 rounded-full text-sm font-bold transition-all",
-                          duration === dur || (dur === 'custom' && ![15, 30, 60].includes(duration))
+                          !isCustomDuration && duration === dur
                           ? "bg-primary text-white shadow-sm" 
                           : "bg-status-grey-bg text-text-primary hover:bg-cream"
                       )}
                       >
-                        {dur === 60 ? '1h' : typeof dur === 'number' ? `${dur}m` : 'Custom'}
+                        {dur === 60 ? '1h' : `${dur}m`}
                       </button>
                     ))}
+                    <button
+                      onClick={() => setIsCustomDuration(true)}
+                      className={cn(
+                        "px-4 py-2 rounded-full text-sm font-bold transition-all",
+                        isCustomDuration
+                        ? "bg-primary text-white shadow-sm" 
+                        : "bg-status-grey-bg text-text-primary hover:bg-cream"
+                    )}
+                    >
+                      Custom
+                    </button>
                   </div>
                 </div>
 
@@ -710,6 +859,36 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
                 </div>
 
                 <div className="flex flex-col gap-3">
+                  <label className="text-sm font-bold text-text-primary">End Time</label>
+                  <input
+                    type="time"
+                    value={endTime}
+                    disabled={!isCustomDuration}
+                    onChange={(e) => {
+                      if (isCustomDuration) {
+                        const newEndTime = e.target.value;
+                        setCustomEndTime(newEndTime);
+                        // Calculate duration from start and end times
+                        const [startH, startM] = startTime.split(':').map(Number);
+                        const [endH, endM] = newEndTime.split(':').map(Number);
+                        let diffMinutes = (endH * 60 + endM) - (startH * 60 + startM);
+                        if (diffMinutes < 0) diffMinutes += 24 * 60; // Handle next day
+                        setDuration(diffMinutes);
+                      }
+                    }}
+                    className={cn(
+                      "w-full px-4 py-3 bg-surface border-none rounded-2xl text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/20 text-sm font-light",
+                      !isCustomDuration && "opacity-60 cursor-not-allowed"
+                    )}
+                  />
+                  {!isCustomDuration && (
+                    <p className="text-xs font-light text-text-secondary">
+                      End time is calculated from duration
+                    </p>
+                  )}
+                </div>
+
+                <div className="flex flex-col gap-3">
                   <label className="text-sm font-bold text-text-primary">Buffer Time</label>
                   <select 
                     value={bufferTime}
@@ -724,6 +903,18 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
                 </div>
               </div>
             </div>
+          </div>
+
+          {/* Room Selection */}
+          <div className="bg-white border border-border/20 rounded-[24px] p-6 flex flex-col gap-6 shadow-sm">
+            <RoomSelector
+              date={startDate}
+              startTime={startTime}
+              endTime={endTime}
+              selectedRoomId={selectedRoomId}
+              onRoomSelect={setSelectedRoomId}
+              minCapacity={selectedParticipants.length + 1}
+            />
           </div>
 
           {/* Template Selection */}

@@ -9,7 +9,8 @@ import {
   Users, 
   BarChart2, 
   Settings, 
-  HelpCircle 
+  HelpCircle,
+  DoorOpen
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -20,6 +21,7 @@ export function Sidebar() {
     { label: 'Dashboard', icon: LayoutDashboard, href: '/', active: pathname === '/' },
     { label: 'Templates', icon: FileText, href: '/templates', active: pathname?.startsWith('/templates') },
     { label: 'Schedule', icon: CalendarDays, href: '/schedule', active: pathname?.startsWith('/schedule') },
+    { label: 'Rooms', icon: DoorOpen, href: '/rooms', active: pathname?.startsWith('/rooms') },
     { label: 'Directory', icon: Users, href: '/directory', active: pathname?.startsWith('/directory') },
     { label: 'Reports', icon: BarChart2, href: '/reports', active: pathname?.startsWith('/reports') },
   ];

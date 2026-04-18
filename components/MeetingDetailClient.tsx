@@ -13,6 +13,21 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { DeleteMeetingModal } from './DeleteMeetingModal';
 
+interface RoomBooking {
+  id: string;
+  room_id: string;
+  meeting_id: string | null;
+  date: string;
+  start_time: string;
+  end_time: string;
+  status: string | null;
+  room: {
+    id: string;
+    name: string;
+    capacity: number;
+  } | null;
+}
+
 interface MeetingDetailClientProps {
   meetingId: string;
   currentUser?: User;
@@ -22,6 +37,7 @@ interface MeetingDetailClientProps {
     tasks: Task[];
     activities: Activity[];
     profileMap: Record<string, { name: string; division?: string | null; rank?: string | null }>;
+    roomBooking: RoomBooking | null;
   };
 }
 
@@ -55,7 +71,7 @@ interface Task {
   description: string;
   assigned_user_id: string | null;
   is_completed: boolean;
-  due_days_before: number | null;
+  due_days_before?: number | null;
   created_at: string;
   assignee: {
     name: string;
@@ -78,6 +94,7 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
   const supabase = createClient();
   const router = useRouter();
   const [meeting, setMeeting] = useState<Meeting | null>(initialData?.meeting || null);
+  const [roomBooking, setRoomBooking] = useState<RoomBooking | null>(initialData?.roomBooking || null);
   const [participants, setParticipants] = useState<Participant[]>(initialData?.participants || []);
   const [tasks, setTasks] = useState<Task[]>(initialData?.tasks || []);
   const [activities, setActivities] = useState<Activity[]>(initialData?.activities || []);
@@ -548,7 +565,7 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
                       </div>
 
                       {(() => {
-                        const due = getTaskDueDateLabel(task.due_days_before, meeting.date);
+                        const due = getTaskDueDateLabel(task.due_days_before ?? null, meeting.date);
                         if (!due) return null;
                         return (
                           <div className={cn(
@@ -748,7 +765,7 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
                 Meeting Venue
               </h4>
               <p className="text-xs font-normal text-text-secondary">
-                North Wing, Room 402 - Main Campus
+                {roomBooking?.room?.name || 'No venue assigned'}
               </p>
             </div>
           </div>

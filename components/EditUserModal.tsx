@@ -12,12 +12,13 @@ interface EditUserModalProps {
   onClose: () => void;
   user: User | null;
   existingRanks: string[];
-  onSave: (userId: string, updates: { name: string; email: string; division: string; rank: string }) => Promise<void>;
+  onSave: (userId: string, updates: { name: string; email: string; organization: string; division: string; rank: string }) => Promise<void>;
 }
 
 export function EditUserModal({ isOpen, onClose, user, existingRanks, onSave }: EditUserModalProps) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
+  const [organization, setOrganization] = useState('');
   const [division, setDivision] = useState('');
   const [rank, setRank] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -27,6 +28,7 @@ export function EditUserModal({ isOpen, onClose, user, existingRanks, onSave }: 
     if (user) {
       setName(user.name);
       setEmail(user.email ?? '');
+      setOrganization(user.organization ?? '');
       setDivision(user.division ?? '');
       setRank(user.rank ?? '');
       setSubmitted(false);
@@ -42,7 +44,7 @@ export function EditUserModal({ isOpen, onClose, user, existingRanks, onSave }: 
 
     setIsLoading(true);
     try {
-      await onSave(user.id, { name, email, division, rank });
+      await onSave(user.id, { name, email, organization, division, rank });
       onClose();
     } catch (error) {
       console.error('Error updating user:', error);
@@ -102,6 +104,20 @@ export function EditUserModal({ isOpen, onClose, user, existingRanks, onSave }: 
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="e.g. jane.doe@company.com"
+                className="w-full px-4 py-3 bg-surface border border-border/50 rounded-2xl text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all font-light"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="edit-organization" className="block text-sm font-bold text-text-primary mb-2 uppercase tracking-wide">
+                Organization <span className="text-text-secondary normal-case font-normal tracking-normal">(optional)</span>
+              </label>
+              <input
+                id="edit-organization"
+                type="text"
+                value={organization}
+                onChange={(e) => setOrganization(e.target.value)}
+                placeholder="e.g. Acme Corp"
                 className="w-full px-4 py-3 bg-surface border border-border/50 rounded-2xl text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all font-light"
               />
             </div>

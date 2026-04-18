@@ -80,17 +80,17 @@ function DirectoryClientComponent({ initialUsers, activeTeamsCount }: DirectoryC
     return { bg: bgs[idx], textColor: textColors[idx] };
   };
 
-  // TODO: Add organization field to users table and fetch real data
-  const getOrganization = (_id: string) => {
-    return '—';
+  const getOrganization = (user: User) => {
+    return user.organization || '—';
   };
 
-  const handleEditUser = async (userId: string, updates: { name: string; email: string; division: string; rank: string }) => {
+  const handleEditUser = async (userId: string, updates: { name: string; email: string; organization: string; division: string; rank: string }) => {
     const { data, error } = await supabase
       .from('people')
       .update({
         name: updates.name,
         email: updates.email || null,
+        organization: updates.organization || null,
         division: updates.division,
         rank: updates.rank,
       })
@@ -122,7 +122,7 @@ function DirectoryClientComponent({ initialUsers, activeTeamsCount }: DirectoryC
     setUsers(prev => prev.filter(u => u.id !== userId));
   };
 
-  const handleAddUser = async (newUser: { name: string; email: string; division: string; rank: string }) => {
+  const handleAddUser = async (newUser: { name: string; email: string; organization: string; division: string; rank: string }) => {
     const { data, error } = await supabase
       .from('people')
       .insert([
@@ -130,6 +130,7 @@ function DirectoryClientComponent({ initialUsers, activeTeamsCount }: DirectoryC
           id: crypto.randomUUID(),
           name: newUser.name,
           email: newUser.email || null,
+          organization: newUser.organization || null,
           division: newUser.division,
           rank: newUser.rank,
         }
@@ -228,7 +229,7 @@ function DirectoryClientComponent({ initialUsers, activeTeamsCount }: DirectoryC
                 </div>
                 
                 <div className="col-span-3 flex items-center">
-                  <span className="text-base text-text-primary font-medium">{getOrganization(user.id)}</span>
+                  <span className="text-base text-text-primary font-medium">{getOrganization(user)}</span>
                 </div>
                 
                 <div className="col-span-3 flex items-center">

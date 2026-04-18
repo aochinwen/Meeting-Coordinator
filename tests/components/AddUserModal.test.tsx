@@ -21,7 +21,7 @@ describe('AddUserModal', () => {
     fireEvent.click(screen.getByText('Add Member'))
 
     await waitFor(() => {
-      expect(onAdd).toHaveBeenCalledWith({ name: 'John Doe', division: 'Sales', rank: 'Manager' })
+      expect(onAdd).toHaveBeenCalledWith({ name: 'John Doe', email: '', organization: '', division: 'Sales', rank: 'Manager' })
       expect(onClose).toHaveBeenCalled()
     })
   })

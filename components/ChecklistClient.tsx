@@ -613,7 +613,7 @@ function ChecklistClientComponent({ meetingId, currentUser }: ChecklistClientPro
                  Meeting Venue
                </h4>
                <p className="text-xs font-normal text-text-secondary">
-                 North Wing, Room 402 - Main Campus
+                 See meeting details for venue
                </p>
              </div>
           </div>

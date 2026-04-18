@@ -7,12 +7,13 @@ import { RankCombobox } from '@/components/ui/RankCombobox';
 interface AddUserModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAdd: (user: { name: string; email: string; division: string; rank: string }) => Promise<void>;
+  onAdd: (user: { name: string; email: string; organization: string; division: string; rank: string }) => Promise<void>;
 }
 
 export function AddUserModal({ isOpen, onClose, onAdd }: AddUserModalProps) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
+  const [organization, setOrganization] = useState('');
   const [division, setDivision] = useState('');
   const [rank, setRank] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -27,9 +28,10 @@ export function AddUserModal({ isOpen, onClose, onAdd }: AddUserModalProps) {
 
     setIsLoading(true);
     try {
-      await onAdd({ name, email, division, rank });
+      await onAdd({ name, email, organization, division, rank });
       setName('');
       setEmail('');
+      setOrganization('');
       setDivision('');
       setRank('');
       setSubmitted(false);
@@ -92,6 +94,20 @@ export function AddUserModal({ isOpen, onClose, onAdd }: AddUserModalProps) {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="e.g. jane.doe@company.com"
+                className="w-full px-4 py-3 bg-surface border border-border/50 rounded-2xl text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all font-light"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="organization" className="block text-sm font-bold text-text-primary mb-2 uppercase tracking-wide">
+                Organization <span className="text-text-secondary normal-case font-normal tracking-normal">(optional)</span>
+              </label>
+              <input
+                id="organization"
+                type="text"
+                value={organization}
+                onChange={(e) => setOrganization(e.target.value)}
+                placeholder="e.g. Acme Corp"
                 className="w-full px-4 py-3 bg-surface border border-border/50 rounded-2xl text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all font-light"
               />
             </div>
