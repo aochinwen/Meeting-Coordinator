@@ -1,37 +1,100 @@
-# Meeting Coordinator
+# Meeting Coordinator — The Organizer
 
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app), featuring Supabase integration for backend services.
-## Getting Started
+A premium internal meeting coordination platform built with **Next.js 16**, **Supabase**, and deployed on **Vercel**.
 
-First, run the development server:
+---
+
+## 🚀 Live Environments
+
+| Environment | Branch | URL |
+|---|---|---|
+| **Production** | `main` | Assigned by Vercel after first deploy |
+| **Staging** | `staging` | Auto-generated preview URL per push |
+| **Feature Preview** | any other branch | Auto-generated preview URL per PR |
+
+---
+
+## 🛠 Local Development
+
+### Prerequisites
+- Node.js 20+
+- A Supabase project (free tier works)
+
+### Setup
 
 ```bash
+# 1. Clone the repo
+git clone https://github.com/aochinwen/Meeting-Coordinator.git
+cd Meeting-Coordinator
+
+# 2. Install dependencies
+npm install
+
+# 3. Configure environment variables
+cp .env.example .env.local
+# Edit .env.local with your Supabase credentials
+
+# 4. Run dev server
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+---
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## ☁️ Deployment (Vercel)
 
-## Learn More
+### First-time setup
 
-To learn more about Next.js, take a look at the following resources:
+1. Go to [vercel.com/new](https://vercel.com/new) and import `aochinwen/Meeting-Coordinator`
+2. Vercel auto-detects Next.js — no build settings needed
+3. Add environment variables (Settings → Environment Variables):
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+| Variable | Environment |
+|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` | Production + Preview + Development |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Production + Preview + Development |
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+> **Staging tip**: Use the same Supabase project for staging, or create a second free Supabase project and set its keys only on the `staging` branch in Vercel's preview environment settings.
 
-## Deploy on Vercel
+4. Deploy. Every push to `main` deploys production. Every push to `staging` or any branch creates an isolated preview URL.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### Branch Strategy
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```
+main      → Production (https://your-app.vercel.app)
+staging   → Staging    (https://your-app-git-staging-username.vercel.app)
+feature/* → Preview    (ephemeral URL per PR)
+```
+
+---
+
+## 🔒 Supabase RLS
+
+Before going to production, enable Row Level Security on all tables.
+See [`supabase/README.md`](./supabase/README.md) for detailed RLS policies.
+
+**Quick check**: In Supabase Dashboard → Table Editor → each table → RLS should show a shield icon (🛡) not an open lock.
+
+---
+
+## 🧪 Testing
+
+```bash
+npm run test           # Run unit tests
+npm run test:ui        # Visual test runner
+npm run test:coverage  # Coverage report
+```
+
+---
+
+## 📦 Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Framework | Next.js 16 (App Router) |
+| Database | Supabase (PostgreSQL) |
+| Auth | Supabase SSR (`@supabase/ssr`) |
+| Styling | Tailwind CSS v4 |
+| Hosting | Vercel (Singapore region) |
+| Fonts | Literata (headings) · Nunito Sans (body) |

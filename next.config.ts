@@ -1,9 +1,6 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Enable static optimization for pages without dynamic data
-  output: 'standalone',
-
   // Image optimization
   images: {
     formats: ['image/webp', 'image/avif'],
