@@ -28,6 +28,8 @@ export interface CreateSeriesInput {
   buffer_minutes: number;
   timezone?: string;
   participants?: string[]; // user IDs
+  chairman_id?: string;
+  coordinator_id?: string;
 }
 
 export interface CreateMeetingInput {
@@ -38,9 +40,11 @@ export interface CreateMeetingInput {
   date: string;
   start_time?: string;
   end_time?: string;
-  status?: 'scheduled' | 'completed' | 'cancelled';
+  status: 'scheduled' | 'completed' | 'cancelled';
   instance_number?: number;
   participants?: string[];
+  chairman_id?: string | null;
+  coordinator_id?: string | null;
 }
 
 /**
@@ -69,6 +73,8 @@ export async function createMeetingSeries(
       buffer_minutes: data.buffer_minutes,
       timezone: data.timezone || 'UTC',
       created_by: createdBy || null,
+      chairman_id: data.chairman_id || null,
+      coordinator_id: data.coordinator_id || null,
     })
     .select('id')
     .single();
@@ -125,6 +131,8 @@ export async function generateSeriesInstances(
       duration_minutes: series.duration_minutes ?? 30,
       buffer_minutes: series.buffer_minutes ?? 0,
       timezone: series.timezone ?? undefined,
+      chairman_id: series.chairman_id || undefined,
+      coordinator_id: series.coordinator_id || undefined,
     };
   }
   
@@ -138,9 +146,15 @@ export async function generateSeriesInstances(
     .order('date', { ascending: false })
     .limit(1);
   
-  const lastDate = existingMeetings && existingMeetings.length > 0
-    ? new Date(existingMeetings[0].date)
-    : new Date(data.start_date);
+  const lastDate = (() => {
+    if (existingMeetings && existingMeetings.length > 0) {
+      return new Date(existingMeetings[0].date);
+    }
+    // Start one day before start_date so generateOccurrences includes start_date itself
+    const d = new Date(data.start_date + 'T00:00:00');
+    d.setDate(d.getDate() - 1);
+    return d;
+  })();
   
   console.log('Generating from date:', lastDate);
   
@@ -173,8 +187,10 @@ export async function generateSeriesInstances(
     date: date.toISOString().split('T')[0],
     start_time: data?.start_time,
     end_time: data?.end_time,
-    status: 'scheduled',
+    status: 'scheduled' as const,
     instance_number: existingMeetings?.length ? existingMeetings.length + index + 1 : index + 1,
+    chairman_id: data?.chairman_id || null,
+    coordinator_id: data?.coordinator_id || null,
   }));
   
   console.log('Meetings to insert:', meetings);

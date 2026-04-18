@@ -46,14 +46,24 @@ async function DashboardContent({
   const from = (page - 1) * PAGE_SIZE;
   const to = from + PAGE_SIZE - 1;
 
-  // Calculate default date range (today to 1 month from today)
+  // Calculate default date range (today to 3 months from today)
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const oneMonthFromToday = new Date(today);
-  oneMonthFromToday.setMonth(oneMonthFromToday.getMonth() + 1);
+  const threeMonthsFromToday = new Date(today);
+  threeMonthsFromToday.setMonth(threeMonthsFromToday.getMonth() + 3);
+
+  // Calculate this week range (Sunday to Saturday)
+  const startOfWeek = new Date(today);
+  startOfWeek.setDate(today.getDate() - today.getDay());
+  const endOfWeek = new Date(startOfWeek);
+  endOfWeek.setDate(startOfWeek.getDate() + 6);
+
+  // Calculate this month range
+  const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+  const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
 
   const defaultStartDate = today.toISOString().split('T')[0];
-  const defaultEndDate = oneMonthFromToday.toISOString().split('T')[0];
+  const defaultEndDate = threeMonthsFromToday.toISOString().split('T')[0];
 
   // Parse filter param
   let dateRangeStart = defaultStartDate;
@@ -70,7 +80,7 @@ async function DashboardContent({
     dateRangeStart = defaultStartDate;
     dateRangeEnd = oneWeekFromToday.toISOString().split('T')[0];
   } else if (filter === 'month') {
-    // Default 1 month range already set
+    // Default 3 month range already set
   }
 
   // Build the query
@@ -98,7 +108,9 @@ async function DashboardContent({
   const [
     { data: meetingsData, count: meetingsCount },
     { data: profiles },
-    { count: usersCount }
+    { count: usersCount },
+    { count: thisWeekMeetingsCount },
+    { count: thisMonthMeetingsCount }
   ] = await Promise.all([
     meetingsQuery.range(from, to),
     // Fetch all users for attendee names
@@ -109,7 +121,19 @@ async function DashboardContent({
     // Fetch active team members count
     supabase
       .from('people')
+      .select('*', { count: 'exact', head: true }),
+    // Fetch meetings this week count
+    supabase
+      .from('meetings')
       .select('*', { count: 'exact', head: true })
+      .gte('date', startOfWeek.toISOString().split('T')[0])
+      .lte('date', endOfWeek.toISOString().split('T')[0]),
+    // Fetch meetings this month count
+    supabase
+      .from('meetings')
+      .select('*', { count: 'exact', head: true })
+      .gte('date', startOfMonth.toISOString().split('T')[0])
+      .lte('date', endOfMonth.toISOString().split('T')[0])
   ]);
 
   const totalMeetings = meetingsCount || 0;
@@ -123,7 +147,6 @@ async function DashboardContent({
   const activeTeamMembers = usersCount || 0;
 
   const meetings = (meetingsData as unknown as MeetingWithRelations[]) || [];
-  const thisWeekMeetingsCount = meetings.length;
 
   const rangeStart = totalMeetings === 0 ? 0 : from + 1;
   const rangeEnd = from + meetings.length;
@@ -210,12 +233,12 @@ async function DashboardContent({
               <Clock className="h-5 w-5 text-status-amber" />
             </div>
             <div className="bg-amber/30 px-3 py-1 rounded-full">
-              <span className="text-xs text-status-amber font-light">Action Required</span>
+              <span className="text-xs text-status-amber font-light">This month</span>
             </div>
           </div>
           <div className="space-y-1">
-            <h3 className="text-sm tracking-wide text-text-tertiary uppercase font-light">Pending Invitations</h3>
-            <p className="text-4xl font-bold text-text-primary leading-none font-literata">—</p>
+            <h3 className="text-sm tracking-wide text-text-tertiary uppercase font-light">Meetings This Month</h3>
+            <p className="text-4xl font-bold text-text-primary leading-none font-literata">{thisMonthMeetingsCount || 0}</p>
           </div>
         </div>
 

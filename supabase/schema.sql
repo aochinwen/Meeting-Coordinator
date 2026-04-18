@@ -6,6 +6,7 @@ create extension if not exists "uuid-ossp";
 create table public.people (
   id uuid primary key default uuid_generate_v4(),
   name text not null,
+  email text,
   division text,
   rank text,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,

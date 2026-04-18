@@ -10,8 +10,7 @@ import { cn } from '@/lib/utils';
 import { User } from '@supabase/supabase-js';
 import { createClient } from '@/utils/supabase/client';
 import { createMeetingSeries, checkConflicts } from '@/lib/meetings';
-import { formatRecurrencePattern, calculateEndTime } from '@/lib/recurrence';
-import { generateOccurrences, RecurrenceConfig } from '@/lib/recurrence';
+import { formatRecurrencePattern, calculateEndTime, generateOccurrences, getEndDateForCount, RecurrenceConfig } from '@/lib/recurrence';
 import { MeetingTemplateModal } from '@/components/MeetingTemplateModal';
 import { MeetingCreatedModal } from '@/components/MeetingCreatedModal';
 
@@ -53,6 +52,13 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
   const [frequency, setFrequency] = useState<'weekly' | 'bi-weekly' | 'monthly'>('weekly');
   const [selectedDays, setSelectedDays] = useState<string[]>(['M', 'W']);
   const [isRecurring, setIsRecurring] = useState(true);
+  const [endRule, setEndRule] = useState<'never' | 'count' | 'date'>('date');
+  const [endCount, setEndCount] = useState(10);
+  const [endDate, setEndDate] = useState<string>(() => {
+    const d = new Date();
+    d.setMonth(d.getMonth() + 3);
+    return d.toISOString().split('T')[0];
+  });
   const [startDate, setStartDate] = useState(() => {
     const today = new Date();
     return today.toISOString().split('T')[0];
@@ -69,6 +75,7 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
   
   // Preview occurrences
   const [previewDates, setPreviewDates] = useState<Date[]>([]);
+  const [totalOccurrences, setTotalOccurrences] = useState<number | null>(null);
   
   // Conflict detection
   const [conflicts, setConflicts] = useState<Array<{
@@ -108,21 +115,50 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
     loadUsers();
   }, []);
   
-  // Update preview when recurrence settings change
-  useEffect(() => {
-    if (isRecurring && frequency && startDate) {
+  // Derive end_date from the end rule
+  const resolvedEndDate: string | null = (() => {
+    if (!isRecurring) return null;
+    if (endRule === 'never') return null;
+    if (endRule === 'date') return endDate || null;
+    if (endRule === 'count') {
       const config: RecurrenceConfig = {
         frequency,
         daysOfWeek: selectedDays,
         startDate: new Date(startDate),
         endDate: null,
       };
-      const occurrences = generateOccurrences(config, 5);
-      setPreviewDates(occurrences);
+      const d = getEndDateForCount(config, endCount);
+      return d ? d.toISOString().split('T')[0] : null;
+    }
+    return null;
+  })();
+
+  // Update preview when recurrence settings change
+  useEffect(() => {
+    if (isRecurring && frequency && startDate) {
+      const parsedEnd = resolvedEndDate ? new Date(resolvedEndDate + 'T00:00:00') : null;
+      const config: RecurrenceConfig = {
+        frequency,
+        daysOfWeek: selectedDays,
+        startDate: new Date(startDate),
+        endDate: parsedEnd,
+      };
+      const startDateMinus1 = new Date(startDate + 'T00:00:00');
+      startDateMinus1.setDate(startDateMinus1.getDate() - 1);
+      const preview = generateOccurrences(config, 5, startDateMinus1);
+      setPreviewDates(preview);
+
+      if (parsedEnd) {
+        const allForCount = generateOccurrences(config, 10000, startDateMinus1);
+        setTotalOccurrences(allForCount.length);
+      } else {
+        setTotalOccurrences(null);
+      }
     } else {
       setPreviewDates([]);
+      setTotalOccurrences(null);
     }
-  }, [frequency, selectedDays, startDate, isRecurring]);
+  }, [frequency, selectedDays, startDate, isRecurring, endRule, endCount, endDate]);
   
   // Check for conflicts when relevant fields change
   useEffect(() => {
@@ -200,11 +236,14 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
           frequency,
           days_of_week: selectedDays,
           start_date: startDate,
+          end_date: resolvedEndDate || undefined,
           start_time: startTime,
           end_time: endTime,
           duration_minutes: duration,
           buffer_minutes: bufferTime,
           participants: selectedParticipants,
+          chairman_id: chairmanId || undefined,
+          coordinator_id: coordinatorId || undefined,
         }, currentUser?.id);
       } else {
         // Create single one-time meeting directly
@@ -217,6 +256,8 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
             start_time: startTime,
             end_time: endTime,
             status: 'scheduled',
+            chairman_id: chairmanId || null,
+            coordinator_id: coordinatorId || null,
           })
           .select('id')
           .single();
@@ -236,7 +277,10 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
                 is_required: true,
               }))
             );
-          if (participantError) console.error('Error adding participants:', participantError);
+          if (participantError) {
+            console.error('Error adding participants:', JSON.stringify(participantError, null, 2));
+            throw new Error(`Failed to add participants: ${participantError.message || JSON.stringify(participantError)}`);
+          }
         }
         
         // Copy checklist tasks from template if selected
@@ -438,47 +482,132 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
             </div>
             
             {isRecurring && (
-              <div className="grid grid-cols-2 gap-8">
-                <div className="flex flex-col gap-3">
-                  <label className="text-xs font-bold text-text-secondary uppercase tracking-widest">Frequency</label>
-                  <div className="flex bg-status-grey-bg rounded-[16px] p-1">
-                    {(['weekly', 'bi-weekly', 'monthly'] as const).map((freq) => (
-                      <button
-                        key={freq}
-                        onClick={() => setFrequency(freq)}
-                        className={cn(
-                          "flex-1 py-1.5 rounded-[12px] text-sm font-bold transition-all capitalize",
-                          frequency === freq 
-                            ? "bg-white text-text-primary shadow-sm" 
-                            : "text-text-primary hover:bg-white/50"
-                        )}
-                      >
-                        {freq === 'weekly' ? 'Weekly' : freq === 'bi-weekly' ? 'Bi-Weekly' : 'Monthly'}
-                      </button>
-                    ))}
+              <div className="flex flex-col gap-6">
+                <div className="grid grid-cols-2 gap-8">
+                  <div className="flex flex-col gap-3">
+                    <label className="text-xs font-bold text-text-secondary uppercase tracking-widest">Frequency</label>
+                    <div className="flex bg-status-grey-bg rounded-[16px] p-1">
+                      {(['weekly', 'bi-weekly', 'monthly'] as const).map((freq) => (
+                        <button
+                          key={freq}
+                          onClick={() => setFrequency(freq)}
+                          className={cn(
+                            "flex-1 py-1.5 rounded-[12px] text-sm font-bold transition-all capitalize",
+                            frequency === freq 
+                              ? "bg-white text-text-primary shadow-sm" 
+                              : "text-text-primary hover:bg-white/50"
+                          )}
+                        >
+                          {freq === 'weekly' ? 'Weekly' : freq === 'bi-weekly' ? 'Bi-Weekly' : 'Monthly'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-3">
+                    <label className="text-xs font-bold text-text-secondary uppercase tracking-widest">Repeat Days</label>
+                    <div className="flex items-center gap-2 mt-1">
+                      {['M', 'T', 'W', 'Th', 'F'].map((day) => {
+                        const mappedDay = day === 'Th' ? 'T' : day;
+                        return (
+                          <button
+                            key={day}
+                            onClick={() => toggleDay(day)}
+                            className={cn(
+                              "h-10 w-10 rounded-full flex items-center justify-center text-sm font-bold transition-all border",
+                              selectedDays.includes(day)
+                                ? "bg-primary text-white border-primary"
+                                : "bg-status-grey-bg text-text-primary border-transparent hover:bg-cream"
+                            )}
+                          >
+                            {mappedDay}
+                          </button>
+                        )
+                      })}
+                    </div>
                   </div>
                 </div>
 
-                <div className="flex flex-col gap-3">
-                  <label className="text-xs font-bold text-text-secondary uppercase tracking-widest">Repeat Days</label>
-                  <div className="flex items-center gap-2 mt-1">
-                    {['M', 'T', 'W', 'Th', 'F'].map((day) => {
-                      const mappedDay = day === 'Th' ? 'T' : day;
-                      return (
-                        <button
-                          key={day}
-                          onClick={() => toggleDay(day)}
-                          className={cn(
-                            "h-10 w-10 rounded-full flex items-center justify-center text-sm font-bold transition-all border",
-                            selectedDays.includes(day)
-                              ? "bg-primary text-white border-primary"
-                              : "bg-status-grey-bg text-text-primary border-transparent hover:bg-cream"
-                          )}
-                        >
-                          {mappedDay}
-                        </button>
-                      )
-                    })}
+                {/* End Rule */}
+                <div className="flex flex-col gap-3 border-t border-border/20 pt-5">
+                  <label className="text-xs font-bold text-text-secondary uppercase tracking-widest">Ends</label>
+                  <div className="flex flex-col gap-3">
+                    {/* Never */}
+                    <div
+                      className={cn(
+                        "flex items-center gap-4 p-4 rounded-2xl border-2 cursor-pointer transition-all",
+                        endRule === 'never' ? "border-primary bg-surface/50" : "border-border/50 hover:border-primary/30"
+                      )}
+                      onClick={() => setEndRule('never')}
+                    >
+                      <div className={cn("h-5 w-5 rounded-full border-2 flex items-center justify-center shrink-0", endRule === 'never' ? "border-primary bg-primary" : "border-border/50")}>
+                        {endRule === 'never' && <div className="h-2 w-2 rounded-full bg-white" />}
+                      </div>
+                      <div>
+                        <h4 className="font-bold text-text-primary text-sm">No end</h4>
+                        <p className="text-xs font-light text-text-secondary">Series continues indefinitely</p>
+                      </div>
+                    </div>
+
+                    {/* After N occurrences */}
+                    <div
+                      className={cn(
+                        "flex items-center gap-4 p-4 rounded-2xl border-2 cursor-pointer transition-all",
+                        endRule === 'count' ? "border-primary bg-surface/50" : "border-border/50 hover:border-primary/30"
+                      )}
+                      onClick={() => setEndRule('count')}
+                    >
+                      <div className={cn("h-5 w-5 rounded-full border-2 flex items-center justify-center shrink-0", endRule === 'count' ? "border-primary bg-primary" : "border-border/50")}>
+                        {endRule === 'count' && <div className="h-2 w-2 rounded-full bg-white" />}
+                      </div>
+                      <div className="flex-1">
+                        <h4 className="font-bold text-text-primary text-sm mb-1">After occurrences</h4>
+                        {endRule === 'count' ? (
+                          <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                            <input
+                              type="number"
+                              min={1}
+                              max={100}
+                              value={endCount}
+                              onChange={(e) => setEndCount(Math.max(1, Math.min(100, parseInt(e.target.value) || 1)))}
+                              className="w-20 px-3 py-1.5 bg-white border border-border rounded-xl text-sm font-bold text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/20 text-center"
+                            />
+                            <span className="text-xs font-light text-text-secondary">occurrences (max 100)</span>
+                          </div>
+                        ) : (
+                          <p className="text-xs font-light text-text-secondary">Stop after a set number of meetings</p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Until date */}
+                    <div
+                      className={cn(
+                        "flex items-center gap-4 p-4 rounded-2xl border-2 cursor-pointer transition-all",
+                        endRule === 'date' ? "border-primary bg-surface/50" : "border-border/50 hover:border-primary/30"
+                      )}
+                      onClick={() => setEndRule('date')}
+                    >
+                      <div className={cn("h-5 w-5 rounded-full border-2 flex items-center justify-center shrink-0", endRule === 'date' ? "border-primary bg-primary" : "border-border/50")}>
+                        {endRule === 'date' && <div className="h-2 w-2 rounded-full bg-white" />}
+                      </div>
+                      <div className="flex-1">
+                        <h4 className="font-bold text-text-primary text-sm mb-1">Until date</h4>
+                        {endRule === 'date' ? (
+                          <div onClick={(e) => e.stopPropagation()}>
+                            <input
+                              type="date"
+                              value={endDate}
+                              min={startDate}
+                              onChange={(e) => setEndDate(e.target.value)}
+                              className="w-full px-3 py-1.5 bg-white border border-border rounded-xl text-sm font-light text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                            />
+                          </div>
+                        ) : (
+                          <p className="text-xs font-light text-text-secondary">Stop on a specific calendar date</p>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -689,31 +818,37 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
             <div>
               <label className="block text-sm font-semibold text-text-primary mb-2">Invitees</label>
               <div className="flex flex-col gap-2 max-h-48 overflow-y-auto border border-border rounded-2xl p-2">
-                {users.map((user) => (
-                  <div
-                    key={user.id}
-                    className={cn(
-                      "flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-colors",
-                      selectedParticipants.includes(user.id)
-                        ? "bg-mint/50 border border-sage/30"
-                        : "hover:bg-surface border border-transparent"
-                    )}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selectedParticipants.includes(user.id)}
-                      onChange={() => toggleParticipant(user.id)}
-                      className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
-                    />
-                    <div className="h-8 w-8 rounded-full bg-primary flex items-center justify-center text-white text-xs font-bold">
-                      {user.name.charAt(0)}
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-sm font-bold text-text-primary">{user.name}</p>
-                      <p className="text-xs text-text-tertiary">{user.division}</p>
-                    </div>
+                {users.length === 0 ? (
+                  <div className="p-4 text-center text-sm text-text-tertiary">
+                    No users available. Add people in the Directory first.
                   </div>
-                ))}
+                ) : (
+                  users.map((user) => (
+                    <div
+                      key={user.id}
+                      className={cn(
+                        "flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-colors",
+                        selectedParticipants.includes(user.id)
+                          ? "bg-mint/50 border border-sage/30"
+                          : "hover:bg-surface border border-transparent"
+                      )}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedParticipants.includes(user.id)}
+                        onChange={() => toggleParticipant(user.id)}
+                        className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
+                      />
+                      <div className="h-8 w-8 rounded-full bg-primary flex items-center justify-center text-white text-xs font-bold">
+                        {user.name.charAt(0)}
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-sm font-bold text-text-primary">{user.name}</p>
+                        <p className="text-xs text-text-tertiary">{user.division}</p>
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           </div>
@@ -967,17 +1102,24 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
               {previewDates.length > 0 && (
                 <div className="flex items-start gap-3">
                   <CalendarIcon className="h-4 w-4 text-text-tertiary shrink-0 mt-0.5" />
-                  <div className="text-sm font-light text-text-primary leading-snug">
-                    <p className="font-bold mb-1">Upcoming occurrences:</p>
+                  <div className="text-sm font-light text-text-primary leading-snug w-full">
+                    <div className="flex items-center justify-between mb-1">
+                      <p className="font-bold">Upcoming occurrences:</p>
+                      {totalOccurrences !== null && (
+                        <span className="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full bg-primary/10 text-primary">
+                          {totalOccurrences} total
+                        </span>
+                      )}
+                    </div>
                     <ul className="space-y-1">
-                      {previewDates.slice(0, 3).map((date, i) => (
+                      {previewDates.slice(0, 5).map((date, i) => (
                         <li key={i} className="text-xs text-text-secondary">
                           {date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
                         </li>
                       ))}
-                      {previewDates.length > 3 && (
+                      {totalOccurrences !== null && totalOccurrences > 5 && (
                         <li className="text-xs text-text-tertiary">
-                          ...and {previewDates.length - 3} more
+                          +{totalOccurrences - 5} more
                         </li>
                       )}
                     </ul>

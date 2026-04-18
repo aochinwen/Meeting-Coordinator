@@ -90,7 +90,7 @@ function DirectoryClientComponent({ initialUsers, activeTeamsCount }: DirectoryC
       .from('people')
       .update({
         name: updates.name,
-        email: updates.email,
+        email: updates.email || null,
         division: updates.division,
         rank: updates.rank,
       })
@@ -129,6 +129,7 @@ function DirectoryClientComponent({ initialUsers, activeTeamsCount }: DirectoryC
         {
           id: crypto.randomUUID(),
           name: newUser.name,
+          email: newUser.email || null,
           division: newUser.division,
           rank: newUser.rank,
         }

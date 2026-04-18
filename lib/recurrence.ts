@@ -357,6 +357,35 @@ export function formatRecurrencePattern(
 }
 
 /**
+ * Get the date of the Nth occurrence after startDate.
+ * Returns null if the series has fewer than count occurrences within a safety limit.
+ */
+export function getEndDateForCount(
+  config: RecurrenceConfig,
+  count: number
+): Date | null {
+  const occurrences: Date[] = [];
+  let currentDate = new Date(config.startDate);
+  currentDate.setHours(0, 0, 0, 0);
+  // Start one day before so the startDate itself can be the first occurrence
+  currentDate.setDate(currentDate.getDate() - 1);
+
+  const MAX_ITERATIONS = 10000;
+  let iterations = 0;
+
+  while (occurrences.length < count && iterations < MAX_ITERATIONS) {
+    iterations++;
+    const nextDate = getNextOccurrence(config, currentDate);
+    if (!nextDate) break;
+    occurrences.push(nextDate);
+    currentDate = new Date(nextDate);
+    currentDate.setDate(currentDate.getDate() + 1);
+  }
+
+  return occurrences.length >= count ? occurrences[count - 1] : null;
+}
+
+/**
  * Calculate end time based on start time and duration
  */
 export function calculateEndTime(
