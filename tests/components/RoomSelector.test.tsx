@@ -248,9 +248,9 @@ describe('RoomSelector', () => {
     const outside = screen.getByTestId('outside');
     fireEvent.click(outside);
 
-    // Dropdown should be closed (room list not visible)
+    // Dropdown should be closed (room list not in document)
     await waitFor(() => {
-      expect(screen.queryByText('Conference Room A')).not.toBeVisible();
+      expect(screen.queryByText('Conference Room A')).not.toBeInTheDocument();
     });
   });
 });

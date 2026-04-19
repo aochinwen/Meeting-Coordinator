@@ -1,5 +1,9 @@
+'use client';
+
 import Link from 'next/link';
-import { headers } from 'next/headers';
+import { usePathname } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import { User } from '@supabase/supabase-js';
 import { 
   LayoutDashboard, 
   FileText, 
@@ -12,15 +16,19 @@ import {
   ShieldCheck
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { createClient } from '@/utils/supabase/server';
+import { createClient } from '@/utils/supabase/client';
 
-export async function Sidebar() {
-  const headersList = await headers();
-  const pathname = headersList.get('x-pathname') ?? '/';
+export function Sidebar() {
+  const pathname = usePathname() ?? '/';
+  const [user, setUser] = useState<User | null>(null);
   
-  // Check if user is admin
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getUser().then(({ data }) => {
+      setUser(data.user);
+    });
+  }, []);
+  
   const isAdmin = user?.email === 'chinwen.ao@gmail.com';
 
   const mainRoutes = [

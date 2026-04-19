@@ -9,7 +9,7 @@ import {
 import { cn } from '@/lib/utils';
 import { User } from '@supabase/supabase-js';
 import { createClient } from '@/utils/supabase/client';
-import { createMeetingSeries, checkConflicts } from '@/lib/meetings';
+import { createMeetingSeries, checkConflicts, addMeetingParticipants } from '@/lib/meetings';
 import { formatRecurrencePattern, calculateEndTime, generateOccurrences, getEndDateForCount, RecurrenceConfig } from '@/lib/recurrence';
 import { bookRoom, bookRoomForRecurrentMeetings, Room } from '@/lib/rooms';
 import { MeetingTemplateModal } from '@/components/MeetingTemplateModal';
@@ -366,20 +366,7 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
         
         // Add participants if any
         if (selectedParticipants.length > 0) {
-          const { error: participantError } = await supabase
-            .from('meeting_participants')
-            .insert(
-              selectedParticipants.map(userId => ({
-                meeting_id: seriesId,
-                user_id: userId,
-                status: 'invited',
-                is_required: true,
-              }))
-            );
-          if (participantError) {
-            console.error('Error adding participants:', JSON.stringify(participantError, null, 2));
-            throw new Error(`Failed to add participants: ${participantError.message || JSON.stringify(participantError)}`);
-          }
+          await addMeetingParticipants(seriesId, selectedParticipants, true);
         }
         
         // Copy checklist tasks from template if selected
@@ -484,12 +471,6 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
     setSelectedTemplate(templateId);
     
     if (templateId) {
-      // Find template info from initial templates
-      const template = initialTemplates.find(t => t.id === templateId);
-      if (template) {
-        setTitle(template.name);
-      }
-      
       // Fetch full template data including chairman and tasks
       try {
         const { data: templateData } = await supabase

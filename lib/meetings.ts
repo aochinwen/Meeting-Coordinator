@@ -88,7 +88,22 @@ export async function createMeetingSeries(
   
   // 2. Generate initial meeting instances (next 8 weeks)
   await generateSeriesInstances(seriesId, 8, data);
-  
+
+  // 3. Add participants to all generated meeting instances if provided
+  if (data.participants && data.participants.length > 0) {
+    const supabase = createClient();
+    const { data: meetings } = await supabase
+      .from('meetings')
+      .select('id')
+      .eq('series_id', seriesId);
+
+    if (meetings && meetings.length > 0) {
+      for (const meeting of meetings) {
+        await addMeetingParticipants(meeting.id, data.participants, true);
+      }
+    }
+  }
+
   return seriesId;
 }
 
@@ -433,18 +448,52 @@ export async function addMeetingParticipants(
   isRequired: boolean = true
 ): Promise<void> {
   const supabase = createClient();
-  
-  const participants = userIds.map(userId => ({
+
+  if (userIds.length === 0) return;
+
+  console.log('addMeetingParticipants called with IDs:', userIds);
+
+  // Validate that user IDs exist in the people table
+  const { data: validPeople, error: peopleError } = await supabase
+    .from('people')
+    .select('id')
+    .in('id', userIds);
+
+  console.log('Validation query returned:', validPeople, 'error:', peopleError);
+
+  if (peopleError) {
+    console.error('Error validating people:', peopleError);
+    throw peopleError;
+  }
+
+  const validPeopleIds = new Set(validPeople?.map(p => p.id) || []);
+  console.log('Valid people IDs found:', Array.from(validPeopleIds));
+
+  const validUserIds = userIds.filter(id => validPeopleIds.has(id));
+
+  console.log('Filtered valid IDs:', validUserIds, 'from original:', userIds);
+
+  if (validUserIds.length === 0) {
+    console.warn('No valid participants to add - all provided IDs are invalid:', userIds);
+    throw new Error(`No valid participants found. IDs checked: ${userIds.join(', ')}`);
+  }
+
+  if (validUserIds.length < userIds.length) {
+    const invalidIds = userIds.filter(id => !validPeopleIds.has(id));
+    console.warn('Filtered out invalid participant IDs:', invalidIds);
+  }
+
+  const participants = validUserIds.map(userId => ({
     meeting_id: meetingId,
     user_id: userId,
     status: 'invited' as const,
     is_required: isRequired,
   }));
-  
+
   const { error } = await supabase
     .from('meeting_participants')
     .insert(participants);
-  
+
   if (error) {
     console.error('Error adding participants:', error);
     throw error;
