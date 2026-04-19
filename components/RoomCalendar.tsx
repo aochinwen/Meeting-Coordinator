@@ -1,13 +1,13 @@
 'use client';
 
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { ChevronLeft, ChevronRight, DoorOpen, Clock, Users, AlertCircle } from 'lucide-react';
+import { ChevronLeft, ChevronRight, DoorOpen, Clock, Users, AlertCircle, Repeat } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format, addDays, startOfWeek, isSameDay } from 'date-fns';
 import { Room, RoomBooking, getRooms, getRoomBookings } from '@/lib/rooms';
 
 interface RoomCalendarProps {
-  onBookingClick?: (booking: RoomBooking & { room: Room; meetings?: { title: string; status: string } | null }) => void;
+  onBookingClick?: (booking: RoomBooking & { room: Room; meetings?: { title: string; status: string; series_id: string | null } | null }) => void;
   onTimeSlotClick?: (room: Room, date: Date, startTime: string, endTime: string) => void;
 }
 
@@ -18,7 +18,7 @@ interface DragState {
   endIndex: number;
 }
 
-type BookingWithRoom = RoomBooking & { room: Room; meetings?: { title: string; status: string } | null };
+type BookingWithRoom = RoomBooking & { room: Room; meetings?: { title: string; status: string; series_id: string | null } | null };
 
 // Bookable day window: 6:00 through 23:00. HOURS is the list of starting
 // hours rendered in the time column; each hour contains two 30-min slots,
@@ -132,7 +132,6 @@ export function RoomCalendar({ onBookingClick, onTimeSlotClick }: RoomCalendarPr
               allBookings[dateKey].push({
                 ...booking,
                 room,
-                meetings: booking.meetings,
               });
             }
           }
@@ -562,6 +561,8 @@ export function RoomCalendar({ onBookingClick, onTimeSlotClick }: RoomCalendarPr
                               ? 'calc(100% - 8px)'
                               : `calc(${widthPercent}% - ${gap * 2}px)`;
 
+                            const isRecurring = !!booking.meetings?.series_id;
+
                             return (
                               <div
                                 key={booking.id}
@@ -573,15 +574,20 @@ export function RoomCalendar({ onBookingClick, onTimeSlotClick }: RoomCalendarPr
                                   left: leftPos,
                                   width: widthStyle,
                                 }}
-                                title={`${booking.meetings?.title || 'Meeting'} (${booking.start_time}-${booking.end_time})`}
+                                title={`${booking.meetings?.title || 'Meeting'} (${booking.start_time}-${booking.end_time})${isRecurring ? ' - Recurring' : ''}`}
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   onBookingClick?.(booking);
                                 }}
                               >
-                                <p className="text-xs font-bold text-primary truncate">
-                                  {booking.meetings?.title || 'Meeting'}
-                                </p>
+                                <div className="flex items-center gap-1">
+                                  <p className="text-xs font-bold text-primary truncate flex-1">
+                                    {booking.meetings?.title || 'Meeting'}
+                                  </p>
+                                  {isRecurring && (
+                                    <Repeat className="h-3 w-3 text-primary shrink-0" />
+                                  )}
+                                </div>
                                 <div className="flex items-center gap-1 text-xs text-text-secondary">
                                   <Clock className="h-3 w-3 shrink-0" />
                                   <span className="truncate">

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
   Users, User as UserIcon, PlusCircle, Settings, Calendar as CalendarIcon, 
@@ -244,7 +244,34 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
       setTotalOccurrences(null);
     }
   }, [frequency, selectedDays, startDate, isRecurring, endRule, endCount, endDate]);
-  
+
+  // Full list of occurrence dates (YYYY-MM-DD) for the room-availability
+  // check. For one-off meetings this is just `[startDate]`. For recurring
+  // meetings we enumerate every date — capped at 100 to match the endCount
+  // UI max and to keep the pre-submit query bounded when endRule='never'.
+  const allOccurrenceDates = useMemo<string[]>(() => {
+    if (!startDate) return [];
+    if (!isRecurring) return [startDate];
+
+    const parsedEnd = resolvedEndDate ? new Date(resolvedEndDate + 'T00:00:00') : null;
+    const config: RecurrenceConfig = {
+      frequency,
+      daysOfWeek: selectedDays,
+      startDate: new Date(startDate),
+      endDate: parsedEnd,
+    };
+    const startDateMinus1 = new Date(startDate + 'T00:00:00');
+    startDateMinus1.setDate(startDateMinus1.getDate() - 1);
+    const cap = endRule === 'count' ? Math.max(1, Math.min(100, endCount)) : 100;
+    const all = generateOccurrences(config, cap, startDateMinus1);
+    return all.map((d) => {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    });
+  }, [isRecurring, startDate, frequency, selectedDays, resolvedEndDate, endRule, endCount]);
+
   // Check for conflicts when relevant fields change
   useEffect(() => {
     async function detectConflicts() {
@@ -910,6 +937,7 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
               selectedRoomId={selectedRoomId}
               onRoomSelect={setSelectedRoomId}
               minCapacity={selectedParticipants.length + 1}
+              occurrenceDates={allOccurrenceDates}
             />
           </div>
 

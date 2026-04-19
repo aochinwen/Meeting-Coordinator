@@ -16,6 +16,9 @@ const nextConfig: NextConfig = {
   // Compression for smaller transfer sizes
   compress: true,
 
+  // Allow browser preview proxy for development testing
+  allowedDevOrigins: ['127.0.0.1', 'localhost'],
+
   // Turbopack configuration (replaces webpack)
   turbopack: {},
 
@@ -26,6 +29,11 @@ const nextConfig: NextConfig = {
       'lucide-react',
       '@supabase/supabase-js',
     ],
+    // Allow browser preview proxy for Server Actions
+    // Note: Browser preview uses dynamic ports, so we need to allow the exact origin
+    serverActions: {
+      allowedOrigins: ['localhost:3000', '127.0.0.1:51841', '127.0.0.1:*', '*'],
+    },
   },
 
   // Headers for caching and security

@@ -543,6 +543,27 @@ export async function getMeetingWithDetails(meetingId: string): Promise<{
 }
 
 /**
+ * Remove a participant from a meeting
+ */
+export async function removeMeetingParticipant(
+  meetingId: string,
+  userId: string
+): Promise<void> {
+  const supabase = createClient();
+
+  const { error } = await supabase
+    .from('meeting_participants')
+    .delete()
+    .eq('meeting_id', meetingId)
+    .eq('user_id', userId);
+
+  if (error) {
+    console.error('Error removing participant:', error);
+    throw error;
+  }
+}
+
+/**
  * Check for scheduling conflicts
  */
 export async function checkConflicts(

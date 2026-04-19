@@ -1,201 +1,179 @@
 /**
  * Tests for RoomSelector Component
  *
- * These tests validate the RoomSelector component that allows users
- * to select meeting rooms during meeting scheduling.
+ * The selector now uses a single batched availability lookup
+ * (`getRoomAvailabilityForDates`) so it can evaluate every occurrence
+ * of a recurring meeting up front. Tests cover both single-date and
+ * multi-date (recurring) flows.
  */
 
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { RoomSelector } from '../../components/RoomSelector';
 import userEvent from '@testing-library/user-event';
+import { RoomSelector } from '../../components/RoomSelector';
 
-// Mock the lib/rooms module
 vi.mock('../../lib/rooms', () => ({
   __esModule: true,
-  getAvailableRooms: vi.fn(),
-  checkRoomAvailability: vi.fn(),
+  getRoomAvailabilityForDates: vi.fn(),
 }));
 
-import { getAvailableRooms, checkRoomAvailability, Room } from '../../lib/rooms';
+import {
+  getRoomAvailabilityForDates,
+  Room,
+  RoomAvailabilityForDates,
+} from '../../lib/rooms';
 
-const mockGetAvailableRooms = vi.mocked(getAvailableRooms);
-const mockCheckRoomAvailability = vi.mocked(checkRoomAvailability);
+const mockGetAvailability = vi.mocked(getRoomAvailabilityForDates);
+
+function makeRoom(id: string, name: string, capacity: number): Room {
+  return { id, name, capacity, created_at: '', updated_at: '' };
+}
+
+function fullyAvailable(
+  room: Room,
+  dates: string[],
+): RoomAvailabilityForDates {
+  return {
+    room,
+    perDate: dates.map((d) => ({ date: d, available: true, conflict: null })),
+    availableCount: dates.length,
+    totalCount: dates.length,
+  };
+}
 
 describe('RoomSelector', () => {
-  const mockRooms: Room[] = [
-    { id: 'room-1', name: 'Conference Room A', capacity: 10, created_at: '', updated_at: '' },
-    { id: 'room-2', name: 'Meeting Room B', capacity: 6, created_at: '', updated_at: '' },
-    { id: 'room-3', name: 'Small Room C', capacity: 4, created_at: '', updated_at: '' },
-  ];
+  const roomA = makeRoom('room-1', 'Conference Room A', 10);
+  const roomB = makeRoom('room-2', 'Meeting Room B', 6);
+  const roomC = makeRoom('room-3', 'Boardroom C', 20);
 
   const defaultProps = {
     date: '2024-01-15',
     startTime: '10:00',
     endTime: '11:00',
-    selectedRoomId: null as string | null,
+    selectedRoomId: null,
     onRoomSelect: vi.fn(),
-    minCapacity: 2,
   };
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockGetAvailableRooms.mockResolvedValue(mockRooms);
-    mockCheckRoomAvailability.mockResolvedValue({ isAvailable: true });
+    mockGetAvailability.mockResolvedValue([
+      fullyAvailable(roomA, ['2024-01-15']),
+      fullyAvailable(roomB, ['2024-01-15']),
+      fullyAvailable(roomC, ['2024-01-15']),
+    ]);
   });
 
-  it('should render with placeholder text when no room selected', async () => {
+  it('renders placeholder when no room selected', async () => {
     render(<RoomSelector {...defaultProps} />);
-
     await waitFor(() => {
       expect(screen.getByText('Select a room (optional)')).toBeInTheDocument();
     });
   });
 
-  it('should fetch available rooms on mount when date/time provided', async () => {
+  it('fetches availability for the single date on mount', async () => {
     render(<RoomSelector {...defaultProps} />);
-
     await waitFor(() => {
-      expect(mockGetAvailableRooms).toHaveBeenCalledWith(
-        '2024-01-15',
+      expect(mockGetAvailability).toHaveBeenCalledWith(
+        ['2024-01-15'],
         '10:00',
         '11:00',
-        2
+        2, // default minCapacity
       );
     });
   });
 
-  it('should display available room count', async () => {
+  it('displays available room count for a one-off meeting', async () => {
     render(<RoomSelector {...defaultProps} />);
-
     await waitFor(() => {
       expect(screen.getByText('3 rooms available')).toBeInTheDocument();
     });
   });
 
-  it('should show "No rooms available" when list is empty', async () => {
-    mockGetAvailableRooms.mockResolvedValueOnce([]);
-
+  it('shows empty state when no rooms meet capacity', async () => {
+    mockGetAvailability.mockResolvedValueOnce([]);
     render(<RoomSelector {...defaultProps} />);
-
     await waitFor(() => {
-      expect(screen.getByText('No rooms available at this time')).toBeInTheDocument();
+      expect(screen.getByText('No rooms meet the capacity requirement')).toBeInTheDocument();
     });
   });
 
-  it('should open dropdown when clicked', async () => {
+  it('opens dropdown when clicked', async () => {
     render(<RoomSelector {...defaultProps} />);
-
     await waitFor(() => {
       expect(screen.getByText('Select a room (optional)')).toBeInTheDocument();
     });
-
     const dropdown = screen.getByText('Select a room (optional)').closest('button');
     if (dropdown) await userEvent.click(dropdown);
-
-    // Wait for dropdown to open and show rooms
     await waitFor(() => {
       expect(screen.getByText('Conference Room A')).toBeInTheDocument();
       expect(screen.getByText('Meeting Room B')).toBeInTheDocument();
     });
   });
 
-  it('should display room capacity in dropdown', async () => {
+  it('shows capacity for each room in dropdown', async () => {
     render(<RoomSelector {...defaultProps} />);
-
     await waitFor(() => {
-      const dropdown = screen.getByText('Select a room (optional)').closest('button');
-      if (dropdown) userEvent.click(dropdown);
+      expect(screen.getByText('Select a room (optional)')).toBeInTheDocument();
     });
-
+    const dropdown = screen.getByText('Select a room (optional)').closest('button');
+    if (dropdown) await userEvent.click(dropdown);
     await waitFor(() => {
       expect(screen.getByText('Capacity: 10')).toBeInTheDocument();
       expect(screen.getByText('Capacity: 6')).toBeInTheDocument();
     });
   });
 
-  it('should call onRoomSelect when room clicked and available', async () => {
+  it('calls onRoomSelect when a fully-available room is clicked', async () => {
     render(<RoomSelector {...defaultProps} />);
-
     await waitFor(() => {
-      const dropdown = screen.getByText('Select a room (optional)').closest('button');
-      if (dropdown) userEvent.click(dropdown);
+      expect(screen.getByText('Select a room (optional)')).toBeInTheDocument();
     });
-
-    await waitFor(() => {
-      expect(screen.getByText('Conference Room A')).toBeInTheDocument();
-    });
-
+    const dropdown = screen.getByText('Select a room (optional)').closest('button');
+    if (dropdown) await userEvent.click(dropdown);
+    await waitFor(() => expect(screen.getByText('Conference Room A')).toBeInTheDocument());
     const roomOption = screen.getByText('Conference Room A').closest('button');
     if (roomOption) await userEvent.click(roomOption);
-
     await waitFor(() => {
-      expect(mockCheckRoomAvailability).toHaveBeenCalledWith('room-1', '2024-01-15', '10:00', '11:00');
       expect(defaultProps.onRoomSelect).toHaveBeenCalledWith('room-1');
     });
   });
 
-  it('should refresh list and not select if room became unavailable', async () => {
-    mockCheckRoomAvailability.mockResolvedValueOnce({ isAvailable: false });
-
-    render(<RoomSelector {...defaultProps} />);
-
-    await waitFor(() => {
-      const dropdown = screen.getByText('Select a room (optional)').closest('button');
-      if (dropdown) userEvent.click(dropdown);
-    });
-
+  it('shows selected room with capacity subtitle', async () => {
+    render(<RoomSelector {...defaultProps} selectedRoomId="room-1" />);
     await waitFor(() => {
       expect(screen.getByText('Conference Room A')).toBeInTheDocument();
-    });
-
-    const roomOption = screen.getByText('Conference Room A').closest('button');
-    if (roomOption) await userEvent.click(roomOption);
-
-    await waitFor(() => {
-      // Should refresh the list
-      expect(mockGetAvailableRooms).toHaveBeenCalledTimes(2);
-      // Should NOT select the room
-      expect(defaultProps.onRoomSelect).not.toHaveBeenCalled();
+      expect(screen.getByText('10 people capacity')).toBeInTheDocument();
     });
   });
 
-  it('should show selected room with checkmark', async () => {
+  it('allows clearing room selection', async () => {
     render(<RoomSelector {...defaultProps} selectedRoomId="room-1" />);
-
+    await waitFor(() => expect(screen.getByText('Conference Room A')).toBeInTheDocument());
+    const dropdown = screen.getByText('Conference Room A').closest('button');
+    if (dropdown) await userEvent.click(dropdown);
+    await waitFor(() => expect(screen.getByText('No room needed')).toBeInTheDocument());
+    await userEvent.click(screen.getByText('No room needed'));
     await waitFor(() => {
-      expect(screen.getByText('Conference Room A')).toBeInTheDocument();
+      expect(defaultProps.onRoomSelect).toHaveBeenCalledWith(null);
     });
   });
 
-  it('should allow clearing room selection', async () => {
-    render(<RoomSelector {...defaultProps} selectedRoomId="room-1" />);
-
-    await waitFor(() => {
-      const dropdown = screen.getByText('Conference Room A').closest('button');
-      if (dropdown) userEvent.click(dropdown);
-    });
-
-    await waitFor(() => {
-      expect(screen.getByText('No room needed')).toBeInTheDocument();
-    });
-
-    const clearButton = screen.getByText('No room needed');
-    await userEvent.click(clearButton);
-
-    expect(defaultProps.onRoomSelect).toHaveBeenCalledWith(null);
-  });
-
-  it('should deselect room if it becomes unavailable after time change', async () => {
+  it('deselects room when availability refetch returns zero free dates for it', async () => {
     const onRoomSelect = vi.fn();
 
     const { rerender } = render(
-      <RoomSelector {...defaultProps} selectedRoomId="room-1" onRoomSelect={onRoomSelect} />
+      <RoomSelector {...defaultProps} selectedRoomId="room-1" onRoomSelect={onRoomSelect} />,
     );
 
-    // Simulate time change that makes selected room unavailable
-    mockGetAvailableRooms.mockResolvedValueOnce([
-      { id: 'room-2', name: 'Meeting Room B', capacity: 6, created_at: '', updated_at: '' },
+    // After time change, room-1 has zero free dates → should be deselected.
+    mockGetAvailability.mockResolvedValueOnce([
+      {
+        room: roomA,
+        perDate: [{ date: '2024-01-15', available: false, conflict: { meetingId: 'm', meetingTitle: 'Standup', startTime: '10:00', endTime: '11:00' } }],
+        availableCount: 0,
+        totalCount: 1,
+      },
+      fullyAvailable(roomB, ['2024-01-15']),
     ]);
 
     rerender(
@@ -203,9 +181,9 @@ describe('RoomSelector', () => {
         {...defaultProps}
         selectedRoomId="room-1"
         onRoomSelect={onRoomSelect}
-        startTime="14:00"
-        endTime="15:00"
-      />
+        startTime="11:00"
+        endTime="12:00"
+      />,
     );
 
     await waitFor(() => {
@@ -213,44 +191,141 @@ describe('RoomSelector', () => {
     });
   });
 
-  it('should show loading state while fetching', async () => {
-    mockGetAvailableRooms.mockImplementationOnce(() => new Promise(() => {})); // Never resolves
-
+  it('shows loading state while fetching', () => {
+    mockGetAvailability.mockImplementationOnce(() => new Promise(() => {}));
     render(<RoomSelector {...defaultProps} />);
-
     expect(screen.getByText('Checking availability...')).toBeInTheDocument();
   });
 
-  it('should not fetch rooms when date or time is missing', () => {
+  it('does not fetch when date is missing and no occurrenceDates provided', () => {
     render(<RoomSelector {...defaultProps} date="" />);
-
-    expect(mockGetAvailableRooms).not.toHaveBeenCalled();
+    expect(mockGetAvailability).not.toHaveBeenCalled();
   });
 
-  it('should close dropdown when clicking outside', async () => {
-    render(
-      <>
-        <div data-testid="outside">Outside</div>
-        <RoomSelector {...defaultProps} />
-      </>
-    );
+  it('closes dropdown when the outside-click overlay is clicked', async () => {
+    const { container } = render(<RoomSelector {...defaultProps} />);
+    await waitFor(() => expect(screen.getByText('Select a room (optional)')).toBeInTheDocument());
+    const dropdown = screen.getByText('Select a room (optional)').closest('button');
+    if (dropdown) await userEvent.click(dropdown);
+    await waitFor(() => expect(screen.getByText('Conference Room A')).toBeInTheDocument());
 
-    await waitFor(() => {
-      const dropdown = screen.getByText('Select a room (optional)').closest('button');
-      if (dropdown) userEvent.click(dropdown);
-    });
+    // The overlay is a fixed-position div rendered only while the dropdown is open.
+    const overlay = container.querySelector('div.fixed.inset-0.z-40') as HTMLElement | null;
+    expect(overlay).not.toBeNull();
+    fireEvent.click(overlay!);
 
-    await waitFor(() => {
-      expect(screen.getByText('Conference Room A')).toBeInTheDocument();
-    });
-
-    // Click outside
-    const outside = screen.getByTestId('outside');
-    fireEvent.click(outside);
-
-    // Dropdown should be closed (room list not in document)
     await waitFor(() => {
       expect(screen.queryByText('Conference Room A')).not.toBeInTheDocument();
+    });
+  });
+
+  // --- Recurring-meeting behavior -----------------------------------------
+
+  describe('recurring meetings', () => {
+    const dates = ['2024-01-15', '2024-01-22', '2024-01-29'];
+
+    it('passes all occurrence dates to the availability helper', async () => {
+      mockGetAvailability.mockResolvedValueOnce([fullyAvailable(roomA, dates)]);
+      render(<RoomSelector {...defaultProps} occurrenceDates={dates} />);
+      await waitFor(() => {
+        expect(mockGetAvailability).toHaveBeenCalledWith(dates, '10:00', '11:00', 2);
+      });
+    });
+
+    it('shows "N of M rooms free on all X dates" summary when any are fully free', async () => {
+      mockGetAvailability.mockResolvedValueOnce([
+        fullyAvailable(roomA, dates),
+        {
+          room: roomB,
+          perDate: [
+            { date: dates[0], available: true, conflict: null },
+            { date: dates[1], available: false, conflict: { meetingId: 'm', meetingTitle: 'Design Review', startTime: '10:00', endTime: '11:00' } },
+            { date: dates[2], available: true, conflict: null },
+          ],
+          availableCount: 2,
+          totalCount: 3,
+        },
+      ]);
+      render(<RoomSelector {...defaultProps} occurrenceDates={dates} />);
+      await waitFor(() => {
+        expect(screen.getByText('1 of 2 rooms free on all 3 dates')).toBeInTheDocument();
+      });
+    });
+
+    it('shows a red summary when no room is free on all dates', async () => {
+      mockGetAvailability.mockResolvedValueOnce([
+        {
+          room: roomA,
+          perDate: [
+            { date: dates[0], available: true, conflict: null },
+            { date: dates[1], available: false, conflict: { meetingId: 'x', meetingTitle: 'X', startTime: '10:00', endTime: '11:00' } },
+            { date: dates[2], available: true, conflict: null },
+          ],
+          availableCount: 2,
+          totalCount: 3,
+        },
+      ]);
+      render(<RoomSelector {...defaultProps} occurrenceDates={dates} />);
+      await waitFor(() => {
+        expect(screen.getByText('No room is free on all 3 dates')).toBeInTheDocument();
+      });
+    });
+
+    it('renders a full per-date list with the conflicting meeting title when a partially-conflicting room is selected', async () => {
+      mockGetAvailability.mockResolvedValue([
+        {
+          room: roomA,
+          perDate: [
+            { date: dates[0], available: true, conflict: null },
+            { date: dates[1], available: false, conflict: { meetingId: 'x', meetingTitle: 'Design Review', startTime: '10:00', endTime: '11:00' } },
+            { date: dates[2], available: true, conflict: null },
+          ],
+          availableCount: 2,
+          totalCount: 3,
+        },
+      ]);
+      render(
+        <RoomSelector
+          {...defaultProps}
+          selectedRoomId="room-1"
+          occurrenceDates={dates}
+        />,
+      );
+      await waitFor(() => {
+        // Header shows free count
+        expect(screen.getByText('2/3 free')).toBeInTheDocument();
+        // Conflict dates display the blocking meeting title
+        expect(screen.getByText(/Design Review/)).toBeInTheDocument();
+        // Warning footer is present for partial conflict
+        expect(
+          screen.getByText(/Conflicting dates will be skipped/i),
+        ).toBeInTheDocument();
+      });
+    });
+
+    it('disables selection for rooms with zero free dates', async () => {
+      mockGetAvailability.mockResolvedValue([
+        {
+          room: roomA,
+          perDate: dates.map((d) => ({
+            date: d,
+            available: false,
+            conflict: { meetingId: 'x', meetingTitle: 'Blocker', startTime: '10:00', endTime: '11:00' },
+          })),
+          availableCount: 0,
+          totalCount: 3,
+        },
+      ]);
+      const onRoomSelect = vi.fn();
+      render(
+        <RoomSelector {...defaultProps} occurrenceDates={dates} onRoomSelect={onRoomSelect} />,
+      );
+      await waitFor(() => expect(screen.getByText('Select a room (optional)')).toBeInTheDocument());
+      const dropdown = screen.getByText('Select a room (optional)').closest('button');
+      if (dropdown) await userEvent.click(dropdown);
+      await waitFor(() => expect(screen.getByText('Conference Room A')).toBeInTheDocument());
+      const option = screen.getByText('Conference Room A').closest('button');
+      expect(option).toBeDisabled();
     });
   });
 });

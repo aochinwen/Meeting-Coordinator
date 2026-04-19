@@ -12,6 +12,9 @@ import { createClient } from '@/utils/supabase/client';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { DeleteMeetingModal } from './DeleteMeetingModal';
+import { AddParticipantsModal } from './AddParticipantsModal';
+import { EditMeetingVenueModal } from './EditMeetingVenueModal';
+import { addMeetingParticipants, removeMeetingParticipant } from '@/lib/meetings';
 
 interface RoomBooking {
   id: string;
@@ -103,6 +106,9 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
   const [commentInput, setCommentInput] = useState('');
   const [copied, setCopied] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isAddParticipantsOpen, setIsAddParticipantsOpen] = useState(false);
+  const [isAddingParticipants, setIsAddingParticipants] = useState(false);
+  const [isEditVenueOpen, setIsEditVenueOpen] = useState(false);
 
   type ProfileInfo = { name: string; division?: string | null; rank?: string | null };
   const profileMapRef = useRef<Map<string, ProfileInfo>>(
@@ -172,6 +178,7 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
 
     await Promise.all([
       fetchMeeting(),
+      fetchRoomBooking(),
       fetchParticipantsWithMap(profileMap),
       fetchTasksWithMap(profileMap),
       fetchActivitiesWithMap(profileMap)
@@ -192,6 +199,27 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
     }
 
     setMeeting(data as any);
+  }
+
+  async function fetchRoomBooking() {
+    const { data, error } = await supabase
+      .from('room_bookings')
+      .select('*, room:room_id(*)')
+      .eq('meeting_id', meetingId)
+      .maybeSingle();
+
+    if (error) {
+      console.error('Error fetching room booking:', {
+        message: error.message,
+        code: error.code,
+        details: error.details,
+        hint: error.hint,
+        meetingId
+      });
+      return;
+    }
+
+    setRoomBooking(data as RoomBooking | null);
   }
 
   async function fetchParticipantsWithMap(profileMap: Map<string, ProfileInfo>) {
@@ -624,10 +652,17 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
 
           {/* Participants */}
           <div className="bg-white border border-border/20 rounded-3xl shadow-sm overflow-hidden">
-            <div className="px-6 py-4 border-b border-border/20 bg-white">
+            <div className="px-6 py-4 border-b border-border/20 bg-white flex justify-between items-center">
               <h3 className="text-lg font-bold text-text-primary font-literata">
                 Participants ({participants.length})
               </h3>
+              <button
+                onClick={() => setIsAddParticipantsOpen(true)}
+                className="px-4 py-2 bg-primary text-white rounded-full text-xs font-medium shadow-sm transition-all hover:bg-primary/90 flex items-center gap-1.5"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Add
+              </button>
             </div>
 
             <div className="p-6">
@@ -640,7 +675,7 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
                   {participants.map((participant) => (
                     <div 
                       key={participant.id}
-                      className="flex items-center gap-3 p-3 bg-surface rounded-2xl"
+                      className="flex items-center gap-3 p-3 bg-surface rounded-2xl group"
                     >
                       <div className="h-10 w-10 rounded-full bg-sage flex items-center justify-center text-white text-sm font-bold">
                         {participant.user ? getInitials(participant.user.name) : '?'}
@@ -653,12 +688,21 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
                           {participant.user?.division || 'No division'}
                         </p>
                       </div>
-                      <span className={cn(
-                        "px-2 py-1 rounded-lg text-[10px] font-bold uppercase",
-                        getStatusColor(participant.status)
-                      )}>
-                        {participant.status}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className={cn(
+                          "px-2 py-1 rounded-lg text-[10px] font-bold uppercase",
+                          getStatusColor(participant.status)
+                        )}>
+                          {participant.status}
+                        </span>
+                        <button
+                          onClick={() => handleRemoveParticipant(participant.user_id)}
+                          className="p-1.5 text-text-tertiary hover:text-coral-text hover:bg-coral-bg rounded-full transition-all opacity-0 group-hover:opacity-100"
+                          title="Remove participant"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -761,12 +805,26 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
             </div>
             
             <div className="p-6 flex flex-col gap-1 z-20 bg-white relative">
-              <h4 className="text-sm font-bold text-text-primary font-literata">
-                Meeting Venue
-              </h4>
+              <div className="flex items-center justify-between">
+                <h4 className="text-sm font-bold text-text-primary font-literata">
+                  Meeting Venue
+                </h4>
+                <button
+                  onClick={() => setIsEditVenueOpen(true)}
+                  className="p-1.5 text-text-tertiary hover:text-primary hover:bg-primary/10 rounded-lg transition-colors"
+                  title="Edit venue"
+                >
+                  <Edit className="h-4 w-4" />
+                </button>
+              </div>
               <p className="text-xs font-normal text-text-secondary">
                 {roomBooking?.room?.name || 'No venue assigned'}
               </p>
+              {(roomBooking?.room?.capacity ?? 0) > 0 && (
+                <p className="text-[10px] text-text-tertiary">
+                  Capacity: {roomBooking?.room?.capacity} people
+                </p>
+              )}
             </div>
           </div>
         </div>
@@ -786,8 +844,94 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
           }}
         />
       )}
+
+      {/* Add Participants Modal */}
+      <AddParticipantsModal
+        isOpen={isAddParticipantsOpen}
+        onClose={() => setIsAddParticipantsOpen(false)}
+        onAdd={handleAddParticipants}
+        existingParticipantIds={participants.map(p => p.user_id)}
+      />
+
+      {/* Edit Venue Modal */}
+      {meeting && (
+        <EditMeetingVenueModal
+          isOpen={isEditVenueOpen}
+          onClose={() => setIsEditVenueOpen(false)}
+          meeting={{
+            id: meeting.id,
+            title: meeting.title,
+            date: meeting.date,
+            start_time: meeting.start_time,
+            end_time: meeting.end_time,
+            series_id: meeting.series_id,
+          }}
+          currentBooking={roomBooking ? {
+            id: roomBooking.id,
+            room_id: roomBooking.room_id,
+            room_name: roomBooking.room?.name || 'Unknown',
+            start_time: roomBooking.start_time,
+            end_time: roomBooking.end_time,
+          } : null}
+          participantIds={participants.map(p => p.user_id)}
+          onVenueUpdated={() => {
+            // Refresh meeting and room booking data
+            fetchMeeting();
+            fetchRoomBooking();
+          }}
+        />
+      )}
     </div>
   );
+
+  async function handleAddParticipants(userIds: string[]) {
+    if (!meetingId || userIds.length === 0) return;
+    
+    setIsAddingParticipants(true);
+    try {
+      await addMeetingParticipants(meetingId, userIds, true);
+      // Refresh participants list
+      await fetchParticipantsWithMap(profileMapRef.current);
+      // Log activity
+      await supabase.from('meeting_activities').insert({
+        meeting_id: meetingId,
+        user_id: currentUser?.id || null,
+        activity_type: 'participants_added',
+        content: `added ${userIds.length} participant${userIds.length > 1 ? 's' : ''} to the meeting`,
+        metadata: { added_count: userIds.length },
+      });
+      await fetchActivitiesWithMap(profileMapRef.current);
+    } catch (error) {
+      console.error('Error adding participants:', error);
+      throw error;
+    } finally {
+      setIsAddingParticipants(false);
+    }
+  }
+
+  async function handleRemoveParticipant(userId: string) {
+    if (!meetingId) return;
+    
+    const participant = participants.find(p => p.user_id === userId);
+    if (!participant) return;
+
+    try {
+      await removeMeetingParticipant(meetingId, userId);
+      // Refresh participants list
+      await fetchParticipantsWithMap(profileMapRef.current);
+      // Log activity
+      await supabase.from('meeting_activities').insert({
+        meeting_id: meetingId,
+        user_id: currentUser?.id || null,
+        activity_type: 'participant_removed',
+        content: `removed ${participant.user?.name || 'a participant'} from the meeting`,
+        metadata: { removed_user_id: userId },
+      });
+      await fetchActivitiesWithMap(profileMapRef.current);
+    } catch (error) {
+      console.error('Error removing participant:', error);
+    }
+  }
 }
 
 // Export memoized version to prevent unnecessary re-renders

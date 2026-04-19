@@ -1,6 +1,6 @@
 import { createClient } from '@/utils/supabase/server';
 import { Suspense } from 'react';
-import { ChevronRight, Plus, Search, Video, Target, User, Users, CalendarCheck2, Clock, CheckCircle2 } from 'lucide-react';
+import { ChevronRight, Plus, Search, Video, Target, User, Users, CalendarCheck2, Clock, CheckCircle2, Repeat } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
 import { DashboardSkeleton } from '@/components/ui/loading-skeleton';
@@ -14,6 +14,7 @@ interface MeetingWithRelations {
   start_time: string;
   end_time: string;
   status: string;
+  series_id: string | null;
   meeting_participants: { user_id: string }[];
   meeting_checklist_tasks: { id: string; is_completed: boolean }[];
 }
@@ -89,7 +90,8 @@ async function DashboardContent({
     .select(`
       *,
       meeting_participants(user_id),
-      meeting_checklist_tasks(id, is_completed)
+      meeting_checklist_tasks(id, is_completed),
+      series_id
     `, { count: 'exact' })
     .gte('date', dateRangeStart)
     .lte('date', dateRangeEnd);
@@ -187,7 +189,8 @@ async function DashboardContent({
       remainingCount,
       progress,
       totalTasks,
-      completedTasks
+      completedTasks,
+      isRecurring: !!meeting.series_id
     };
   });
 
@@ -305,7 +308,14 @@ async function DashboardContent({
                   <meeting.icon className={cn("h-5 w-5", meeting.iconColor)} />
                 </div>
                 <div className="flex flex-col pr-4">
-                  <h4 className="text-lg font-bold text-text-primary leading-tight font-literata">{meeting.title}</h4>
+                  <div className="flex items-center gap-2">
+                    <h4 className="text-lg font-bold text-text-primary leading-tight font-literata">{meeting.title}</h4>
+                    {meeting.isRecurring && (
+                      <span className="inline-flex items-center text-text-secondary" title="Recurring meeting">
+                        <Repeat className="h-3.5 w-3.5" />
+                      </span>
+                    )}
+                  </div>
                   <p className="text-sm font-light text-text-tertiary truncate leading-relaxed">{meeting.description}</p>
                 </div>
               </div>
