@@ -324,20 +324,6 @@ create policy "Allow true on all for now" on public.comments for all using (true
 create policy "Allow true on all for now" on public.rooms for all using (true);
 create policy "Allow true on all for now" on public.room_bookings for all using (true);
 
--- Create a trigger to create a profile when a new user signs up
-create or replace function public.handle_new_user()
-returns trigger as $$
-begin
-  insert into public.people (id, name, division, rank)
-  values (new.id, coalesce(new.raw_user_meta_data->>'name', new.email), 'General', 'Member');
-  return new;
-end;
-$$ language plpgsql security definer;
-
-create trigger on_auth_user_created
-  after insert on auth.users
-  for each row execute procedure public.handle_new_user();
-
 -- Indexes for performance
 create index idx_template_participants_template_id on public.template_participants(template_id);
 create index idx_template_participants_person_id on public.template_participants(person_id);

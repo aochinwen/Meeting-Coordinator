@@ -170,14 +170,29 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Load users on mount
+  // Load users on mount (exclude rejected users from user_approvals)
   useEffect(() => {
     async function loadUsers() {
-      const { data, error } = await supabase
+      // First, get rejected user IDs from user_approvals
+      const { data: rejectedApprovals } = await supabase
+        .from('user_approvals')
+        .select('user_id')
+        .eq('status', 'rejected');
+
+      const rejectedIds = rejectedApprovals?.map(a => a.user_id) || [];
+
+      // Then fetch people, excluding rejected users
+      let query = supabase
         .from('people')
         .select('id, name, division')
         .order('name');
-      
+
+      if (rejectedIds.length > 0) {
+        query = query.not('id', 'in', `(${rejectedIds.join(',')})`);
+      }
+
+      const { data, error } = await query;
+
       if (!error && data) {
         setUsers(data);
       }
