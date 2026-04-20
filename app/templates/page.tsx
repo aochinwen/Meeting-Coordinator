@@ -481,9 +481,9 @@ export default function TemplatesPage() {
   };
 
   return (
-    <div className="max-w-[1280px] mx-auto space-y-8 pb-12">
+    <div className="max-w-[1280px] mx-auto space-y-8 pb-12 pt-8 px-4 sm:px-6 lg:px-8">
       <div className="flex flex-col gap-2">
-        <h1 className="text-4xl font-bold tracking-tight text-text-primary font-literata">
+        <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-text-primary font-literata">
           Template Builder
         </h1>
         <p className="text-base font-light text-text-secondary">
@@ -491,12 +491,12 @@ export default function TemplatesPage() {
         </p>
       </div>
 
-      <div className="grid grid-cols-12 gap-8">
+      <div className="flex flex-col sm:flex-row gap-6 sm:gap-8">
         {/* Left Column - Form */}
-        <div className="col-span-8">
+        <div className="w-full sm:flex-[2] min-w-0 order-2 sm:order-1">
           <div className="bg-white rounded-3xl shadow-sm border border-border overflow-hidden">
             {/* Meeting Details Section */}
-            <div className="p-8 border-b border-border bg-surface/30">
+            <div className="p-5 sm:p-8 border-b border-border bg-surface/30">
               <h2 className="text-xl font-bold text-text-primary font-literata">Meeting Details</h2>
               <p className="text-sm text-text-tertiary font-light mt-1 mb-6">Set the core details and roles for this template type.</p>
               
@@ -512,7 +512,7 @@ export default function TemplatesPage() {
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                   <div>
                     <label className="block text-sm font-semibold text-text-primary mb-2">Chairman</label>
                     <UserSelectInput
@@ -538,7 +538,7 @@ export default function TemplatesPage() {
             </div>
 
             {/* Participants Section */}
-            <div className="p-8 border-b border-border">
+            <div className="p-5 sm:p-8 border-b border-border">
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <h2 className="text-xl font-bold text-text-primary font-literata">Participants</h2>
@@ -617,7 +617,7 @@ export default function TemplatesPage() {
             </div>
 
             {/* Default Checklist Section */}
-            <div className="p-8">
+            <div className="p-5 sm:p-8">
               <div className="flex items-center justify-between mb-6">
                 <div>
                   <h2 className="text-xl font-bold text-text-primary font-literata">Default Checklist</h2>
@@ -668,7 +668,7 @@ export default function TemplatesPage() {
                 ))}
               </div>
 
-              <div className="flex items-center gap-3">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
                 <div className="flex-1">
                   <UserTaggingInput 
                     value={newTask} 
@@ -679,7 +679,7 @@ export default function TemplatesPage() {
                 <button 
                   onClick={handleAddTask}
                   disabled={!newTask.trim()}
-                  className="px-6 py-3.5 bg-board text-text-primary border border-border rounded-2xl text-base font-light hover:bg-surface transition-colors disabled:opacity-50 flex items-center gap-2 shrink-0"
+                  className="px-5 sm:px-6 py-3 sm:py-3.5 bg-board text-text-primary border border-border rounded-2xl text-sm sm:text-base font-light hover:bg-surface transition-colors disabled:opacity-50 flex items-center justify-center gap-2 shrink-0"
                 >
                   <Plus className="h-5 w-5" />
                   Add Task
@@ -688,9 +688,9 @@ export default function TemplatesPage() {
             </div>
 
             {/* Footer Actions */}
-            <div className="p-6 border-t border-border bg-surface/30 flex justify-end gap-3">
+            <div className="p-5 sm:p-6 border-t border-border bg-surface/30 flex flex-col-reverse sm:flex-row sm:justify-end gap-3">
               <button 
-                className="px-6 py-3 bg-white border border-border text-text-primary rounded-full text-base font-light hover:bg-board transition-colors shadow-sm"
+                className="px-5 sm:px-6 py-3 bg-white border border-border text-text-primary rounded-full text-sm sm:text-base font-light hover:bg-board transition-colors shadow-sm"
                 onClick={() => {
                   setTemplateName('');
                   setChairman('');
@@ -704,7 +704,7 @@ export default function TemplatesPage() {
               <button 
                 onClick={handleSave}
                 disabled={isSubmitting || !templateName.trim()}
-                className="px-6 py-3 bg-primary text-white rounded-full text-base font-light hover:bg-primary-hover shadow-md transition-colors active:scale-95 disabled:opacity-50"
+                className="px-5 sm:px-6 py-3 bg-primary text-white rounded-full text-sm sm:text-base font-light hover:bg-primary-hover shadow-md transition-colors active:scale-95 disabled:opacity-50"
               >
                 {isSubmitting 
                   ? 'Saving...' 
@@ -718,14 +718,14 @@ export default function TemplatesPage() {
         </div>
 
         {/* Right Column - Templates List */}
-        <div className="col-span-4">
-          <div className="bg-white rounded-3xl shadow-sm border border-border overflow-hidden sticky top-4">
+        <div className="w-full sm:flex-1 min-w-0 order-1 sm:order-2">
+          <div className="bg-white rounded-3xl shadow-sm border border-border overflow-hidden sm:sticky sm:top-4">
             <div className="p-6 border-b border-border bg-surface/30">
               <h2 className="text-lg font-bold text-text-primary font-literata">Your Templates</h2>
               <p className="text-sm text-text-tertiary mt-1">{templates.length} template{templates.length !== 1 ? 's' : ''} created</p>
             </div>
 
-            <div className="p-4 max-h-[calc(100vh-200px)] overflow-y-auto">
+            <div className="p-4 sm:max-h-[calc(100vh-200px)] sm:overflow-y-auto">
               {loadingTemplates ? (
                 <div className="text-center py-8 text-text-tertiary">Loading...</div>
               ) : templates.length === 0 ? (

@@ -20,11 +20,5 @@ export default async function RoomsPage() {
   //   return redirect('/login');
   // }
 
-  return (
-    <div className="flex flex-col h-full bg-board">
-      <main className="flex-1 overflow-y-auto w-full">
-        <RoomsClient />
-      </main>
-    </div>
-  );
+  return <RoomsClient />;
 }

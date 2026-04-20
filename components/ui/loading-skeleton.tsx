@@ -18,12 +18,12 @@ export function Skeleton({ className }: SkeletonProps) {
 // Dashboard loading skeleton
 export function DashboardSkeleton() {
   return (
-    <div className="max-w-[1280px] mx-auto space-y-8 pb-12 h-full flex flex-col pt-8">
+    <div className="max-w-[1280px] mx-auto space-y-8 pb-12 h-full flex flex-col pt-8 px-4 sm:px-6 lg:px-8">
       {/* Header skeleton */}
-      <div className="flex items-end justify-between">
+      <div className="flex flex-col gap-4 sm:gap-6 sm:flex-row sm:items-end sm:justify-between">
         <div className="flex flex-col gap-2">
           <Skeleton className="h-10 w-64" />
-          <Skeleton className="h-4 w-80" />
+          <Skeleton className="h-4 w-72 sm:w-80" />
         </div>
         <Skeleton className="h-12 w-36 rounded-full" />
       </div>
@@ -45,14 +45,16 @@ export function DashboardSkeleton() {
       </div>
 
       {/* Search/filter skeleton */}
-      <div className="bg-status-grey-bg rounded-3xl p-4 flex gap-4 items-center shrink-0">
+      <div className="bg-status-grey-bg rounded-3xl p-4 flex flex-col sm:flex-row gap-3 sm:gap-4 sm:items-center shrink-0">
         <Skeleton className="h-12 flex-1 rounded-2xl" />
-        <Skeleton className="h-12 w-24 rounded-2xl" />
-        <Skeleton className="h-12 w-24 rounded-2xl" />
+        <div className="grid grid-cols-2 sm:flex gap-2 w-full sm:w-auto">
+          <Skeleton className="h-12 w-full sm:w-24 rounded-2xl" />
+          <Skeleton className="h-12 w-full sm:w-24 rounded-2xl" />
+        </div>
       </div>
 
       {/* Table skeleton */}
-      <div className="bg-white rounded-[24px] shadow-sm border border-border overflow-hidden flex-1 flex flex-col min-h-0">
+      <div className="bg-white rounded-[24px] shadow-sm border border-border overflow-hidden flex-1 flex-col min-h-0 hidden md:flex">
         <div className="grid grid-cols-12 gap-4 px-6 py-4 bg-surface/50 border-b border-border">
           {[...Array(5)].map((_, i) => (
             <Skeleton key={i} className="h-4 col-span-2" />
@@ -77,13 +79,46 @@ export function DashboardSkeleton() {
         </div>
       </div>
 
+      {/* Mobile cards skeleton */}
+      <div className="md:hidden flex flex-col gap-3">
+        {[...Array(5)].map((_, i) => (
+          <div key={i} className="bg-white border border-border/30 rounded-2xl p-4 space-y-3">
+            <div className="flex items-start gap-3">
+              <Skeleton className="h-10 w-10 rounded-full shrink-0" />
+              <div className="flex-1 space-y-2">
+                <Skeleton className="h-4 w-3/4" />
+                <Skeleton className="h-3 w-full" />
+              </div>
+            </div>
+            <div className="flex items-center justify-between">
+              <Skeleton className="h-8 w-24 rounded-full" />
+              <Skeleton className="h-6 w-20 rounded-full" />
+            </div>
+            <div className="flex items-center justify-between">
+              <div className="flex -space-x-2">
+                <Skeleton className="h-7 w-7 rounded-full" />
+                <Skeleton className="h-7 w-7 rounded-full" />
+                <Skeleton className="h-7 w-7 rounded-full" />
+              </div>
+              <Skeleton className="h-3 w-20" />
+            </div>
+          </div>
+        ))}
+      </div>
+
       {/* Pagination skeleton */}
-      <div className="flex items-center justify-between pt-2 shrink-0">
+      <div className="flex flex-col gap-3 sm:gap-0 sm:flex-row sm:items-center sm:justify-between pt-2 shrink-0">
         <Skeleton className="h-4 w-40" />
         <div className="flex items-center gap-2">
-          {[...Array(5)].map((_, i) => (
+          {[...Array(2)].map((_, i) => (
             <Skeleton key={i} className="h-10 w-10 rounded-2xl" />
           ))}
+          <Skeleton className="h-4 w-20 md:hidden" />
+          <div className="hidden md:flex items-center gap-2">
+            {[...Array(3)].map((_, i) => (
+              <Skeleton key={`desktop-${i}`} className="h-10 w-10 rounded-2xl" />
+            ))}
+          </div>
         </div>
       </div>
     </div>
@@ -93,9 +128,9 @@ export function DashboardSkeleton() {
 // Directory page loading skeleton
 export function DirectorySkeleton() {
   return (
-    <div className="max-w-[1280px] mx-auto pb-24 h-full flex flex-col pt-8 space-y-8">
+    <div className="max-w-[1280px] mx-auto pb-12 pt-8 space-y-8 px-4 sm:px-6 lg:px-8">
       {/* Header */}
-      <div className="flex items-end justify-between shrink-0">
+      <div className="flex flex-col gap-4 sm:gap-6 sm:flex-row sm:items-end sm:justify-between shrink-0">
         <div className="flex flex-col gap-2">
           <Skeleton className="h-10 w-48" />
           <Skeleton className="h-4 w-64" />
@@ -104,21 +139,21 @@ export function DirectorySkeleton() {
       </div>
 
       {/* Controls */}
-      <div className="grid grid-cols-4 gap-4 shrink-0">
-        <Skeleton className="h-12 col-span-2 rounded-[24px]" />
-        <Skeleton className="h-12 rounded-[24px]" />
-        <Skeleton className="h-12 rounded-[24px]" />
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 shrink-0">
+        <Skeleton className="h-12 col-span-1 sm:col-span-2 rounded-[24px]" />
+        <Skeleton className="h-12 rounded-[24px] hidden sm:block" />
+        <Skeleton className="h-12 rounded-[24px] hidden sm:block" />
       </div>
 
-      {/* Table */}
-      <div className="bg-white rounded-[24px] shadow-sm overflow-hidden flex-1 flex flex-col min-h-0">
+      {/* Table - Desktop */}
+      <div className="bg-white rounded-[24px] shadow-sm overflow-hidden hidden md:block">
         <div className="grid grid-cols-12 gap-4 px-6 py-4 bg-surface border-b border-border/30">
           {[...Array(5)].map((_, i) => (
             <Skeleton key={i} className="h-4" />
           ))}
         </div>
         <div className="divide-y divide-border/20">
-          {[...Array(4)].map((_, i) => (
+          {[...Array(10)].map((_, i) => (
             <div key={i} className="grid grid-cols-12 gap-4 px-6 py-4 items-center">
               <div className="col-span-3 flex items-center gap-3">
                 <Skeleton className="h-10 w-10 rounded-full" />
@@ -139,8 +174,32 @@ export function DirectorySkeleton() {
         </div>
       </div>
 
+      {/* Cards - Mobile */}
+      <div className="md:hidden flex flex-col gap-3">
+        {[...Array(5)].map((_, i) => (
+          <div key={i} className="bg-white border border-border/30 rounded-2xl p-4 space-y-3">
+            <div className="flex items-start gap-3">
+              <Skeleton className="h-10 w-10 rounded-full shrink-0" />
+              <div className="flex-1 space-y-2">
+                <Skeleton className="h-4 w-3/4" />
+                <Skeleton className="h-3 w-1/2" />
+              </div>
+              <Skeleton className="h-6 w-16 rounded-full" />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <Skeleton className="h-3 w-full" />
+              <Skeleton className="h-3 w-full" />
+            </div>
+            <div className="flex justify-end gap-1 pt-2">
+              <Skeleton className="h-8 w-8 rounded-lg" />
+              <Skeleton className="h-8 w-8 rounded-lg" />
+            </div>
+          </div>
+        ))}
+      </div>
+
       {/* Stats cards */}
-      <div className="grid grid-cols-3 gap-6 shrink-0">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 shrink-0">
         {[...Array(3)].map((_, i) => (
           <div key={i} className="rounded-[24px] p-6 flex flex-col gap-4 border">
             <div className="flex items-start justify-between">

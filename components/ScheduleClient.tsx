@@ -556,12 +556,12 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
   const recurrenceDisplay = isRecurring ? formatRecurrencePattern(frequency, selectedDays) : 'One-time meeting';
 
   return (
-    <div className="max-w-[1280px] mx-auto pb-24 pt-8 space-y-8">
+    <div className="max-w-[1280px] mx-auto pb-24 pt-8 space-y-8 px-4 sm:px-6 lg:px-8">
       {/* Header */}
           <div className="flex flex-col gap-6">
-            <div className="flex items-end justify-between shrink-0">
+            <div className="flex flex-col gap-4 sm:gap-6 sm:flex-row sm:items-end sm:justify-between shrink-0">
               <div className="flex flex-col gap-2">
-                <h1 className="text-4xl font-bold tracking-tight text-text-primary font-literata">
+                <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-text-primary font-literata">
                   Schedule New Meeting
                 </h1>
                 <p className="text-base font-light text-text-secondary">
@@ -604,7 +604,7 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
               <button 
                 onClick={handleSubmit}
                 disabled={isSubmitting}
-                className="px-6 py-3 bg-primary text-white rounded-2xl text-base font-bold shadow-md transition-all active:scale-95 hover:bg-primary/90 disabled:opacity-50"
+                className="w-full sm:w-auto px-5 sm:px-6 py-3 bg-primary text-white rounded-2xl text-sm sm:text-base font-bold shadow-md transition-all active:scale-95 hover:bg-primary/90 disabled:opacity-50"
               >
                 {isSubmitting ? 'Creating...' : 'Publish Schedule'}
               </button>
@@ -612,10 +612,10 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
           </div>
 
       {/* Grid Layout */}
-      <div className="grid grid-cols-12 gap-8 shrink-0">
+      <div className="flex flex-col sm:flex-row gap-6 sm:gap-8 shrink-0 w-full">
 
         {/* Left Column - Configuration */}
-        <div className="col-span-8 flex flex-col gap-8">
+        <div className="w-full sm:flex-[2] flex flex-col gap-6 sm:gap-8 min-w-0">
 
           {/* Meeting Details */}
           <div className="bg-white border border-border/20 rounded-[24px] p-6 flex flex-col gap-6 shadow-sm">
@@ -679,7 +679,7 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
             
             {isRecurring && (
               <div className="flex flex-col gap-6">
-                <div className="grid grid-cols-2 gap-8">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 sm:gap-8">
                   <div className="flex flex-col gap-3">
                     <label className="text-xs font-bold text-text-secondary uppercase tracking-widest">Frequency</label>
                     <div className="flex bg-status-grey-bg rounded-[16px] p-1">
@@ -814,6 +814,69 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
                 This meeting will occur once on the selected date.
               </p>
             )}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t border-border/20 pt-5">
+              <div className="flex flex-col gap-3">
+                <label className="text-sm font-bold text-text-primary">Start Date</label>
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="w-full px-4 py-3 bg-surface border-none rounded-2xl text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/20 text-sm font-light"
+                />
+              </div>
+
+              <div className="flex flex-col gap-3">
+                <label className="text-sm font-bold text-text-primary">Start Time</label>
+                <input
+                  type="time"
+                  value={startTime}
+                  onChange={(e) => setStartTime(e.target.value)}
+                  className="w-full px-4 py-3 bg-surface border-none rounded-2xl text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/20 text-sm font-light"
+                />
+              </div>
+
+              <div className="flex flex-col gap-3 md:col-span-2">
+                <label className="text-sm font-bold text-text-primary">End Time</label>
+                <input
+                  type="time"
+                  value={endTime}
+                  disabled={!isCustomDuration}
+                  onChange={(e) => {
+                    if (isCustomDuration) {
+                      const newEndTime = e.target.value;
+                      setCustomEndTime(newEndTime);
+                      const [startH, startM] = startTime.split(':').map(Number);
+                      const [endH, endM] = newEndTime.split(':').map(Number);
+                      let diffMinutes = (endH * 60 + endM) - (startH * 60 + startM);
+                      if (diffMinutes < 0) diffMinutes += 24 * 60;
+                      setDuration(diffMinutes);
+                    }
+                  }}
+                  className={cn(
+                    "w-full px-4 py-3 bg-surface border-none rounded-2xl text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/20 text-sm font-light",
+                    !isCustomDuration && "opacity-60 cursor-not-allowed"
+                  )}
+                />
+                {!isCustomDuration && (
+                  <p className="text-xs font-light text-text-secondary">
+                    End time is calculated from duration
+                  </p>
+                )}
+              </div>
+
+              <div className="md:col-span-2 bg-white border border-border/20 rounded-[20px] p-4">
+                <RoomSelector
+                  date={startDate}
+                  startTime={startTime}
+                  endTime={endTime}
+                  selectedRoomId={selectedRoomId}
+                  onRoomSelect={setSelectedRoomId}
+                  minCapacity={selectedParticipants.length + 1}
+                  occurrenceDates={allOccurrenceDates}
+                />
+              </div>
+            </div>
           </div>
 
           {/* Scheduling Mode & Session Timing */}
@@ -862,56 +925,6 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
                 </div>
 
                 <div className="flex flex-col gap-3">
-                  <label className="text-sm font-bold text-text-primary">Start Date</label>
-                  <input
-                    type="date"
-                    value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
-                    className="w-full px-4 py-3 bg-surface border-none rounded-2xl text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/20 text-sm font-light"
-                  />
-                </div>
-
-                <div className="flex flex-col gap-3">
-                  <label className="text-sm font-bold text-text-primary">Start Time</label>
-                  <input
-                    type="time"
-                    value={startTime}
-                    onChange={(e) => setStartTime(e.target.value)}
-                    className="w-full px-4 py-3 bg-surface border-none rounded-2xl text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/20 text-sm font-light"
-                  />
-                </div>
-
-                <div className="flex flex-col gap-3">
-                  <label className="text-sm font-bold text-text-primary">End Time</label>
-                  <input
-                    type="time"
-                    value={endTime}
-                    disabled={!isCustomDuration}
-                    onChange={(e) => {
-                      if (isCustomDuration) {
-                        const newEndTime = e.target.value;
-                        setCustomEndTime(newEndTime);
-                        // Calculate duration from start and end times
-                        const [startH, startM] = startTime.split(':').map(Number);
-                        const [endH, endM] = newEndTime.split(':').map(Number);
-                        let diffMinutes = (endH * 60 + endM) - (startH * 60 + startM);
-                        if (diffMinutes < 0) diffMinutes += 24 * 60; // Handle next day
-                        setDuration(diffMinutes);
-                      }
-                    }}
-                    className={cn(
-                      "w-full px-4 py-3 bg-surface border-none rounded-2xl text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/20 text-sm font-light",
-                      !isCustomDuration && "opacity-60 cursor-not-allowed"
-                    )}
-                  />
-                  {!isCustomDuration && (
-                    <p className="text-xs font-light text-text-secondary">
-                      End time is calculated from duration
-                    </p>
-                  )}
-                </div>
-
-                <div className="flex flex-col gap-3">
                   <label className="text-sm font-bold text-text-primary">Buffer Time</label>
                   <select 
                     value={bufferTime}
@@ -928,19 +941,6 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
             </div>
           </div>
 
-          {/* Room Selection */}
-          <div className="bg-white border border-border/20 rounded-[24px] p-6 flex flex-col gap-6 shadow-sm">
-            <RoomSelector
-              date={startDate}
-              startTime={startTime}
-              endTime={endTime}
-              selectedRoomId={selectedRoomId}
-              onRoomSelect={setSelectedRoomId}
-              minCapacity={selectedParticipants.length + 1}
-              occurrenceDates={allOccurrenceDates}
-            />
-          </div>
-
           {/* Template Selection */}
           <div className="bg-surface border border-border/30 rounded-[24px] p-6 flex flex-col gap-6">
             <div className="flex items-center gap-3">
@@ -950,8 +950,7 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
               </h2>
             </div>
             
-            <div className="grid grid-cols-3 gap-4">
-              {/* Template Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
               {initialTemplates.map((template) => (
                 <div 
                   key={template.id}
@@ -965,7 +964,7 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
                 >
                   {selectedTemplate === template.id && (
                     <div className="absolute top-3 right-3 h-5 w-5 bg-primary rounded-full flex items-center justify-center">
-                     <div className="w-2 h-2 bg-white rounded-full"></div>
+                      <div className="w-2 h-2 bg-white rounded-full"></div>
                     </div>
                   )}
                   <Users className="h-5 w-5 text-text-primary mb-3" />
@@ -976,7 +975,6 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
                 </div>
               ))}
 
-              {/* Custom Template Card */}
               <div 
                 onClick={() => handleTemplateSelect(null)}
                 className={cn(
@@ -1001,7 +999,7 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
               </h2>
             </div>
             
-            <div className="grid grid-cols-2 gap-5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
               <div>
                 <label className="block text-sm font-semibold text-text-primary mb-2">Chairman</label>
                 <select 
@@ -1180,7 +1178,7 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
         </div>
 
         {/* Right Column - Summary & Tips */}
-        <div className="col-span-4 flex flex-col gap-6">
+        <div className="w-full sm:flex-1 flex flex-col gap-6 min-w-0">
           
           {/* Schedule Summary Card */}
           <div className="bg-primary rounded-[24px] p-8 flex flex-col gap-6 text-white shadow-lg relative overflow-hidden">

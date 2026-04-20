@@ -29,7 +29,7 @@ export function FilterDropdown({ search, filter, sortBy, sortOrder }: FilterDrop
     <div className="relative" ref={ref}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="bg-board border border-border rounded-2xl px-4 py-3 flex items-center gap-2 hover:bg-white transition-colors"
+        className="w-full sm:w-auto bg-board border border-border rounded-2xl px-4 py-3 flex items-center justify-center gap-2 hover:bg-white transition-colors"
       >
         <Filter className="h-4 w-4 text-text-secondary" />
         <span className="text-sm font-light text-text-secondary">Filter</span>
@@ -88,7 +88,7 @@ export function SortDropdown({ search, filter, sortBy, sortOrder }: FilterDropdo
     <div className="relative" ref={ref}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="bg-board border border-border rounded-2xl px-4 py-3 flex items-center gap-2 hover:bg-white transition-colors"
+        className="w-full sm:w-auto bg-board border border-border rounded-2xl px-4 py-3 flex items-center justify-center gap-2 hover:bg-white transition-colors"
       >
         <ArrowUpDown className="h-4 w-4 text-text-secondary" />
         <span className="text-sm font-light text-text-secondary">Sort</span>

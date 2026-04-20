@@ -67,6 +67,92 @@ export type Database = {
         }
         Relationships: []
       }
+      initiative_slides: {
+        Row: {
+          created_at: string
+          deleted_at: string | null
+          description_md: string | null
+          id: string
+          initiative_id: string
+          media_type: string
+          position: number
+          storage_path: string | null
+          title: string
+          updated_at: string
+          video_url: string | null
+        }
+        Insert: {
+          created_at?: string
+          deleted_at?: string | null
+          description_md?: string | null
+          id?: string
+          initiative_id: string
+          media_type: string
+          position: number
+          storage_path?: string | null
+          title: string
+          updated_at?: string
+          video_url?: string | null
+        }
+        Update: {
+          created_at?: string
+          deleted_at?: string | null
+          description_md?: string | null
+          id?: string
+          initiative_id?: string
+          media_type?: string
+          position?: number
+          storage_path?: string | null
+          title?: string
+          updated_at?: string
+          video_url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "initiative_slides_initiative_id_fkey"
+            columns: ["initiative_id"]
+            isOneToOne: false
+            referencedRelation: "initiatives"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      initiatives: {
+        Row: {
+          created_at: string
+          deleted_at: string | null
+          demo_setup_md: string
+          id: string
+          narrative_md: string
+          stage: string
+          target_groups: string[]
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          deleted_at?: string | null
+          demo_setup_md: string
+          id?: string
+          narrative_md: string
+          stage: string
+          target_groups?: string[]
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          deleted_at?: string | null
+          demo_setup_md?: string
+          id?: string
+          narrative_md?: string
+          stage?: string
+          target_groups?: string[]
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       meeting_activities: {
         Row: {
           activity_type: string

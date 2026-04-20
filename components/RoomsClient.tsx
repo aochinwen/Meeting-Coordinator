@@ -35,9 +35,9 @@ export function RoomsClient() {
     <div className="max-w-[1280px] mx-auto pb-24 pt-8 space-y-8 px-4 sm:px-6 lg:px-8">
       {/* Header */}
       <div className="flex flex-col gap-6">
-        <div className="flex items-end justify-between shrink-0">
+        <div className="flex flex-col gap-4 sm:gap-6 sm:flex-row sm:items-end sm:justify-between shrink-0">
           <div className="flex flex-col gap-2">
-            <h1 className="text-4xl font-bold tracking-tight text-text-primary font-literata">
+            <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-text-primary font-literata">
               Meeting Rooms
             </h1>
             <p className="text-base font-light text-text-secondary">
@@ -45,27 +45,29 @@ export function RoomsClient() {
             </p>
           </div>
           
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
             <button
               onClick={() => setShowRoomManager(true)}
-              className="px-4 py-2.5 bg-white border border-border/50 text-text-primary rounded-xl text-sm font-bold flex items-center gap-2 hover:border-primary/50 transition-colors"
+              className="flex-1 sm:flex-none px-3 sm:px-4 py-2.5 bg-white border border-border/50 text-text-primary rounded-xl text-sm font-bold flex items-center justify-center gap-2 hover:border-primary/50 transition-colors"
             >
               <Settings className="h-4 w-4" />
-              Manage Rooms
+              <span className="hidden sm:inline">Manage Rooms</span>
+              <span className="sm:hidden">Manage</span>
             </button>
             <button
               onClick={() => router.push('/schedule')}
-              className="px-4 py-2.5 bg-primary text-white rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-primary/90 transition-colors"
+              className="flex-1 sm:flex-none px-3 sm:px-4 py-2.5 bg-primary text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2 hover:bg-primary/90 transition-colors"
             >
               <Plus className="h-4 w-4" />
-              Book Room
+              <span className="hidden sm:inline">Book Room</span>
+              <span className="sm:hidden">Book</span>
             </button>
           </div>
         </div>
       </div>
 
       {/* Room Calendar */}
-      <div className="bg-white border border-border/20 rounded-[24px] p-6 shadow-sm">
+      <div className="bg-white border border-border/20 rounded-[24px] p-4 sm:p-6 shadow-sm">
         <RoomCalendar
           onTimeSlotClick={handleTimeSlotClick}
           onBookingClick={handleBookingClick}
@@ -73,7 +75,7 @@ export function RoomsClient() {
       </div>
 
       {/* Instructions */}
-      <div className="bg-surface border border-border/30 rounded-[24px] p-6">
+      <div className="bg-surface border border-border/30 rounded-[24px] p-5 sm:p-6">
         <div className="flex items-start gap-4">
           <div className="h-12 w-12 rounded-2xl bg-primary/10 flex items-center justify-center shrink-0">
             <CalendarIcon className="h-6 w-6 text-primary" />

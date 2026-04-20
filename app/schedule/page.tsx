@@ -27,13 +27,9 @@ export default async function SchedulePage() {
     .order('name');
 
   return (
-    <div className="flex flex-col h-full bg-board">
-      <main className="flex-1 overflow-y-auto w-full">
-        <ScheduleClient 
-          initialTemplates={templates || []}
-          currentUser={user || undefined}
-        />
-      </main>
-    </div>
+    <ScheduleClient 
+      initialTemplates={templates || []}
+      currentUser={user || undefined}
+    />
   );
 }

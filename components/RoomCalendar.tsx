@@ -259,9 +259,9 @@ export function RoomCalendar({ onBookingClick, onTimeSlotClick }: RoomCalendarPr
   return (
     <div className="flex flex-col gap-4">
       {/* Header with navigation */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <h2 className="text-2xl font-bold text-text-primary font-literata">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-wrap items-center gap-3 sm:gap-4">
+          <h2 className="text-xl sm:text-2xl font-bold text-text-primary font-literata">
             Room Schedule
           </h2>
           <div className="flex items-center gap-1 bg-white border border-border/30 rounded-xl p-1">
@@ -286,7 +286,7 @@ export function RoomCalendar({ onBookingClick, onTimeSlotClick }: RoomCalendarPr
           </div>
         </div>
         
-        <p className="text-sm text-text-secondary font-light">
+        <p className="text-xs sm:text-sm text-text-secondary font-light">
           {format(visibleDays[0], 'MMM d')} - {format(visibleDays[6], 'MMM d, yyyy')}
         </p>
       </div>
@@ -344,10 +344,11 @@ export function RoomCalendar({ onBookingClick, onTimeSlotClick }: RoomCalendarPr
             })}
           </div>
 
-          <div className="bg-white border border-border/30 rounded-3xl overflow-hidden shadow-sm">
+          <div className="bg-white border border-border/30 rounded-3xl shadow-sm overflow-x-auto">
+            <div className="min-w-[720px]">
             {/* Column Headers: time + 7 days for the selected room */}
             <div className="flex border-b border-border/50">
-              <div className="w-20 shrink-0 p-4 border-r border-border/50 bg-surface/50">
+              <div className="w-16 sm:w-20 shrink-0 p-3 sm:p-4 border-r border-border/50 bg-surface/50">
                 <span className="text-xs font-bold text-text-secondary uppercase tracking-wider">
                   Time
                 </span>
@@ -358,7 +359,7 @@ export function RoomCalendar({ onBookingClick, onTimeSlotClick }: RoomCalendarPr
                 <div
                   key={format(day, 'yyyy-MM-dd')}
                   className={cn(
-                    'flex-1 min-w-[120px] p-3 text-center border-r border-border/50 last:border-r-0 bg-surface/50',
+                    'flex-1 min-w-[90px] sm:min-w-[120px] p-2 sm:p-3 text-center border-r border-border/50 last:border-r-0 bg-surface/50',
                     isToday && 'bg-primary/5 border-l-2 border-l-primary border-r-0'
                   )}
                 >
@@ -380,17 +381,17 @@ export function RoomCalendar({ onBookingClick, onTimeSlotClick }: RoomCalendarPr
             </div>
 
             {/* Scrollable content */}
-            <div className="overflow-auto max-h-[600px]">
+            <div className="overflow-y-auto overflow-x-hidden max-h-[600px]">
               <div className="flex">
                 {/* Time column */}
-                <div className="w-20 shrink-0 border-r border-border/50 bg-surface/30">
+                <div className="w-16 sm:w-20 shrink-0 border-r border-border/50 bg-surface/30">
                   {HOURS.map((hour) => (
                     <div
                       key={hour}
                       className="border-b border-border/20 last:border-b-0"
                       style={{ height: SLOT_HEIGHT * 2 }}
                     >
-                      <div className="p-2 text-xs font-medium text-text-secondary sticky top-0">
+                      <div className="p-1.5 sm:p-2 text-[10px] sm:text-xs font-medium text-text-secondary sticky top-0">
                         {hour === 12 ? '12 PM' : hour > 12 ? `${hour - 12} PM` : `${hour} AM`}
                       </div>
                     </div>
@@ -422,7 +423,7 @@ export function RoomCalendar({ onBookingClick, onTimeSlotClick }: RoomCalendarPr
                           columnRefs.current[dateKey] = el;
                         }}
                         className={cn(
-                          'flex-1 min-w-[120px] relative cursor-pointer select-none transition-colors hover:bg-surface/40',
+                          'flex-1 min-w-[90px] sm:min-w-[120px] relative cursor-pointer select-none transition-colors hover:bg-surface/40',
                           isEvenColumn ? 'bg-white' : 'bg-surface/30',
                           isToday && 'bg-primary/[0.03] hover:bg-primary/[0.05]',
                           'border-r border-border/40 last:border-r-0'
@@ -617,6 +618,7 @@ export function RoomCalendar({ onBookingClick, onTimeSlotClick }: RoomCalendarPr
                     );
                   })}
               </div>
+            </div>
             </div>
           </div>
         </>

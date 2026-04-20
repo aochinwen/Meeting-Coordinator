@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import { Literata, Nunito_Sans } from "next/font/google";
 import { headers } from "next/headers";
 import "./globals.css";
-import { Sidebar } from "@/components/Sidebar";
 import { Header } from "@/components/Header";
+import { Sidebar } from "@/components/Sidebar";
 
 const literata = Literata({ 
   subsets: ["latin"],
@@ -53,9 +53,9 @@ export default async function RootLayout({
       ) : (
         <body className="h-full flex flex-col bg-board text-text-primary font-nunito">
           <Header />
-          <div className="flex flex-1 pt-16 overflow-hidden">
+          <div className="flex flex-1 pt-16 min-h-0">
             <Sidebar />
-            <main className="flex-1 ml-64 p-8 overflow-y-auto bg-board min-h-screen">
+            <main className="flex-1 lg:ml-64 p-4 sm:p-6 lg:p-8 overflow-y-auto bg-board min-h-0">
               {children}
             </main>
           </div>

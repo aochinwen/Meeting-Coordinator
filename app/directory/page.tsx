@@ -34,10 +34,8 @@ async function DirectoryContent() {
 // Main page component with streaming
 export default function PeopleDirectoryPage() {
   return (
-    <div className="h-full">
-      <Suspense fallback={<DirectorySkeleton />}>
-        <DirectoryContent />
-      </Suspense>
-    </div>
+    <Suspense fallback={<DirectorySkeleton />}>
+      <DirectoryContent />
+    </Suspense>
   );
 }
