@@ -64,7 +64,7 @@ export function InitiativePresentClient({ initiativeId, initiativeTitle, slides 
   return (
     <div className="min-h-[calc(100vh-8rem)] bg-text-primary rounded-3xl p-6 md:p-8 text-text-primary relative overflow-hidden">
       <div className="absolute top-4 right-4">
-        <Link href={`/demo/${initiativeId}`} className="inline-flex items-center gap-2 px-3 py-2 rounded-full border border-border hover:bg-surface/70">
+        <Link href={`/demo/${initiativeId}`} className="inline-flex items-center gap-2 px-3 py-2 rounded-full border border-border hover:bg-surface/70 text-white">
           <X className="h-4 w-4" />
           Exit
         </Link>
@@ -72,8 +72,8 @@ export function InitiativePresentClient({ initiativeId, initiativeTitle, slides 
 
       <div className="max-w-[1100px] mx-auto h-full flex flex-col gap-6">
         <div className="pt-12">
-          <p className="text-sm uppercase tracking-widest text-text-secondary">Present Mode</p>
-          <h1 className="text-3xl md:text-4xl font-bold font-literata mt-2">{initiativeTitle}</h1>
+          <p className="text-sm uppercase tracking-widest text-white/70">Present Mode</p>
+          <h1 className="text-3xl md:text-4xl font-bold font-literata mt-2 text-white">{initiativeTitle}</h1>
         </div>
 
         <div className="flex-1 rounded-2xl border border-white/20 bg-black/30 p-3 flex items-center justify-center min-h-[420px]">
@@ -87,15 +87,15 @@ export function InitiativePresentClient({ initiativeId, initiativeTitle, slides 
 
         <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-6 items-end">
           <div>
-            <h2 className="text-2xl font-bold">{current.title}</h2>
-            <MarkdownContent markdown={current.description_md || ''} className="mt-2" />
+            <h2 className="text-2xl font-bold text-white">{current.title}</h2>
+            <MarkdownContent markdown={current.description_md || ''} className="mt-2 text-white prose-headings:text-white prose-a:text-white/80 prose-code:text-white prose-code:bg-white/20" />
           </div>
 
           <div className="flex items-center gap-2">
             <button
               onClick={() => setIndex((prev) => Math.max(0, prev - 1))}
               disabled={index === 0}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-border disabled:opacity-40"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-border disabled:opacity-40 text-white"
             >
               <ChevronLeft className="h-4 w-4" />
               Prev
@@ -103,7 +103,7 @@ export function InitiativePresentClient({ initiativeId, initiativeTitle, slides 
             <button
               onClick={() => setIndex((prev) => Math.min(orderedSlides.length - 1, prev + 1))}
               disabled={index === orderedSlides.length - 1}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-border disabled:opacity-40"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-border disabled:opacity-40 text-white"
             >
               Next
               <ChevronRight className="h-4 w-4" />
