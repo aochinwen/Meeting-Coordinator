@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Literata, Nunito_Sans } from "next/font/google";
 import { headers } from "next/headers";
+import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 import { Header } from "@/components/Header";
 import { Sidebar } from "@/components/Sidebar";
@@ -49,6 +50,7 @@ export default async function RootLayout({
       {hideChrome ? (
         <body className="h-full bg-board text-text-primary font-nunito">
           {children}
+          <Analytics />
         </body>
       ) : (
         <body className="h-full flex flex-col bg-board text-text-primary font-nunito">
@@ -59,6 +61,7 @@ export default async function RootLayout({
               {children}
             </main>
           </div>
+          <Analytics />
         </body>
       )}
     </html>
