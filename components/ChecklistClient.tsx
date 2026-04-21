@@ -49,6 +49,7 @@ function ChecklistClientComponent({ meetingId, currentUser }: ChecklistClientPro
   const [loading, setLoading] = useState(true);
   const [commentInput, setCommentInput] = useState('');
   const [newTaskInput, setNewTaskInput] = useState('');
+  const [newTaskDueDate, setNewTaskDueDate] = useState<string>('');
   const [meetingDate, setMeetingDate] = useState<string | null>(null);
 
   const profileMapRef = useRef<Map<string, { name: string }>>(new Map());
@@ -200,8 +201,28 @@ function ChecklistClientComponent({ meetingId, currentUser }: ChecklistClientPro
     fetchActivities();
   }
 
+  // Calculate due_days_before from an absolute date
+  const calculateDueDaysBefore = (absoluteDateStr: string, meetingDateStr: string): number | null => {
+    if (!absoluteDateStr || !meetingDateStr) return null;
+    const meetingDate = new Date(meetingDateStr + 'T00:00:00');
+    const dueDate = new Date(absoluteDateStr + 'T00:00:00');
+    const diffMs = meetingDate.getTime() - dueDate.getTime();
+    const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+    return diffDays >= 0 ? diffDays : null;
+  };
+
+  // Get absolute due date string for date input (YYYY-MM-DD)
+  const getAbsoluteDueDate = (due_days_before: number | null, meetingDateStr: string): string => {
+    if (due_days_before === null || !meetingDateStr) return '';
+    const d = new Date(meetingDateStr + 'T00:00:00');
+    d.setDate(d.getDate() - due_days_before);
+    return d.toISOString().split('T')[0];
+  };
+
   async function addTask() {
     if (!newTaskInput.trim()) return;
+
+    const due_days_before = (newTaskDueDate && meetingDate) ? calculateDueDaysBefore(newTaskDueDate, meetingDate) : null;
 
     const { error } = await supabase
       .from('meeting_checklist_tasks')
@@ -209,6 +230,7 @@ function ChecklistClientComponent({ meetingId, currentUser }: ChecklistClientPro
         meeting_id: meetingId,
         description: newTaskInput.trim(),
         is_completed: false,
+        due_days_before,
       });
 
     if (error) {
@@ -226,8 +248,26 @@ function ChecklistClientComponent({ meetingId, currentUser }: ChecklistClientPro
     });
 
     setNewTaskInput('');
+    setNewTaskDueDate('');
     fetchTasks();
     fetchActivities();
+  }
+
+  async function updateTaskDueDate(taskId: string, absoluteDateStr: string) {
+    if (!meetingDate) return;
+    const due_days_before = absoluteDateStr ? calculateDueDaysBefore(absoluteDateStr, meetingDate) : null;
+
+    const { error } = await supabase
+      .from('meeting_checklist_tasks')
+      .update({ due_days_before })
+      .eq('id', taskId);
+
+    if (error) {
+      console.error('Error updating task due date:', error);
+      return;
+    }
+
+    fetchTasks();
   }
 
   async function postActivity() {
@@ -436,29 +476,41 @@ function ChecklistClientComponent({ meetingId, currentUser }: ChecklistClientPro
                         </span>
                       </div>
 
-                      {meetingDate && task.due_days_before !== null && task.due_days_before !== undefined && (() => {
-                        const d = new Date(meetingDate + 'T00:00:00');
-                        d.setDate(d.getDate() - task.due_days_before);
+                      {meetingDate && (() => {
+                        const absoluteDueDate = getAbsoluteDueDate(task.due_days_before ?? null, meetingDate);
+                        const d = absoluteDueDate ? new Date(absoluteDueDate + 'T00:00:00') : null;
                         const today = new Date();
                         today.setHours(0, 0, 0, 0);
-                        const isOverdue = d.getTime() < today.getTime() && !task.is_completed;
-                        const isToday = d.getTime() === today.getTime() && !task.is_completed;
-                        const label = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                        const isOverdue = d && d.getTime() < today.getTime() && !task.is_completed;
+                        const isToday = d && d.getTime() === today.getTime() && !task.is_completed;
+                        const label = d ? d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : null;
                         return (
                           <div className={cn(
-                            "flex items-center gap-1 mt-1",
+                            "flex items-center gap-2 mt-1",
                             task.is_completed ? "opacity-40" : ""
                           )}>
                             <Calendar className={cn(
                               "h-3 w-3 shrink-0",
                               isOverdue ? "text-coral-text" : isToday ? "text-status-amber" : "text-text-tertiary"
                             )} />
-                            <span className={cn(
-                              "text-[11px] font-medium",
-                              isOverdue ? "text-coral-text" : isToday ? "text-status-amber" : "text-text-tertiary"
-                            )}>
-                              Due {label}{isOverdue ? ' · Overdue' : isToday ? ' · Today' : ''}
-                            </span>
+                            {label && (
+                              <>
+                                <span className={cn(
+                                  "text-[11px] font-medium",
+                                  isOverdue ? "text-coral-text" : isToday ? "text-status-amber" : "text-text-tertiary"
+                                )}>
+                                  Due {label}{isOverdue ? ' · Overdue' : isToday ? ' · Today' : ''}
+                                </span>
+                                <span className="text-[10px] text-text-tertiary">·</span>
+                              </>
+                            )}
+                            <input
+                              type="date"
+                              value={absoluteDueDate}
+                              onChange={(e) => updateTaskDueDate(task.id, e.target.value)}
+                              className="text-[11px] bg-transparent border-none focus:outline-none text-text-tertiary hover:text-text-secondary cursor-pointer p-0"
+                              title="Click to change due date"
+                            />
                           </div>
                         );
                       })()}
@@ -482,23 +534,41 @@ function ChecklistClientComponent({ meetingId, currentUser }: ChecklistClientPro
 
             {/* Add Task Input */}
             <div className="p-4 bg-status-grey-bg/20 border-t border-border/20">
-              <div className="bg-white border border-border/50 rounded-full flex items-center gap-3 px-4 py-2 w-full">
-                <Plus className="h-4 w-4 text-text-tertiary shrink-0" />
-                <input 
-                  type="text" 
-                  placeholder="Add a new action item..."
-                  className="flex-1 bg-transparent border-none focus:outline-none text-sm font-normal text-text-secondary placeholder:text-text-tertiary"
-                  value={newTaskInput}
-                  onChange={(e) => setNewTaskInput(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && addTask()}
-                />
-                <button 
-                  onClick={addTask}
-                  disabled={!newTaskInput.trim()}
-                  className="px-3 py-1 font-bold text-xs text-primary transition-all hover:bg-primary/10 rounded-full disabled:opacity-50"
-                >
-                  SAVE
-                </button>
+              <div className="flex flex-col gap-2">
+                <div className="bg-white border border-border/50 rounded-full flex items-center gap-3 px-4 py-2 w-full">
+                  <Plus className="h-4 w-4 text-text-tertiary shrink-0" />
+                  <input
+                    type="text"
+                    placeholder="Add a new action item..."
+                    className="flex-1 bg-transparent border-none focus:outline-none text-sm font-normal text-text-secondary placeholder:text-text-tertiary"
+                    value={newTaskInput}
+                    onChange={(e) => setNewTaskInput(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && addTask()}
+                  />
+                  <button
+                    onClick={addTask}
+                    disabled={!newTaskInput.trim()}
+                    className="px-3 py-1 font-bold text-xs text-primary transition-all hover:bg-primary/10 rounded-full disabled:opacity-50"
+                  >
+                    SAVE
+                  </button>
+                </div>
+                <div className="flex items-center gap-2 px-2">
+                  <Calendar className="h-3.5 w-3.5 text-text-tertiary" />
+                  <span className="text-xs text-text-tertiary">Due date:</span>
+                  <input
+                    type="date"
+                    value={newTaskDueDate}
+                    onChange={(e) => setNewTaskDueDate(e.target.value)}
+                    className="text-xs bg-transparent border-none focus:outline-none text-text-secondary cursor-pointer"
+                    title="Select due date (will be stored as days before meeting)"
+                  />
+                  {newTaskDueDate && meetingDate && (
+                    <span className="text-xs text-text-tertiary">
+                      ({calculateDueDaysBefore(newTaskDueDate, meetingDate)} days before)
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
 

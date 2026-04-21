@@ -14,6 +14,7 @@ import { useRouter } from 'next/navigation';
 import { DeleteMeetingModal } from './DeleteMeetingModal';
 import { AddParticipantsModal } from './AddParticipantsModal';
 import { EditMeetingVenueModal } from './EditMeetingVenueModal';
+import { EditMeetingModal } from './EditMeetingModal';
 import { addMeetingParticipants, removeMeetingParticipant } from '@/lib/meetings';
 
 interface RoomBooking {
@@ -103,12 +104,14 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
   const [activities, setActivities] = useState<Activity[]>(initialData?.activities || []);
   const [loading, setLoading] = useState(!initialData);
   const [newTaskInput, setNewTaskInput] = useState('');
+  const [newTaskDueDate, setNewTaskDueDate] = useState<string>('');
   const [commentInput, setCommentInput] = useState('');
   const [copied, setCopied] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isAddParticipantsOpen, setIsAddParticipantsOpen] = useState(false);
   const [isAddingParticipants, setIsAddingParticipants] = useState(false);
   const [isEditVenueOpen, setIsEditVenueOpen] = useState(false);
+  const [isEditMeetingOpen, setIsEditMeetingOpen] = useState(false);
 
   type ProfileInfo = { name: string; division?: string | null; rank?: string | null };
   const profileMapRef = useRef<Map<string, ProfileInfo>>(
@@ -194,7 +197,7 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
       .single();
 
     if (error) {
-      console.error('Error fetching meeting:', error);
+      console.error('Error fetching meeting:', JSON.stringify(error, null, 2));
       return;
     }
 
@@ -302,8 +305,28 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
     fetchActivities();
   }
 
+  // Calculate due_days_before from an absolute date
+  const calculateDueDaysBefore = (absoluteDateStr: string, meetingDateStr: string): number | null => {
+    if (!absoluteDateStr || !meetingDateStr) return null;
+    const meetingDate = new Date(meetingDateStr + 'T00:00:00');
+    const dueDate = new Date(absoluteDateStr + 'T00:00:00');
+    const diffMs = meetingDate.getTime() - dueDate.getTime();
+    const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+    return diffDays >= 0 ? diffDays : null;
+  };
+
+  // Get absolute due date string for date input (YYYY-MM-DD)
+  const getAbsoluteDueDate = (due_days_before: number | null, meetingDateStr: string): string => {
+    if (due_days_before === null || !meetingDateStr) return '';
+    const d = new Date(meetingDateStr + 'T00:00:00');
+    d.setDate(d.getDate() - due_days_before);
+    return d.toISOString().split('T')[0];
+  };
+
   async function addTask() {
     if (!newTaskInput.trim()) return;
+
+    const due_days_before = (newTaskDueDate && meeting) ? calculateDueDaysBefore(newTaskDueDate, meeting.date) : null;
 
     const { error } = await supabase
       .from('meeting_checklist_tasks')
@@ -311,6 +334,7 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
         meeting_id: meetingId,
         description: newTaskInput.trim(),
         is_completed: false,
+        due_days_before,
       });
 
     if (error) {
@@ -327,8 +351,26 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
     });
 
     setNewTaskInput('');
+    setNewTaskDueDate('');
     fetchTasks();
     fetchActivities();
+  }
+
+  async function updateTaskDueDate(taskId: string, absoluteDateStr: string) {
+    if (!meeting) return;
+    const due_days_before = absoluteDateStr ? calculateDueDaysBefore(absoluteDateStr, meeting.date) : null;
+
+    const { error } = await supabase
+      .from('meeting_checklist_tasks')
+      .update({ due_days_before })
+      .eq('id', taskId);
+
+    if (error) {
+      console.error('Error updating task due date:', error);
+      return;
+    }
+
+    fetchTasks();
   }
 
   async function postActivity() {
@@ -385,7 +427,7 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
   // Memoize expensive computations
   const completedTasks = useMemo(() => tasks.filter(t => t.is_completed).length, [tasks]);
   const progress = useMemo(() => tasks.length > 0 ? Math.round((completedTasks / tasks.length) * 100) : 0, [tasks.length, completedTasks]);
-  const formattedDate = useMemo(() => new Date(meeting.date).toLocaleDateString('en-US', {
+  const formattedDate = useMemo(() => new Date(meeting.date + 'T00:00:00').toLocaleDateString('en-US', {
     weekday: 'long',
     day: 'numeric',
     month: 'long',
@@ -463,6 +505,14 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
             Send Invites
           </button>
           
+          <button
+            onClick={() => setIsEditMeetingOpen(true)}
+            className="px-5 py-2.5 bg-board border border-border text-text-primary rounded-full text-sm font-medium transition-all active:scale-95 hover:bg-surface flex items-center gap-2"
+          >
+            <Edit className="h-4 w-4" />
+            Edit
+          </button>
+
           <button 
             onClick={() => setIsDeleteModalOpen(true)}
             className="px-5 py-2.5 bg-coral-bg text-coral-text border border-coral-text/30 rounded-full text-sm font-medium transition-all active:scale-95 hover:bg-coral-text/10 flex items-center gap-2"
@@ -594,22 +644,34 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
 
                       {(() => {
                         const due = getTaskDueDateLabel(task.due_days_before ?? null, meeting.date);
-                        if (!due) return null;
+                        const absoluteDueDate = getAbsoluteDueDate(task.due_days_before ?? null, meeting.date);
                         return (
                           <div className={cn(
-                            "flex items-center gap-1 mt-1",
+                            "flex items-center gap-2 mt-1",
                             task.is_completed ? "opacity-40" : ""
                           )}>
                             <Calendar className={cn(
                               "h-3 w-3 shrink-0",
-                              due.isOverdue && !task.is_completed ? "text-coral-text" : due.isToday && !task.is_completed ? "text-status-amber" : "text-text-tertiary"
+                              due?.isOverdue && !task.is_completed ? "text-coral-text" : due?.isToday && !task.is_completed ? "text-status-amber" : "text-text-tertiary"
                             )} />
-                            <span className={cn(
-                              "text-[11px] font-medium",
-                              due.isOverdue && !task.is_completed ? "text-coral-text" : due.isToday && !task.is_completed ? "text-status-amber" : "text-text-tertiary"
-                            )}>
-                              Due {due.label}{due.isOverdue && !task.is_completed ? ' · Overdue' : due.isToday && !task.is_completed ? ' · Today' : ''}
-                            </span>
+                            {due ? (
+                              <>
+                                <span className={cn(
+                                  "text-[11px] font-medium",
+                                  due.isOverdue && !task.is_completed ? "text-coral-text" : due.isToday && !task.is_completed ? "text-status-amber" : "text-text-tertiary"
+                                )}>
+                                  Due {due.label}{due.isOverdue && !task.is_completed ? ' · Overdue' : due.isToday && !task.is_completed ? ' · Today' : ''}
+                                </span>
+                                <span className="text-[10px] text-text-tertiary">·</span>
+                              </>
+                            ) : null}
+                            <input
+                              type="date"
+                              value={absoluteDueDate}
+                              onChange={(e) => updateTaskDueDate(task.id, e.target.value)}
+                              className="text-[11px] bg-transparent border-none focus:outline-none text-text-tertiary hover:text-text-secondary cursor-pointer p-0"
+                              title="Click to change due date"
+                            />
                           </div>
                         );
                       })()}
@@ -629,23 +691,41 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
             </div>
 
             <div className="p-4 bg-status-grey-bg/20 border-t border-border/20">
-              <div className="bg-white border border-border/50 rounded-full flex items-center gap-3 px-4 py-2 w-full">
-                <Plus className="h-4 w-4 text-text-tertiary shrink-0" />
-                <input 
-                  type="text" 
-                  placeholder="Add a new action item..."
-                  className="flex-1 bg-transparent border-none focus:outline-none text-sm font-normal text-text-secondary placeholder:text-text-tertiary"
-                  value={newTaskInput}
-                  onChange={(e) => setNewTaskInput(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && addTask()}
-                />
-                <button 
-                  onClick={addTask}
-                  disabled={!newTaskInput.trim()}
-                  className="px-3 py-1 font-bold text-xs text-primary transition-all hover:bg-primary/10 rounded-full disabled:opacity-50"
-                >
-                  SAVE
-                </button>
+              <div className="flex flex-col gap-2">
+                <div className="bg-white border border-border/50 rounded-full flex items-center gap-3 px-4 py-2 w-full">
+                  <Plus className="h-4 w-4 text-text-tertiary shrink-0" />
+                  <input
+                    type="text"
+                    placeholder="Add a new action item..."
+                    className="flex-1 bg-transparent border-none focus:outline-none text-sm font-normal text-text-secondary placeholder:text-text-tertiary"
+                    value={newTaskInput}
+                    onChange={(e) => setNewTaskInput(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && addTask()}
+                  />
+                  <button
+                    onClick={addTask}
+                    disabled={!newTaskInput.trim()}
+                    className="px-3 py-1 font-bold text-xs text-primary transition-all hover:bg-primary/10 rounded-full disabled:opacity-50"
+                  >
+                    SAVE
+                  </button>
+                </div>
+                <div className="flex items-center gap-2 px-2">
+                  <Calendar className="h-3.5 w-3.5 text-text-tertiary" />
+                  <span className="text-xs text-text-tertiary">Due date:</span>
+                  <input
+                    type="date"
+                    value={newTaskDueDate}
+                    onChange={(e) => setNewTaskDueDate(e.target.value)}
+                    className="text-xs bg-transparent border-none focus:outline-none text-text-secondary cursor-pointer"
+                    title="Select due date (will be stored as days before meeting)"
+                  />
+                  {newTaskDueDate && meeting && (
+                    <span className="text-xs text-text-tertiary">
+                      ({calculateDueDaysBefore(newTaskDueDate, meeting.date)} days before)
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -878,6 +958,42 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
             // Refresh meeting and room booking data
             fetchMeeting();
             fetchRoomBooking();
+          }}
+        />
+      )}
+
+      {/* Edit Meeting Modal */}
+      {meeting && (
+        <EditMeetingModal
+          isOpen={isEditMeetingOpen}
+          onClose={() => setIsEditMeetingOpen(false)}
+          meetingId={meeting.id}
+          seriesId={meeting.series_id}
+          meetingDate={meeting.date}
+          currentValues={{
+            title: meeting.title,
+            description: meeting.description || '',
+            date: meeting.date,
+            start_time: meeting.start_time || '',
+            end_time: meeting.end_time || '',
+          }}
+          onSuccess={async (newMeetingId?: string) => {
+            try {
+              // If series was updated, the meeting may have a new ID
+              // Use the new ID if provided, otherwise try to find by date
+              if (newMeetingId && newMeetingId !== meetingId) {
+                // Navigate to the new meeting URL
+                router.push(`/meetings/${newMeetingId}`);
+                return;
+              }
+              await Promise.all([
+                fetchMeeting(),
+                fetchRoomBooking(),
+                fetchActivitiesWithMap(profileMapRef.current)
+              ]);
+            } catch (err) {
+              console.error('Error refreshing meeting data:', err);
+            }
           }}
         />
       )}

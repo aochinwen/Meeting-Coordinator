@@ -166,7 +166,9 @@ export async function generateSeriesInstances(
       return new Date(existingMeetings[0].date);
     }
     // Start one day before start_date so generateOccurrences includes start_date itself
-    const d = new Date(data.start_date + 'T00:00:00');
+    // Parse as local date to avoid timezone offset issues
+    const [year, month, day] = data.start_date.split('-').map(Number);
+    const d = new Date(year, month - 1, day);
     d.setDate(d.getDate() - 1);
     return d;
   })();
@@ -199,7 +201,7 @@ export async function generateSeriesInstances(
     template_id: data?.template_id,
     title: data?.title || 'Meeting',
     description: data?.description,
-    date: date.toISOString().split('T')[0],
+    date: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`,
     start_time: data?.start_time,
     end_time: data?.end_time,
     status: 'scheduled' as const,
@@ -285,38 +287,45 @@ export async function updateMeetingOccurrence(
   isOverride: boolean = true
 ): Promise<void> {
   const supabase = createClient();
-  
+
   const updateData: Partial<Meeting> = {
     ...changes,
     updated_at: new Date().toISOString(),
   };
-  
+
   if (isOverride) {
     updateData.is_override = true;
     updateData.override_fields = Object.keys(changes) as unknown as typeof updateData.override_fields;
   }
-  
-  const { error } = await supabase
+
+  console.log('Updating meeting:', meetingId, 'with data:', updateData);
+
+  const { error, data } = await supabase
     .from('meetings')
     .update(updateData)
-    .eq('id', meetingId);
-  
+    .eq('id', meetingId)
+    .select();
+
   if (error) {
-    console.error('Error updating meeting:', error);
-    throw error;
+    console.error('Error updating meeting:', JSON.stringify(error, null, 2));
+    throw new Error(`Failed to update meeting: ${error.message || JSON.stringify(error)}`);
   }
+
+  console.log('Update successful, returned data:', data);
 }
 
 /**
  * Update a meeting series pattern and regenerate future instances
+ * Returns the meeting ID for the specified target date after regeneration
  */
 export async function updateSeriesPattern(
   seriesId: string,
-  changes: Partial<MeetingSeries>,
-  fromDate?: Date
-): Promise<void> {
+  changes: Partial<MeetingSeries> & { start_date?: string },
+  fromDate?: Date,
+  targetDate?: string // The specific date we want to find after regeneration
+): Promise<string | null> {
   const supabase = createClient();
-  
+
   // Update the series
   const { error: updateError } = await supabase
     .from('meeting_series')
@@ -325,12 +334,12 @@ export async function updateSeriesPattern(
       updated_at: new Date().toISOString(),
     })
     .eq('id', seriesId);
-  
+
   if (updateError) {
     console.error('Error updating series:', updateError);
     throw updateError;
   }
-  
+
   // Delete future instances
   const deleteFromDate = fromDate || new Date();
   const { error: deleteError } = await supabase
@@ -339,14 +348,29 @@ export async function updateSeriesPattern(
     .eq('series_id', seriesId)
     .gte('date', format(deleteFromDate, 'yyyy-MM-dd'))
     .eq('is_override', false); // Don't delete overridden instances
-  
+
   if (deleteError) {
     console.error('Error deleting future instances:', deleteError);
     throw deleteError;
   }
-  
+
   // Regenerate instances
   await generateSeriesInstances(seriesId, 8);
+
+  // Find and return the meeting ID for the target date
+  // Use the new start_date if provided, otherwise use targetDate
+  const dateToFind = changes.start_date || targetDate;
+  if (dateToFind) {
+    const { data: meeting } = await supabase
+      .from('meetings')
+      .select('id')
+      .eq('series_id', seriesId)
+      .eq('date', dateToFind)
+      .maybeSingle();
+    return meeting?.id || null;
+  }
+
+  return null;
 }
 
 /**

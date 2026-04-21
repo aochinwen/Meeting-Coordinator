@@ -3,9 +3,9 @@
 import { useState, useMemo, useCallback, useEffect, useRef, useLayoutEffect } from 'react';
 import { X, MapPin, Clock, Calendar, AlertTriangle, Check, ChevronRight, DoorOpen, Users, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { format, addDays, startOfWeek, isSameDay, parseISO } from 'date-fns';
+import { format, addDays, startOfWeek, isSameDay, parseISO, getISODay } from 'date-fns';
 import { Room, RoomBooking, getRooms, getRoomBookings, checkRoomAvailability, bookRoom, cancelRoomBooking } from '@/lib/rooms';
-import { checkConflicts, updateMeetingOccurrence, addMeetingParticipants } from '@/lib/meetings';
+import { checkConflicts, updateMeetingOccurrence, updateSeriesPattern } from '@/lib/meetings';
 import { calculateEndTime } from '@/lib/recurrence';
 import { createClient } from '@/utils/supabase/client';
 
@@ -45,7 +45,7 @@ interface SelectedSlot {
 }
 
 interface SeriesPattern {
-  frequency: 'weekly' | 'bi-weekly' | 'monthly';
+  frequency: 'daily' | 'weekly' | 'bi-weekly' | 'monthly';
   daysOfWeek: string[];
   startTime: string;
   durationMinutes: number;
@@ -110,9 +110,12 @@ export function EditMeetingVenueModal({
     setStep('confirm');
   }, [participantIds]);
 
-  // Handle series pattern submission
-  const handleSeriesPatternSubmit = useCallback(async () => {
-    if (!seriesPattern || !seriesRoomId) return;
+  // Handle series pattern submission from selector
+  const handleSeriesPatternSubmit = useCallback(async (pattern: SeriesPattern) => {
+    if (!seriesRoomId) return;
+    
+    // Store the pattern
+    setSeriesPattern(pattern);
     
     const room = await getRoomById(seriesRoomId);
     if (!room) return;
@@ -124,11 +127,11 @@ export function EditMeetingVenueModal({
       roomName: room.name,
       roomCapacity: room.capacity,
       date: meeting.date,
-      startTime: seriesPattern.startTime,
-      endTime: calculateEndTime(seriesPattern.startTime, seriesPattern.durationMinutes),
+      startTime: pattern.startTime,
+      endTime: calculateEndTime(pattern.startTime, pattern.durationMinutes),
     });
     setStep('confirm');
-  }, [seriesPattern, seriesRoomId, meeting.date]);
+  }, [seriesRoomId, meeting.date]);
 
   // Execute the venue update
   const handleConfirm = useCallback(async () => {
@@ -169,8 +172,83 @@ export function EditMeetingVenueModal({
         });
 
       } else {
-        // Series update - TODO: implement series pattern update
-        throw new Error('Series venue update not yet implemented');
+        // Series update
+        if (!meeting.series_id || !seriesPattern) {
+          throw new Error('Series information not available');
+        }
+
+        const supabase = createClient();
+
+        // 1. Cancel existing room bookings for future meetings in this series
+        const today = format(new Date(), 'yyyy-MM-dd');
+        const { data: futureMeetings, error: fetchError } = await supabase
+          .from('meetings')
+          .select('id, date, room_id')
+          .eq('series_id', meeting.series_id)
+          .gte('date', today);
+
+        if (fetchError) {
+          console.error('Error fetching future meetings:', fetchError);
+        }
+
+        // Cancel bookings for meetings that have rooms assigned
+        if (futureMeetings) {
+          for (const m of futureMeetings) {
+            if (m.room_id) {
+              await cancelRoomBooking(m.room_id, m.id, m.date);
+            }
+          }
+        }
+
+        // 2. Update series pattern and regenerate meetings
+        const endTime = calculateEndTime(seriesPattern.startTime, seriesPattern.durationMinutes);
+        await updateSeriesPattern(
+          meeting.series_id,
+          {
+            frequency: seriesPattern.frequency,
+            days_of_week: seriesPattern.daysOfWeek.length > 0 ? seriesPattern.daysOfWeek : null,
+            start_time: seriesPattern.startTime,
+            end_time: endTime,
+          },
+          new Date(), // From today
+          meeting.date  // Target date for current meeting
+        );
+
+        // 3. Book the new room for all future meetings in the series
+        const { data: regeneratedMeetings, error: regenError } = await supabase
+          .from('meetings')
+          .select('id, date')
+          .eq('series_id', meeting.series_id)
+          .gte('date', today)
+          .order('date');
+
+        if (regenError) {
+          throw new Error('Failed to fetch regenerated meetings');
+        }
+
+        if (regeneratedMeetings) {
+          const failedBookings: string[] = [];
+          
+          for (const m of regeneratedMeetings) {
+            const bookingResult = await bookRoom({
+              roomId: selectedSlot.roomId,
+              meetingId: m.id,
+              date: m.date,
+              startTime: seriesPattern.startTime,
+              endTime: endTime,
+            });
+
+            if (!bookingResult.success) {
+              failedBookings.push(`${m.date}: ${bookingResult.error}`);
+            }
+          }
+
+          if (failedBookings.length > 0) {
+            console.warn('Some room bookings failed:', failedBookings);
+            // Don't throw - the meetings exist, just some room bookings failed
+            // Could show a warning to the user in future
+          }
+        }
       }
 
       setStep('success');
@@ -180,7 +258,7 @@ export function EditMeetingVenueModal({
     } finally {
       setIsSubmitting(false);
     }
-  }, [selectedSlot, editMode, currentBooking, meeting, onVenueUpdated]);
+  }, [selectedSlot, editMode, currentBooking, meeting, onVenueUpdated, seriesPattern]);
 
   const handleClose = () => {
     setStep('select');
@@ -270,7 +348,7 @@ export function EditMeetingVenueModal({
           {step === 'select' && editMode === 'series' && (
             <SeriesPatternSelector
               meeting={meeting}
-              onPatternSubmit={setSeriesPattern}
+              onPatternSubmit={handleSeriesPatternSubmit}
               onRoomSelect={setSeriesRoomId}
               selectedRoomId={seriesRoomId}
             />
@@ -879,7 +957,7 @@ function SimpleCalendarGrid({
 // Series Pattern Selector Component
 interface SeriesPatternSelectorProps {
   meeting: EditMeetingVenueModalProps['meeting'];
-  onPatternSubmit: (pattern: SeriesPattern) => void;
+  onPatternSubmit: (pattern: SeriesPattern) => Promise<void>;
   onRoomSelect: (roomId: string) => void;
   selectedRoomId: string | null;
 }
@@ -890,7 +968,7 @@ function SeriesPatternSelector({
   onRoomSelect,
   selectedRoomId,
 }: SeriesPatternSelectorProps) {
-  const [frequency, setFrequency] = useState<'weekly' | 'bi-weekly' | 'monthly'>('weekly');
+  const [frequency, setFrequency] = useState<'daily' | 'weekly' | 'bi-weekly' | 'monthly'>('weekly');
   const [daysOfWeek, setDaysOfWeek] = useState<string[]>([]);
   const [startTime, setStartTime] = useState(meeting.start_time?.slice(0, 5) || '10:00');
   const [durationMinutes, setDurationMinutes] = useState(() => {
@@ -902,10 +980,11 @@ function SeriesPatternSelector({
     return 60;
   });
   const [rooms, setRooms] = useState<Room[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  useState(() => {
+  useEffect(() => {
     getRooms().then(setRooms);
-  });
+  }, []);
 
   const toggleDay = (day: string) => {
     setDaysOfWeek(prev =>
@@ -913,13 +992,18 @@ function SeriesPatternSelector({
     );
   };
 
-  const handleSubmit = () => {
-    onPatternSubmit({
-      frequency,
-      daysOfWeek,
-      startTime,
-      durationMinutes,
-    });
+  const handleSubmit = async () => {
+    setIsSubmitting(true);
+    try {
+      await onPatternSubmit({
+        frequency,
+        daysOfWeek,
+        startTime,
+        durationMinutes,
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -933,8 +1017,8 @@ function SeriesPatternSelector({
       {/* Frequency */}
       <div className="space-y-2">
         <label className="text-xs font-bold text-text-secondary uppercase">Frequency</label>
-        <div className="flex gap-2">
-          {(['weekly', 'bi-weekly', 'monthly'] as const).map((freq) => (
+        <div className="flex flex-wrap gap-2">
+          {(['daily', 'weekly', 'bi-weekly', 'monthly'] as const).map((freq) => (
             <button
               key={freq}
               onClick={() => setFrequency(freq)}
@@ -945,32 +1029,34 @@ function SeriesPatternSelector({
                   : "bg-white text-text-primary border-border/40 hover:border-primary/50"
               )}
             >
-              {freq === 'weekly' ? 'Weekly' : freq === 'bi-weekly' ? 'Bi-Weekly' : 'Monthly'}
+              {freq === 'daily' ? 'Daily' : freq === 'weekly' ? 'Weekly' : freq === 'bi-weekly' ? 'Bi-Weekly' : 'Monthly'}
             </button>
           ))}
         </div>
       </div>
 
-      {/* Days of Week */}
-      <div className="space-y-2">
-        <label className="text-xs font-bold text-text-secondary uppercase">Repeat On</label>
-        <div className="flex gap-2">
-          {['M', 'T', 'W', 'Th', 'F'].map((day) => (
-            <button
-              key={day}
-              onClick={() => toggleDay(day)}
-              className={cn(
-                "h-10 w-10 rounded-full flex items-center justify-center text-sm font-bold transition-all border",
-                daysOfWeek.includes(day)
-                  ? "bg-primary text-white border-primary"
-                  : "bg-status-grey-bg text-text-primary border-transparent hover:bg-cream"
-              )}
-            >
-              {day === 'Th' ? 'T' : day}
-            </button>
-          ))}
+      {/* Days of Week (hidden for daily) */}
+      {frequency !== 'daily' && (
+        <div className="space-y-2">
+          <label className="text-xs font-bold text-text-secondary uppercase">Repeat On</label>
+          <div className="flex gap-2">
+            {['M', 'T', 'W', 'Th', 'F'].map((day) => (
+              <button
+                key={day}
+                onClick={() => toggleDay(day)}
+                className={cn(
+                  "h-10 w-10 rounded-full flex items-center justify-center text-sm font-bold transition-all border",
+                  daysOfWeek.includes(day)
+                    ? "bg-primary text-white border-primary"
+                    : "bg-status-grey-bg text-text-primary border-transparent hover:bg-cream"
+                )}
+              >
+                {day === 'Th' ? 'T' : day}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Time and Duration */}
       <div className="grid grid-cols-2 gap-4">
@@ -1030,6 +1116,44 @@ function SeriesPatternSelector({
             </button>
           ))}
         </div>
+      </div>
+
+      {/* Recurring Dates Preview */}
+      {selectedRoomId && (
+        <div className="space-y-2">
+          <label className="text-xs font-bold text-text-secondary uppercase">Upcoming Dates</label>
+          <div className="bg-surface/50 border border-border/30 rounded-2xl p-4 max-h-40 overflow-y-auto">
+            <ul className="space-y-1">
+              {calculateUpcomingDates(frequency, daysOfWeek, meeting.date).map((date, i) => (
+                <li key={i} className="text-sm text-text-primary flex items-center gap-2">
+                  <Calendar className="h-3.5 w-3.5 text-primary" />
+                  {date}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
+
+      {/* Submit Button */}
+      <div className="pt-4 border-t border-border/20">
+        <button
+          onClick={handleSubmit}
+          disabled={isSubmitting || !selectedRoomId || (frequency !== 'daily' && daysOfWeek.length === 0)}
+          className="w-full px-5 py-3 bg-primary text-white rounded-xl text-sm font-bold shadow-md transition-all hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+        >
+          {isSubmitting ? (
+            <>
+              <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              Processing...
+            </>
+          ) : (
+            <>
+              <Check className="h-4 w-4" />
+              Continue to Confirmation
+            </>
+          )}
+        </button>
       </div>
     </div>
   );
@@ -1227,4 +1351,53 @@ function getDurationMinutes(startTime: string, endTime: string): number {
   const [sh, sm] = startTime.split(':').map(Number);
   const [eh, em] = endTime.split(':').map(Number);
   return (eh - sh) * 60 + (em - sm);
+}
+
+// Helper function to calculate upcoming recurring dates
+function calculateUpcomingDates(
+  frequency: 'daily' | 'weekly' | 'bi-weekly' | 'monthly',
+  daysOfWeek: string[],
+  startDateStr: string,
+  count: number = 8
+): string[] {
+  const startDate = parseISO(startDateStr);
+  const dates: string[] = [];
+  
+  const dayMap: Record<string, number> = { 'M': 1, 'T': 2, 'W': 3, 'Th': 4, 'F': 5 };
+  const isoDayToFormat: Record<number, string> = { 1: 'M', 2: 'T', 3: 'W', 4: 'Th', 5: 'F' };
+  
+  if (frequency === 'daily') {
+    for (let i = 0; i < count; i++) {
+      dates.push(format(addDays(startDate, i), 'EEEE, MMMM d, yyyy'));
+    }
+  } else if (frequency === 'weekly' || frequency === 'bi-weekly') {
+    const interval = frequency === 'bi-weekly' ? 2 : 1;
+    // Default to the meeting's current day if no days selected
+    const sortedDays = daysOfWeek.length > 0 
+      ? [...daysOfWeek].sort((a, b) => dayMap[a] - dayMap[b])
+      : [isoDayToFormat[getISODay(startDate)] || 'M'];
+    
+    let currentWeek = startOfWeek(startDate, { weekStartsOn: 1 });
+    let weeksAdded = 0;
+    
+    while (dates.length < count) {
+      for (const day of sortedDays) {
+        if (dates.length >= count) break;
+        const dayIndex = dayMap[day];
+        const date = addDays(currentWeek, dayIndex - 1);
+        if (date >= startDate || weeksAdded === 0) {
+          dates.push(format(date, 'EEEE, MMMM d, yyyy'));
+        }
+      }
+      currentWeek = addDays(currentWeek, 7 * interval);
+      weeksAdded++;
+    }
+  } else if (frequency === 'monthly') {
+    for (let i = 0; i < count; i++) {
+      const date = new Date(startDate.getFullYear(), startDate.getMonth() + i, startDate.getDate());
+      dates.push(format(date, 'EEEE, MMMM d, yyyy'));
+    }
+  }
+  
+  return dates;
 }

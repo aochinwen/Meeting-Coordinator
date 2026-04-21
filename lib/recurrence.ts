@@ -194,26 +194,26 @@ function getNextWeeklyOccurrence(
   if (targetDays.length === 0) return null;
   
   const currentDay = afterDate.getDay();
-  
+
   // Find the next target day (allow same day for initial generation)
   let daysToAdd = 0;
   let foundNextDay = false;
-  
+
   // Check remaining days of this week including current day
   for (const targetDay of targetDays) {
-    if (targetDay > currentDay) {
+    if (targetDay >= currentDay) {
       daysToAdd = targetDay - currentDay;
       foundNextDay = true;
       break;
     }
   }
-  
+
   // If no day found this week, wrap to first day of next week
   if (!foundNextDay) {
     const firstDay = targetDays[0];
     daysToAdd = (7 - currentDay) + firstDay;
   }
-  
+
   const nextDate = new Date(afterDate);
   nextDate.setDate(nextDate.getDate() + daysToAdd);
   return nextDate;
@@ -221,6 +221,7 @@ function getNextWeeklyOccurrence(
 
 /**
  * Get next bi-weekly occurrence (every 2 weeks on specific days)
+ * Generates occurrences every 2 weeks on the specified days
  */
 function getNextBiWeeklyOccurrence(
   afterDate: Date,
@@ -230,71 +231,73 @@ function getNextBiWeeklyOccurrence(
   if (!config.daysOfWeek || config.daysOfWeek.length === 0) {
     return null;
   }
-  
-  // Calculate which bi-week period we're in
-  const msPerDay = 24 * 60 * 60 * 1000;
-  const daysSinceStart = Math.floor(
-    (afterDate.getTime() - seriesStartDate.getTime()) / msPerDay
-  );
-  const currentBiWeekNumber = Math.floor(daysSinceStart / 14);
-  
-  // Get the start of the current bi-week period
-  const currentBiWeekStart = new Date(seriesStartDate);
-  currentBiWeekStart.setDate(
-    currentBiWeekStart.getDate() + currentBiWeekNumber * 14
-  );
-  
-  // Convert day codes to day numbers
+
+  // Convert day codes to day numbers and sort
   const targetDays = config.daysOfWeek
     .map(day => DAY_MAP[day])
     .filter(day => day !== undefined)
     .sort((a, b) => a - b);
-  
+
   if (targetDays.length === 0) return null;
-  
-  // Find the next occurrence in the current bi-week
-  const currentDay = afterDate.getDay();
-  const daysSinceBiWeekStart = Math.floor(
-    (afterDate.getTime() - currentBiWeekStart.getTime()) / msPerDay
+
+  const msPerDay = 24 * 60 * 60 * 1000;
+
+  // For each target day, calculate its first occurrence from series start
+  // Then find which bi-week period we're in and return the appropriate occurrence
+
+  // Get the earliest first occurrence among all target days
+  let earliestFirstOccurrence: Date | null = null;
+  const firstOccurrences: Date[] = [];
+
+  for (const targetDay of targetDays) {
+    let daysToFirst = targetDay - seriesStartDate.getDay();
+    if (daysToFirst < 0) {
+      daysToFirst += 7;
+    }
+    const firstOccurrence = new Date(seriesStartDate);
+    firstOccurrence.setDate(seriesStartDate.getDate() + daysToFirst);
+    firstOccurrences.push(firstOccurrence);
+
+    if (!earliestFirstOccurrence || firstOccurrence < earliestFirstOccurrence) {
+      earliestFirstOccurrence = firstOccurrence;
+    }
+  }
+
+  if (!earliestFirstOccurrence) return null;
+
+  // Calculate days from the earliest first occurrence
+  const daysSinceEarliest = Math.floor(
+    (afterDate.getTime() - earliestFirstOccurrence.getTime()) / msPerDay
   );
-  
-  // Check if we're still in the first week of the bi-week
-  if (daysSinceBiWeekStart < 7) {
-    for (const targetDay of targetDays) {
-      if (targetDay > currentDay) {
-        const daysToAdd = targetDay - currentDay;
-        const nextDate = new Date(afterDate);
-        nextDate.setDate(nextDate.getDate() + daysToAdd);
-        return nextDate;
-      }
+
+  // Calculate current bi-week number (0-indexed)
+  const currentBiWeekNumber = Math.max(0, Math.floor(daysSinceEarliest / 14));
+
+  // Find all candidate dates in the current and next bi-weeks
+  const candidates: Date[] = [];
+
+  // Check current bi-week
+  for (let i = 0; i < firstOccurrences.length; i++) {
+    const candidate = new Date(firstOccurrences[i]);
+    candidate.setDate(firstOccurrences[i].getDate() + currentBiWeekNumber * 14);
+
+    if (candidate > afterDate) {
+      candidates.push(candidate);
     }
   }
-  
-  // Check second week of the bi-week
-  if (daysSinceBiWeekStart < 14) {
-    for (const targetDay of targetDays) {
-      const adjustedTargetDay = targetDay + 7;
-      if (adjustedTargetDay > daysSinceBiWeekStart) {
-        const daysToAdd = adjustedTargetDay - daysSinceBiWeekStart;
-        const nextDate = new Date(afterDate);
-        nextDate.setDate(nextDate.getDate() + daysToAdd);
-        return nextDate;
-      }
+
+  // Check next bi-week if no candidates in current
+  if (candidates.length === 0) {
+    for (let i = 0; i < firstOccurrences.length; i++) {
+      const candidate = new Date(firstOccurrences[i]);
+      candidate.setDate(firstOccurrences[i].getDate() + (currentBiWeekNumber + 1) * 14);
+      candidates.push(candidate);
     }
   }
-  
-  // Move to next bi-week period
-  const nextBiWeekStart = new Date(currentBiWeekStart);
-  nextBiWeekStart.setDate(nextBiWeekStart.getDate() + 14);
-  
-  // Find the first target day in the next bi-week
-  const firstTargetDay = targetDays[0];
-  const daysToFirstTarget = firstTargetDay - nextBiWeekStart.getDay();
-  
-  const nextDate = new Date(nextBiWeekStart);
-  nextDate.setDate(nextDate.getDate() + daysToFirstTarget);
-  
-  return nextDate;
+
+  // Return the earliest candidate
+  candidates.sort((a, b) => a.getTime() - b.getTime());
+  return candidates[0] || null;
 }
 
 /**
@@ -306,26 +309,43 @@ function getNextMonthlyOccurrence(
   seriesStartDate: Date
 ): Date | null {
   const targetDay = seriesStartDate.getDate();
-  
-  // Start from the next month
+
+  // Check if we can use the current month's target day
+  const currentMonthDate = new Date(afterDate);
+  currentMonthDate.setDate(1);
+
+  const daysInCurrentMonth = new Date(
+    currentMonthDate.getFullYear(),
+    currentMonthDate.getMonth() + 1,
+    0
+  ).getDate();
+
+  // Determine the actual target day for this month (handle months with fewer days)
+  const actualTargetDay = Math.min(targetDay, daysInCurrentMonth);
+  currentMonthDate.setDate(actualTargetDay);
+
+  // If the target day in current month is after afterDate, use it
+  if (currentMonthDate > afterDate) {
+    return currentMonthDate;
+  }
+
+  // Otherwise, move to next month
   const nextDate = new Date(afterDate);
-  nextDate.setDate(1); // Set to first of month
-  nextDate.setMonth(nextDate.getMonth() + 1); // Move to next month
-  
-  // Try to set the target day
-  const daysInMonth = new Date(
+  nextDate.setDate(1);
+  nextDate.setMonth(nextDate.getMonth() + 1);
+
+  const daysInNextMonth = new Date(
     nextDate.getFullYear(),
     nextDate.getMonth() + 1,
     0
   ).getDate();
-  
-  if (targetDay <= daysInMonth) {
+
+  if (targetDay <= daysInNextMonth) {
     nextDate.setDate(targetDay);
   } else {
-    // If target day doesn't exist (e.g., 31st in a 30-day month), use last day
-    nextDate.setDate(daysInMonth);
+    nextDate.setDate(daysInNextMonth);
   }
-  
+
   return nextDate;
 }
 

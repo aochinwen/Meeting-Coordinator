@@ -156,22 +156,23 @@ export function RoomCalendar({ onBookingClick, onTimeSlotClick }: RoomCalendarPr
   }, [currentDate]);
 
   // While a drag is in progress, track the pointer globally:
-  //   - mousemove → recompute the hovered slot from the originating column's
+  //   - mousemove/touchmove → recompute the hovered slot from the originating column's
   //     bounding rect so that fast movement or crossing sibling elements
   //     never loses a frame. This mirrors Google/Apple Calendar behaviour.
-  //   - mouseup  → commit the selection and fire onTimeSlotClick.
+  //   - mouseup/touchend  → commit the selection and fire onTimeSlotClick.
   useEffect(() => {
     // Only bind listeners when a drag is actually in progress.
     if (!dragState) return;
 
-    const handleMouseMove = (e: MouseEvent) => {
+    const handlePointerMove = (e: MouseEvent | TouchEvent) => {
       const ds = dragStateRef.current;
       if (!ds) return;
       const col = columnRefs.current[ds.dateKey];
       if (!col) return;
       const rect = col.getBoundingClientRect();
+      const clientY = 'touches' in e ? e.touches[0]?.clientY ?? e.changedTouches[0]?.clientY : e.clientY;
       const slotIdx = clamp(
-        Math.floor((e.clientY - rect.top) / SLOT_HEIGHT),
+        Math.floor((clientY - rect.top) / SLOT_HEIGHT),
         0,
         TOTAL_SLOTS - 1,
       );
@@ -180,7 +181,7 @@ export function RoomCalendar({ onBookingClick, onTimeSlotClick }: RoomCalendarPr
       );
     };
 
-    const handleMouseUp = () => {
+    const handlePointerEnd = () => {
       const ds = dragStateRef.current;
       if (!ds) return;
       const { roomId, dateKey, startIndex, endIndex } = ds;
@@ -196,11 +197,17 @@ export function RoomCalendar({ onBookingClick, onTimeSlotClick }: RoomCalendarPr
       }
     };
 
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
+    window.addEventListener('mousemove', handlePointerMove);
+    window.addEventListener('mouseup', handlePointerEnd);
+    window.addEventListener('touchmove', handlePointerMove, { passive: false });
+    window.addEventListener('touchend', handlePointerEnd);
+    window.addEventListener('touchcancel', handlePointerEnd);
     return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('mousemove', handlePointerMove);
+      window.removeEventListener('mouseup', handlePointerEnd);
+      window.removeEventListener('touchmove', handlePointerMove);
+      window.removeEventListener('touchend', handlePointerEnd);
+      window.removeEventListener('touchcancel', handlePointerEnd);
     };
     // Bind only when dragState toggles (null ↔ non-null), not on every index change.
     // Handlers read from the mutable ref to always see fresh endIndex.
@@ -438,6 +445,25 @@ export function RoomCalendar({ onBookingClick, onTimeSlotClick }: RoomCalendarPr
                           const rect = e.currentTarget.getBoundingClientRect();
                           const slotIdx = clamp(
                             Math.floor((e.clientY - rect.top) / SLOT_HEIGHT),
+                            0,
+                            TOTAL_SLOTS - 1,
+                          );
+                          setDragState({
+                            roomId: selectedRoom.id,
+                            dateKey,
+                            startIndex: slotIdx,
+                            endIndex: slotIdx,
+                          });
+                        }}
+                        onTouchStart={(e) => {
+                          // Ignore drags that originate on an existing booking
+                          const target = e.target as HTMLElement;
+                          if (target.closest('[data-booking="true"]')) return;
+                          e.preventDefault();
+                          const touch = e.touches[0];
+                          const rect = e.currentTarget.getBoundingClientRect();
+                          const slotIdx = clamp(
+                            Math.floor((touch.clientY - rect.top) / SLOT_HEIGHT),
                             0,
                             TOTAL_SLOTS - 1,
                           );

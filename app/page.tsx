@@ -179,7 +179,7 @@ async function DashboardContent({
       id: meeting.id,
       title: meeting.title,
       description: meeting.description || 'No description provided',
-      date: new Date(meeting.date).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' }),
+      date: new Date(meeting.date + 'T00:00:00').toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' }),
       timeLabel: `${meeting.start_time?.slice(0, 5) || 'TBD'} — ${meeting.end_time?.slice(0, 5) || 'TBD'}`,
       status: isLive ? 'Live' : 'Upcoming',
       icon: icons[randomIdx],
