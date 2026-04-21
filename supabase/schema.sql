@@ -153,9 +153,14 @@ create table public.room_bookings (
   end_time time not null,
   status text check (status in ('confirmed', 'cancelled', 'tentative')) default 'confirmed',
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
-  updated_at timestamp with time zone default timezone('utc'::text, now()) not null,
-  unique(room_id, date, start_time)
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
+
+-- Partial unique index: only enforce uniqueness for active (non-cancelled)
+-- bookings. Cancelled rows are retained for audit and must not block re-booking.
+create unique index if not exists room_bookings_active_unique_idx
+  on public.room_bookings (room_id, date, start_time)
+  where status <> 'cancelled';
 
 -- Add room_id to meetings table
 alter table public.meetings add column if not exists room_id uuid references public.rooms(id) on delete set null;

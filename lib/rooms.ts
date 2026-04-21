@@ -415,15 +415,20 @@ export async function bookRoom(input: BookRoomInput): Promise<BookingResult> {
   );
   
   if (!availability.isAvailable) {
-    // Get suggestions
+    // Get suggestions (best-effort; do not let a suggestion RPC failure hide the real error)
     const duration = calculateDurationMinutes(input.startTime, input.endTime);
-    const suggestions = await suggestAlternativeSlots(
-      input.roomId,
-      input.date,
-      input.startTime,
-      duration
-    );
-    
+    let suggestions: AlternativeSlot[] = [];
+    try {
+      suggestions = await suggestAlternativeSlots(
+        input.roomId,
+        input.date,
+        input.startTime,
+        duration
+      );
+    } catch (suggestErr) {
+      console.error('suggestAlternativeSlots failed (non-fatal):', suggestErr);
+    }
+
     return {
       success: false,
       error: 'Room is not available for the selected time slot',
@@ -451,13 +456,18 @@ export async function bookRoom(input: BookRoomInput): Promise<BookingResult> {
     // Handle unique constraint violation
     if (error.code === '23505') {
       const duration = calculateDurationMinutes(input.startTime, input.endTime);
-      const suggestions = await suggestAlternativeSlots(
-        input.roomId,
-        input.date,
-        input.startTime,
-        duration
-      );
-      
+      let suggestions: AlternativeSlot[] = [];
+      try {
+        suggestions = await suggestAlternativeSlots(
+          input.roomId,
+          input.date,
+          input.startTime,
+          duration
+        );
+      } catch (suggestErr) {
+        console.error('suggestAlternativeSlots failed (non-fatal):', suggestErr);
+      }
+
       return {
         success: false,
         error: 'Room was just booked by someone else. Please select a different time.',
@@ -679,18 +689,23 @@ export async function getConfirmedBookingForMeeting(
   client?: any
 ): Promise<(RoomBooking & { room: Room | null }) | null> {
   const supabase = client ?? createClient();
+  // Intentionally do NOT use maybeSingle() here: even with the status filter,
+  // a brief race (e.g. mid-update or duplicated rows from a bug) can produce
+  // multiple rows and cause PGRST116. Fetch the most recent and pick one.
   const { data, error } = await supabase
     .from('room_bookings')
     .select('*, room:room_id(*)')
     .eq('meeting_id', meetingId)
     .eq('status', 'confirmed')
-    .maybeSingle();
+    .order('created_at', { ascending: false })
+    .limit(1);
 
   if (error) {
     console.error('Error fetching confirmed booking:', error);
     return null;
   }
-  return data as (RoomBooking & { room: Room | null }) | null;
+  const rows = (data ?? []) as Array<RoomBooking & { room: Room | null }>;
+  return rows[0] ?? null;
 }
 
 /**
