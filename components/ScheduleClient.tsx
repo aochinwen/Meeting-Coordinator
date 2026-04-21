@@ -386,6 +386,31 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
             }
           }
         }
+        
+        // Add checklist tasks to all meetings in the series if any
+        if (meetingTasks.length > 0) {
+          const { data: seriesMeetings } = await supabase
+            .from('meetings')
+            .select('id')
+            .eq('series_id', seriesId);
+          
+          if (seriesMeetings && seriesMeetings.length > 0) {
+            const allTasks = seriesMeetings.flatMap(meeting =>
+              meetingTasks.map(task => ({
+                meeting_id: meeting.id,
+                description: task.description,
+                is_completed: false,
+                due_days_before: task.due_days_before ?? null,
+              }))
+            );
+            
+            const { error: taskError } = await supabase
+              .from('meeting_checklist_tasks')
+              .insert(allTasks);
+            
+            if (taskError) console.error('Error adding tasks to series:', taskError);
+          }
+        }
       } else {
         // Create single one-time meeting directly
         const { data: meeting, error } = await supabase
@@ -411,8 +436,8 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
           await addMeetingParticipants(seriesId, selectedParticipants, true);
         }
         
-        // Copy checklist tasks from template if selected
-        if (selectedTemplate && meetingTasks.length > 0) {
+        // Add checklist tasks if any
+        if (meetingTasks.length > 0) {
           const { error: taskError } = await supabase
             .from('meeting_checklist_tasks')
             .insert(
