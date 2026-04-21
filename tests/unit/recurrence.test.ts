@@ -1,5 +1,11 @@
-import { describe, test, expect } from 'vitest';
-import { calculateEndTime, generateOccurrences, getNextOccurrence, RecurrenceConfig } from '../../lib/recurrence';
+import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
+import {
+  calculateEndTime,
+  generateOccurrences,
+  getNextOccurrence,
+  generateAllOccurrences as prodGenerateAllOccurrences,
+  RecurrenceConfig,
+} from '../../lib/recurrence';
 
 describe('calculateEndTime', () => {
   describe('Happy Path', () => {
@@ -424,6 +430,98 @@ describe('Edge Cases and Bug Fixes', () => {
   });
 });
 
+describe('Production generateAllOccurrences (clamps to today)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  test('should start from today when startDate is in the past', () => {
+    // Freeze "today" to April 22, 2026
+    vi.setSystemTime(new Date(2026, 3, 22, 12, 0, 0));
+
+    const config: RecurrenceConfig = {
+      frequency: 'daily',
+      daysOfWeek: null,
+      startDate: new Date(2026, 3, 21), // April 21 (yesterday)
+      endDate: new Date(2026, 3, 25), // April 25
+    };
+
+    const occurrences = prodGenerateAllOccurrences(config, new Date(2026, 3, 30));
+
+    // April 21 (past) is skipped: currentDate is clamped to today (Apr 22).
+    // For daily frequency, getNextOccurrence returns the current date,
+    // so generated occurrences are Apr 22, Apr 23, Apr 24, Apr 25.
+    expect(occurrences.map((d) => formatLocalDate(d))).toEqual([
+      '2026-04-22',
+      '2026-04-23',
+      '2026-04-24',
+      '2026-04-25',
+    ]);
+  });
+
+  test('should start from startDate when it is in the future', () => {
+    // Freeze "today" to April 1, 2026 — before all test dates
+    vi.setSystemTime(new Date(2026, 3, 1, 12, 0, 0));
+
+    const config: RecurrenceConfig = {
+      frequency: 'daily',
+      daysOfWeek: null,
+      startDate: new Date(2026, 3, 21), // April 21 (future)
+      endDate: new Date(2026, 3, 23), // April 23
+    };
+
+    const occurrences = prodGenerateAllOccurrences(config, new Date(2026, 3, 30));
+
+    expect(occurrences.map((d) => formatLocalDate(d))).toEqual([
+      '2026-04-21',
+      '2026-04-22',
+      '2026-04-23',
+    ]);
+  });
+
+  test('should skip past bi-weekly occurrences but keep future ones', () => {
+    // Freeze today to April 28, 2026 — after first Tuesday, before second
+    vi.setSystemTime(new Date(2026, 3, 28, 12, 0, 0));
+
+    const config: RecurrenceConfig = {
+      frequency: 'bi-weekly',
+      daysOfWeek: ['T'],
+      startDate: new Date(2026, 3, 21), // Tue Apr 21 (past)
+      endDate: new Date(2026, 5, 1), // June 1
+    };
+
+    const occurrences = prodGenerateAllOccurrences(config, new Date(2026, 5, 30));
+
+    // Apr 21 is in the past, so should be skipped.
+    // Bi-weekly series anchored at Apr 21: Apr 21, May 5, May 19, June 2.
+    // May 19 is within untilDate; June 2 is beyond endDate (June 1).
+    expect(occurrences.map((d) => formatLocalDate(d))).toEqual([
+      '2026-05-05',
+      '2026-05-19',
+    ]);
+  });
+
+  test('should return empty array when all occurrences are before today', () => {
+    // Freeze today well after endDate
+    vi.setSystemTime(new Date(2027, 0, 1, 12, 0, 0));
+
+    const config: RecurrenceConfig = {
+      frequency: 'daily',
+      daysOfWeek: null,
+      startDate: new Date(2026, 3, 21),
+      endDate: new Date(2026, 3, 25),
+    };
+
+    const occurrences = prodGenerateAllOccurrences(config, new Date(2026, 5, 30));
+
+    expect(occurrences.length).toBe(0);
+  });
+});
+
 // Helper to format date as YYYY-MM-DD in local time (not UTC)
 function formatLocalDate(date: Date): string {
   const year = date.getFullYear();
@@ -432,18 +530,16 @@ function formatLocalDate(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
-// Helper function for testing with end dates
+// Helper function for testing with end dates.
+// Deterministic: iterates from one day before startDate (so startDate itself can
+// be the first occurrence) up to untilDate, without clamping to the current
+// system time. This keeps the unit tests time-independent.
 function generateAllOccurrences(config: RecurrenceConfig, untilDate: Date): Date[] {
   const occurrences: Date[] = [];
   let currentDate = new Date(config.startDate);
   currentDate.setHours(0, 0, 0, 0);
-
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  if (currentDate < today) {
-    currentDate = today;
-  }
+  // Back up one day so the first getNextOccurrence call can return startDate.
+  currentDate.setDate(currentDate.getDate() - 1);
 
   while (true) {
     const nextDate = getNextOccurrence(config, currentDate);
