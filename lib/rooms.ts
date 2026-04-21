@@ -666,6 +666,34 @@ export async function getRoomBookings(
 }
 
 /**
+ * Get the confirmed room booking for a single meeting (with room details).
+ * Centralized helper used by both server-side and client-side fetching to
+ * avoid inconsistent filters. Cancelled bookings remain in the table, so
+ * the status filter is required — otherwise maybeSingle() can return an
+ * error when multiple rows exist per meeting_id.
+ */
+export async function getConfirmedBookingForMeeting(
+  meetingId: string,
+  // Accept either the browser client or the server client; their query
+  // surface (`.from(...).select(...)`) is structurally compatible.
+  client?: any
+): Promise<(RoomBooking & { room: Room | null }) | null> {
+  const supabase = client ?? createClient();
+  const { data, error } = await supabase
+    .from('room_bookings')
+    .select('*, room:room_id(*)')
+    .eq('meeting_id', meetingId)
+    .eq('status', 'confirmed')
+    .maybeSingle();
+
+  if (error) {
+    console.error('Error fetching confirmed booking:', error);
+    return null;
+  }
+  return data as (RoomBooking & { room: Room | null }) | null;
+}
+
+/**
  * Get all room bookings for a date (for calendar view)
  */
 export async function getAllRoomBookingsForDate(

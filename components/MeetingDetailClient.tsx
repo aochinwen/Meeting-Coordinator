@@ -16,6 +16,7 @@ import { AddParticipantsModal } from './AddParticipantsModal';
 import { EditMeetingVenueModal } from './EditMeetingVenueModal';
 import { EditMeetingModal } from './EditMeetingModal';
 import { addMeetingParticipants, removeMeetingParticipant } from '@/lib/meetings';
+import { getConfirmedBookingForMeeting } from '@/lib/rooms';
 
 interface RoomBooking {
   id: string;
@@ -205,23 +206,7 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
   }
 
   async function fetchRoomBooking() {
-    const { data, error } = await supabase
-      .from('room_bookings')
-      .select('*, room:room_id(*)')
-      .eq('meeting_id', meetingId)
-      .maybeSingle();
-
-    if (error) {
-      console.error('Error fetching room booking:', {
-        message: error.message,
-        code: error.code,
-        details: error.details,
-        hint: error.hint,
-        meetingId
-      });
-      return;
-    }
-
+    const data = await getConfirmedBookingForMeeting(meetingId, supabase);
     setRoomBooking(data as RoomBooking | null);
   }
 
@@ -954,10 +939,15 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
             end_time: roomBooking.end_time,
           } : null}
           participantIds={participants.map(p => p.user_id)}
-          onVenueUpdated={() => {
-            // Refresh meeting and room booking data
-            fetchMeeting();
-            fetchRoomBooking();
+          onVenueUpdated={(newMeetingId) => {
+            // If series was regenerated with a new meeting ID, navigate to it
+            if (newMeetingId && newMeetingId !== meetingId) {
+              router.push(`/meetings/${newMeetingId}`);
+            } else {
+              // Otherwise just refresh current data
+              fetchMeeting();
+              fetchRoomBooking();
+            }
           }}
         />
       )}

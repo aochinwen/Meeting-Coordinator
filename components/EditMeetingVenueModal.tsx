@@ -29,7 +29,7 @@ interface EditMeetingVenueModalProps {
     end_time: string;
   } | null;
   participantIds: string[];
-  onVenueUpdated: () => void;
+  onVenueUpdated: (newMeetingId?: string) => void;
 }
 
 type EditMode = 'single' | 'series';
@@ -139,6 +139,7 @@ export function EditMeetingVenueModal({
 
     setIsSubmitting(true);
     setError(null);
+    let newMeetingId: string | null = null;
 
     try {
       if (editMode === 'single') {
@@ -202,7 +203,7 @@ export function EditMeetingVenueModal({
 
         // 2. Update series pattern and regenerate meetings
         const endTime = calculateEndTime(seriesPattern.startTime, seriesPattern.durationMinutes);
-        await updateSeriesPattern(
+        newMeetingId = await updateSeriesPattern(
           meeting.series_id,
           {
             frequency: seriesPattern.frequency,
@@ -252,7 +253,7 @@ export function EditMeetingVenueModal({
       }
 
       setStep('success');
-      onVenueUpdated();
+      onVenueUpdated(newMeetingId || undefined);
     } catch (err: any) {
       setError(err.message || 'Failed to update venue');
     } finally {

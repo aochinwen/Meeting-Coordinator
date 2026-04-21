@@ -41,7 +41,7 @@ export default async function MeetingDetailPage({ params }: { params: Promise<{ 
     supabase.from('meeting_activities').select('*').eq('meeting_id', meetingId).order('created_at', { ascending: false }).limit(20),
     supabase.from('people').select('id, name, division, rank'),
     supabase.auth.getUser(),
-    supabase.from('room_bookings').select('*, room:room_id(*)').eq('meeting_id', meetingId).maybeSingle()
+    supabase.from('room_bookings').select('*, room:room_id(*)').eq('meeting_id', meetingId).eq('status', 'confirmed').maybeSingle()
   ]);
 
   // Build profile map for client-side use
