@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
-  Users, User as UserIcon, PlusCircle, Settings, Calendar as CalendarIcon, 
+  Users, User as UserIcon, PlusCircle, Calendar as CalendarIcon, 
   Clock, Repeat, UserPlus, Lightbulb, AlertTriangle, Eye, Sparkles, AlertCircle
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -859,6 +859,38 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
                   onChange={(e) => setStartTime(e.target.value)}
                   className="w-full px-4 py-3 bg-surface border-none rounded-2xl text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/20 text-sm font-light"
                 />
+                <div className="flex flex-wrap items-center gap-2 pt-1">
+                  {[15, 30, 60].map((dur) => (
+                    <button
+                      key={dur}
+                      type="button"
+                      onClick={() => {
+                        setDuration(dur);
+                        setIsCustomDuration(false);
+                      }}
+                      className={cn(
+                        "px-4 py-2 rounded-full text-sm font-bold transition-all",
+                        !isCustomDuration && duration === dur
+                          ? "bg-primary text-white shadow-sm"
+                          : "bg-status-grey-bg text-text-primary hover:bg-cream"
+                      )}
+                    >
+                      {dur === 60 ? '1h' : `${dur}m`}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => setIsCustomDuration(true)}
+                    className={cn(
+                      "px-4 py-2 rounded-full text-sm font-bold transition-all",
+                      isCustomDuration
+                        ? "bg-primary text-white shadow-sm"
+                        : "bg-status-grey-bg text-text-primary hover:bg-cream"
+                    )}
+                  >
+                    Custom
+                  </button>
+                </div>
               </div>
 
               <div className="flex flex-col gap-3 md:col-span-2">
@@ -900,68 +932,6 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
                   minCapacity={selectedParticipants.length + 1}
                   occurrenceDates={allOccurrenceDates}
                 />
-              </div>
-            </div>
-          </div>
-
-          {/* Scheduling Mode & Session Timing */}
-          <div className="bg-white border border-border/20 rounded-[24px] p-6 flex flex-col gap-8 shadow-sm">
-            <div className="flex items-center gap-3">
-              <Settings className="h-5 w-5 text-text-primary" />
-              <h2 className="text-xl font-bold text-text-primary font-literata">
-                Scheduling Mode & Session Timing
-              </h2>
-            </div>
-            
-            <div className="grid grid-cols-1 gap-8">
-              <div className="flex flex-col gap-6">
-                <div className="flex flex-col gap-3">
-                  <label className="text-sm font-bold text-text-primary">Duration</label>
-                  <div className="flex items-center gap-2">
-                    {[15, 30, 60].map((dur) => (
-                      <button
-                        key={dur}
-                        onClick={() => {
-                          setDuration(dur);
-                          setIsCustomDuration(false);
-                        }}
-                        className={cn(
-                          "px-4 py-2 rounded-full text-sm font-bold transition-all",
-                          !isCustomDuration && duration === dur
-                          ? "bg-primary text-white shadow-sm" 
-                          : "bg-status-grey-bg text-text-primary hover:bg-cream"
-                      )}
-                      >
-                        {dur === 60 ? '1h' : `${dur}m`}
-                      </button>
-                    ))}
-                    <button
-                      onClick={() => setIsCustomDuration(true)}
-                      className={cn(
-                        "px-4 py-2 rounded-full text-sm font-bold transition-all",
-                        isCustomDuration
-                        ? "bg-primary text-white shadow-sm" 
-                        : "bg-status-grey-bg text-text-primary hover:bg-cream"
-                    )}
-                    >
-                      Custom
-                    </button>
-                  </div>
-                </div>
-
-                <div className="flex flex-col gap-3">
-                  <label className="text-sm font-bold text-text-primary">Buffer Time</label>
-                  <select 
-                    value={bufferTime}
-                    onChange={(e) => setBufferTime(Number(e.target.value))}
-                    className="w-full px-4 py-3 bg-surface border-none rounded-2xl text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/20 appearance-none text-sm font-light"
-                  >
-                    <option value={0}>None</option>
-                    <option value={5}>5 minutes</option>
-                    <option value={10}>10 minutes</option>
-                    <option value={15}>15 minutes</option>
-                  </select>
-                </div>
               </div>
             </div>
           </div>

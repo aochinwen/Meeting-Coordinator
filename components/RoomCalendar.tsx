@@ -165,6 +165,7 @@ export function RoomCalendar({ onBookingClick, onTimeSlotClick }: RoomCalendarPr
     if (!dragState) return;
 
     const handlePointerMove = (e: MouseEvent | TouchEvent) => {
+      if ('touches' in e) e.preventDefault();
       const ds = dragStateRef.current;
       if (!ds) return;
       const col = columnRefs.current[ds.dateKey];
@@ -351,11 +352,11 @@ export function RoomCalendar({ onBookingClick, onTimeSlotClick }: RoomCalendarPr
             })}
           </div>
 
-          <div className="bg-white border border-border/30 rounded-3xl shadow-sm overflow-x-auto">
+          <div className="bg-white border border-border/30 rounded-3xl shadow-sm overflow-auto max-h-[700px]">
             <div className="min-w-[720px]">
             {/* Column Headers: time + 7 days for the selected room */}
-            <div className="flex border-b border-border/50">
-              <div className="w-16 sm:w-20 shrink-0 p-3 sm:p-4 border-r border-border/50 bg-surface/50">
+            <div className="flex border-b border-border/50 sticky top-0 z-30 bg-white">
+              <div className="sticky left-0 z-40 w-16 sm:w-20 shrink-0 p-3 sm:p-4 border-r border-border/50 bg-surface">
                 <span className="text-xs font-bold text-text-secondary uppercase tracking-wider">
                   Time
                 </span>
@@ -388,10 +389,10 @@ export function RoomCalendar({ onBookingClick, onTimeSlotClick }: RoomCalendarPr
             </div>
 
             {/* Scrollable content */}
-            <div className="overflow-y-auto overflow-x-hidden max-h-[600px]">
+            <div>
               <div className="flex">
                 {/* Time column */}
-                <div className="w-16 sm:w-20 shrink-0 border-r border-border/50 bg-surface/30">
+                <div className="sticky left-0 z-20 w-16 sm:w-20 shrink-0 border-r border-border/50 bg-surface">
                   {HOURS.map((hour) => (
                     <div
                       key={hour}
@@ -435,7 +436,7 @@ export function RoomCalendar({ onBookingClick, onTimeSlotClick }: RoomCalendarPr
                           isToday && 'bg-primary/[0.03] hover:bg-primary/[0.05]',
                           'border-r border-border/40 last:border-r-0'
                         )}
-                        style={{ height: TOTAL_SLOTS * SLOT_HEIGHT }}
+                        style={{ height: TOTAL_SLOTS * SLOT_HEIGHT, touchAction: 'none' }}
                         onMouseDown={(e) => {
                           // Ignore drags that originate on an existing booking
                           // (those should fall through to the booking's onClick).

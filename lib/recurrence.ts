@@ -143,6 +143,35 @@ export function getNextOccurrence(
 }
 
 /**
+ * Return which Nth occurrence of a weekday a date is within its month.
+ * e.g. April 22 (4th Wednesday) → { weekday: 3, n: 4 }
+ */
+function getMonthlyWeekdayPattern(date: Date): { weekday: number; n: number } {
+  const weekday = date.getDay();
+  const n = Math.ceil(date.getDate() / 7);
+  return { weekday, n };
+}
+
+/**
+ * Return the date of the Nth occurrence of `weekday` in the given year/month.
+ * If the Nth occurrence overflows the month, returns the last occurrence instead.
+ */
+function getNthWeekdayOfMonth(year: number, month: number, weekday: number, n: number): Date {
+  // Find the first occurrence of weekday in the month
+  const firstOfMonth = new Date(year, month, 1);
+  let daysToFirst = weekday - firstOfMonth.getDay();
+  if (daysToFirst < 0) daysToFirst += 7;
+  const firstOccurrence = 1 + daysToFirst;
+
+  const targetDay = firstOccurrence + (n - 1) * 7;
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+  // If target overflows the month, fall back to the last valid occurrence
+  const actualDay = targetDay <= daysInMonth ? targetDay : targetDay - 7;
+  return new Date(year, month, actualDay);
+}
+
+/**
  * Check if a specific date matches the recurrence pattern
  */
 export function isValidOccurrence(date: Date, config: RecurrenceConfig): boolean {
@@ -155,9 +184,11 @@ export function isValidOccurrence(date: Date, config: RecurrenceConfig): boolean
       const dayOfWeek = date.getDay();
       const dayCode = REVERSE_DAY_MAP[dayOfWeek];
       return config.daysOfWeek.includes(dayCode);
-    case 'monthly':
-      const startDay = config.startDate.getDate();
-      return date.getDate() === startDay;
+    case 'monthly': {
+      const { weekday, n } = getMonthlyWeekdayPattern(config.startDate);
+      const expected = getNthWeekdayOfMonth(date.getFullYear(), date.getMonth(), weekday, n);
+      return date.getDate() === expected.getDate();
+    }
     default:
       return false;
   }
@@ -301,52 +332,31 @@ function getNextBiWeeklyOccurrence(
 }
 
 /**
- * Get next monthly occurrence (same day of month)
+ * Get next monthly occurrence (same Nth weekday of month as the series start date)
+ * e.g. if start date is the 4th Wednesday, recurs on the 4th Wednesday of each month.
  */
 function getNextMonthlyOccurrence(
   afterDate: Date,
   config: RecurrenceConfig,
   seriesStartDate: Date
 ): Date | null {
-  const targetDay = seriesStartDate.getDate();
+  const { weekday, n } = getMonthlyWeekdayPattern(seriesStartDate);
 
-  // Check if we can use the current month's target day
-  const currentMonthDate = new Date(afterDate);
-  currentMonthDate.setDate(1);
+  // Check if this month's occurrence is still after afterDate
+  const candidateThisMonth = getNthWeekdayOfMonth(
+    afterDate.getFullYear(),
+    afterDate.getMonth(),
+    weekday,
+    n
+  );
 
-  const daysInCurrentMonth = new Date(
-    currentMonthDate.getFullYear(),
-    currentMonthDate.getMonth() + 1,
-    0
-  ).getDate();
-
-  // Determine the actual target day for this month (handle months with fewer days)
-  const actualTargetDay = Math.min(targetDay, daysInCurrentMonth);
-  currentMonthDate.setDate(actualTargetDay);
-
-  // If the target day in current month is after afterDate, use it
-  if (currentMonthDate > afterDate) {
-    return currentMonthDate;
+  if (candidateThisMonth > afterDate) {
+    return candidateThisMonth;
   }
 
-  // Otherwise, move to next month
-  const nextDate = new Date(afterDate);
-  nextDate.setDate(1);
-  nextDate.setMonth(nextDate.getMonth() + 1);
-
-  const daysInNextMonth = new Date(
-    nextDate.getFullYear(),
-    nextDate.getMonth() + 1,
-    0
-  ).getDate();
-
-  if (targetDay <= daysInNextMonth) {
-    nextDate.setDate(targetDay);
-  } else {
-    nextDate.setDate(daysInNextMonth);
-  }
-
-  return nextDate;
+  // Otherwise use next month
+  const nextMonthDate = new Date(afterDate.getFullYear(), afterDate.getMonth() + 1, 1);
+  return getNthWeekdayOfMonth(nextMonthDate.getFullYear(), nextMonthDate.getMonth(), weekday, n);
 }
 
 /**
