@@ -2,31 +2,39 @@
 
 import { useState } from 'react';
 import { X } from 'lucide-react';
+import { RankCombobox } from '@/components/ui/RankCombobox';
 
 interface AddUserModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAdd: (user: { name: string; division: string; rank: string }) => Promise<void>;
+  onAdd: (user: { name: string; email: string; organization: string; division: string; rank: string }) => Promise<void>;
 }
 
 export function AddUserModal({ isOpen, onClose, onAdd }: AddUserModalProps) {
   const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [organization, setOrganization] = useState('');
   const [division, setDivision] = useState('');
   const [rank, setRank] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
 
   if (!isOpen) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSubmitted(true);
     if (!name || !division || !rank) return;
-    
+
     setIsLoading(true);
     try {
-      await onAdd({ name, division, rank });
+      await onAdd({ name, email, organization, division, rank });
       setName('');
+      setEmail('');
+      setOrganization('');
       setDivision('');
       setRank('');
+      setSubmitted(false);
       onClose();
     } catch (error) {
       console.error('Error adding user:', error);
@@ -65,8 +73,42 @@ export function AddUserModal({ isOpen, onClose, onAdd }: AddUserModalProps) {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="e.g. Jane Doe"
+                className={`w-full px-4 py-3 bg-surface border rounded-2xl text-text-primary focus:outline-none focus:ring-2 transition-all font-light ${
+                  submitted && !name
+                    ? 'border-red-400 focus:ring-red-200'
+                    : 'border-border/50 focus:ring-primary/20'
+                }`}
+              />
+              {submitted && !name && (
+                <p className="mt-1 text-xs text-red-500 px-1">Full name is required.</p>
+              )}
+            </div>
+
+            <div>
+              <label htmlFor="email" className="block text-sm font-bold text-text-primary mb-2 uppercase tracking-wide">
+                Email <span className="text-text-secondary normal-case font-normal tracking-normal">(optional)</span>
+              </label>
+              <input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="e.g. jane.doe@company.com"
                 className="w-full px-4 py-3 bg-surface border border-border/50 rounded-2xl text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all font-light"
-                required
+              />
+            </div>
+
+            <div>
+              <label htmlFor="organization" className="block text-sm font-bold text-text-primary mb-2 uppercase tracking-wide">
+                Organization <span className="text-text-secondary normal-case font-normal tracking-normal">(optional)</span>
+              </label>
+              <input
+                id="organization"
+                type="text"
+                value={organization}
+                onChange={(e) => setOrganization(e.target.value)}
+                placeholder="e.g. Acme Corp"
+                className="w-full px-4 py-3 bg-surface border border-border/50 rounded-2xl text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all font-light"
               />
             </div>
 
@@ -80,30 +122,30 @@ export function AddUserModal({ isOpen, onClose, onAdd }: AddUserModalProps) {
                 value={division}
                 onChange={(e) => setDivision(e.target.value)}
                 placeholder="e.g. Engineering"
-                className="w-full px-4 py-3 bg-surface border border-border/50 rounded-2xl text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all font-light"
-                required
+                className={`w-full px-4 py-3 bg-surface border rounded-2xl text-text-primary focus:outline-none focus:ring-2 transition-all font-light ${
+                  submitted && !division
+                    ? 'border-red-400 focus:ring-red-200'
+                    : 'border-border/50 focus:ring-primary/20'
+                }`}
               />
+              {submitted && !division && (
+                <p className="mt-1 text-xs text-red-500 px-1">Division is required.</p>
+              )}
             </div>
 
             <div>
-              <label htmlFor="rank" className="block text-sm font-bold text-text-primary mb-2 uppercase tracking-wide">
+              <label htmlFor="rank-input" className="block text-sm font-bold text-text-primary mb-2 uppercase tracking-wide">
                 Rank / Role
               </label>
-              <select
-                id="rank"
+              <RankCombobox
+                id="rank-input"
                 value={rank}
-                onChange={(e) => setRank(e.target.value)}
-                className="w-full px-4 py-3 bg-surface border border-border/50 rounded-2xl text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all font-light appearance-none"
-                required
-              >
-                <option value="" disabled>Select a rank</option>
-                <option value="Executive">Executive</option>
-                <option value="Manager">Manager</option>
-                <option value="Associate">Associate</option>
-                <option value="Director">Director</option>
-                <option value="Analyst">Analyst</option>
-                <option value="Staff">Staff</option>
-              </select>
+                onChange={setRank}
+                hasError={submitted && !rank}
+              />
+              {submitted && !rank && (
+                <p className="mt-1 text-xs text-red-500 px-1">Rank / Role is required.</p>
+              )}
             </div>
           </div>
 
@@ -117,7 +159,7 @@ export function AddUserModal({ isOpen, onClose, onAdd }: AddUserModalProps) {
             </button>
             <button
               type="submit"
-              disabled={isLoading || !name || !division || !rank}
+              disabled={isLoading}
               className="px-8 py-3 bg-primary text-white rounded-2xl text-base font-bold shadow-md hover:bg-primary/90 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isLoading ? 'Adding...' : 'Add Member'}

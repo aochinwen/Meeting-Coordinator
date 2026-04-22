@@ -20,7 +20,7 @@ describe('ScheduleClient', () => {
             error: null
           })
         }
-      } else if (table === 'profiles') {
+      } else if (table === 'people') {
         return {
           select: vi.fn().mockReturnThis(),
           order: vi.fn().mockResolvedValue({

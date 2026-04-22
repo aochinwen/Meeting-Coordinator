@@ -1,5 +1,11 @@
-import { describe, test, expect } from 'vitest';
-import { calculateEndTime } from '../../lib/recurrence';
+import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
+import {
+  calculateEndTime,
+  generateOccurrences,
+  getNextOccurrence,
+  generateAllOccurrences as prodGenerateAllOccurrences,
+  RecurrenceConfig,
+} from '../../lib/recurrence';
 
 describe('calculateEndTime', () => {
   describe('Happy Path', () => {
@@ -48,3 +54,503 @@ describe('calculateEndTime', () => {
     });
   });
 });
+
+describe('Daily Recurrence', () => {
+  test('should generate consecutive days', () => {
+    const config: RecurrenceConfig = {
+      frequency: 'daily',
+      daysOfWeek: null,
+      startDate: new Date(2026, 3, 21), // April 21
+      endDate: null,
+    };
+
+    const occurrences = generateOccurrences(config, 5, new Date(2026, 3, 20));
+
+    expect(occurrences.map(d => formatLocalDate(d))).toEqual([
+      '2026-04-21',
+      '2026-04-22',
+      '2026-04-23',
+      '2026-04-24',
+      '2026-04-25',
+    ]);
+  });
+
+  test('should respect end date', () => {
+    const config: RecurrenceConfig = {
+      frequency: 'daily',
+      daysOfWeek: null,
+      startDate: new Date(2026, 3, 21),
+      endDate: new Date(2026, 3, 23),
+    };
+
+    const occurrences = generateAllOccurrences(config, new Date(2026, 3, 30));
+
+    expect(occurrences.length).toBe(3);
+    expect(formatLocalDate(occurrences[2])).toBe('2026-04-23');
+  });
+});
+
+describe('Weekly Recurrence', () => {
+  test('should generate weekly on single day (Tuesday)', () => {
+    const config: RecurrenceConfig = {
+      frequency: 'weekly',
+      daysOfWeek: ['T'],
+      startDate: new Date(2026, 3, 21), // Tuesday
+      endDate: null,
+    };
+
+    const occurrences = generateOccurrences(config, 5, new Date(2026, 3, 20));
+
+    expect(occurrences.map(d => formatLocalDate(d))).toEqual([
+      '2026-04-21',
+      '2026-04-28',
+      '2026-05-05',
+      '2026-05-12',
+      '2026-05-19',
+    ]);
+  });
+
+  test('should generate weekly on multiple days (Tue, Thu)', () => {
+    const config: RecurrenceConfig = {
+      frequency: 'weekly',
+      daysOfWeek: ['T', 'Th'],
+      startDate: new Date(2026, 3, 21), // Tuesday
+      endDate: null,
+    };
+
+    const occurrences = generateOccurrences(config, 6, new Date(2026, 3, 20));
+
+    expect(occurrences.map(d => formatLocalDate(d))).toEqual([
+      '2026-04-21', // Tue
+      '2026-04-23', // Thu
+      '2026-04-28', // Tue
+      '2026-04-30', // Thu
+      '2026-05-05', // Tue
+      '2026-05-07', // Thu
+    ]);
+  });
+
+  test('should generate weekly starting mid-week', () => {
+    const config: RecurrenceConfig = {
+      frequency: 'weekly',
+      daysOfWeek: ['M', 'W', 'F'],
+      startDate: new Date(2026, 3, 21), // Tuesday
+      endDate: null,
+    };
+
+    const occurrences = generateOccurrences(config, 6, new Date(2026, 3, 20));
+
+    expect(occurrences.map(d => formatLocalDate(d))).toEqual([
+      '2026-04-22', // Wed
+      '2026-04-24', // Fri
+      '2026-04-27', // Mon
+      '2026-04-29', // Wed
+      '2026-05-01', // Fri
+      '2026-05-04', // Mon
+    ]);
+  });
+
+  test('should handle all weekdays', () => {
+    const config: RecurrenceConfig = {
+      frequency: 'weekly',
+      daysOfWeek: ['M', 'T', 'W', 'Th', 'F'],
+      startDate: new Date(2026, 3, 21), // Tuesday
+      endDate: null,
+    };
+
+    const occurrences = generateOccurrences(config, 8, new Date(2026, 3, 20));
+
+    expect(occurrences.map(d => d.getDay())).toEqual([2, 3, 4, 5, 1, 2, 3, 4]); // Tue, Wed, Thu, Fri, Mon, Tue...
+  });
+});
+
+describe('Bi-Weekly Recurrence', () => {
+  test('should generate every 2 weeks on single day (Tuesday)', () => {
+    const config: RecurrenceConfig = {
+      frequency: 'bi-weekly',
+      daysOfWeek: ['T'],
+      startDate: new Date(2026, 3, 21), // Tuesday April 21
+      endDate: null,
+    };
+
+    const occurrences = generateOccurrences(config, 5, new Date(2026, 3, 20));
+
+    expect(occurrences.map(d => formatLocalDate(d))).toEqual([
+      '2026-04-21', // Tue week 1
+      '2026-05-05', // Tue week 3 (2 weeks later)
+      '2026-05-19', // Tue week 5
+      '2026-06-02', // Tue week 7
+      '2026-06-16', // Tue week 9
+    ]);
+  });
+
+  test('should generate bi-weekly on multiple days (Tue, Thu)', () => {
+    const config: RecurrenceConfig = {
+      frequency: 'bi-weekly',
+      daysOfWeek: ['T', 'Th'],
+      startDate: new Date(2026, 3, 21), // Tuesday
+      endDate: null,
+    };
+
+    const occurrences = generateOccurrences(config, 6, new Date(2026, 3, 20));
+
+    // Should be every 2 weeks, not weekly
+    expect(occurrences.map(d => formatLocalDate(d))).toEqual([
+      '2026-04-21', // Tue week 1
+      '2026-04-23', // Thu week 1
+      '2026-05-05', // Tue week 3
+      '2026-05-07', // Thu week 3
+      '2026-05-19', // Tue week 5
+      '2026-05-21', // Thu week 5
+    ]);
+  });
+
+  test('should generate bi-weekly starting from Thursday', () => {
+    const config: RecurrenceConfig = {
+      frequency: 'bi-weekly',
+      daysOfWeek: ['Th'],
+      startDate: new Date(2026, 3, 23), // Thursday April 23
+      endDate: null,
+    };
+
+    const occurrences = generateOccurrences(config, 4, new Date(2026, 3, 20));
+
+    expect(occurrences.map(d => formatLocalDate(d))).toEqual([
+      '2026-04-23',
+      '2026-05-07',
+      '2026-05-21',
+      '2026-06-04',
+    ]);
+  });
+
+  test('should generate bi-weekly with Monday start', () => {
+    const config: RecurrenceConfig = {
+      frequency: 'bi-weekly',
+      daysOfWeek: ['M'],
+      startDate: new Date(2026, 3, 20), // Monday April 20
+      endDate: null,
+    };
+
+    const occurrences = generateOccurrences(config, 4, new Date(2026, 3, 19));
+
+    expect(occurrences.map(d => formatLocalDate(d))).toEqual([
+      '2026-04-20',
+      '2026-05-04',
+      '2026-05-18',
+      '2026-06-01',
+    ]);
+  });
+
+  test('should NOT generate weekly occurrences within bi-week period', () => {
+    const config: RecurrenceConfig = {
+      frequency: 'bi-weekly',
+      daysOfWeek: ['T'],
+      startDate: new Date(2026, 3, 21), // Tuesday
+      endDate: null,
+    };
+
+    const occurrences = generateOccurrences(config, 3, new Date(2026, 3, 20));
+
+    // Should NOT include April 28 (1 week later)
+    const dates = occurrences.map(d => formatLocalDate(d));
+    expect(dates).not.toContain('2026-04-28');
+    expect(dates[1]).toBe('2026-05-05'); // 2 weeks later
+  });
+
+  test('should handle bi-weekly across month boundaries', () => {
+    const config: RecurrenceConfig = {
+      frequency: 'bi-weekly',
+      daysOfWeek: ['F'],
+      startDate: new Date(2026, 3, 24), // Friday April 24
+      endDate: null,
+    };
+
+    const occurrences = generateOccurrences(config, 4, new Date(2026, 3, 20));
+
+    expect(occurrences.map(d => formatLocalDate(d))).toEqual([
+      '2026-04-24',
+      '2026-05-08',
+      '2026-05-22',
+      '2026-06-05',
+    ]);
+  });
+
+  test('should handle bi-weekly starting mid-week with day before start', () => {
+    const config: RecurrenceConfig = {
+      frequency: 'bi-weekly',
+      daysOfWeek: ['M'], // Monday
+      startDate: new Date(2026, 3, 22), // Wednesday April 22
+      endDate: null,
+    };
+
+    const occurrences = generateOccurrences(config, 4, new Date(2026, 3, 20));
+
+    // First Monday after April 22 is April 27, then every 2 weeks
+    expect(occurrences.map(d => formatLocalDate(d))).toEqual([
+      '2026-04-27',
+      '2026-05-11',
+      '2026-05-25',
+      '2026-06-08',
+    ]);
+  });
+});
+
+describe('Monthly Recurrence', () => {
+  test('should generate monthly on same day of month', () => {
+    const config: RecurrenceConfig = {
+      frequency: 'monthly',
+      daysOfWeek: null,
+      startDate: new Date(2026, 3, 21), // April 21
+      endDate: null,
+    };
+
+    const occurrences = generateOccurrences(config, 5, new Date(2026, 3, 20));
+
+    expect(occurrences.map(d => formatLocalDate(d))).toEqual([
+      '2026-04-21',
+      '2026-05-21',
+      '2026-06-21',
+      '2026-07-21',
+      '2026-08-21',
+    ]);
+  });
+
+  test('should handle month with fewer days', () => {
+    const config: RecurrenceConfig = {
+      frequency: 'monthly',
+      daysOfWeek: null,
+      startDate: new Date(2027, 0, 31), // Jan 31, 2027
+      endDate: null,
+    };
+
+    const occurrences = generateOccurrences(config, 4, new Date(2027, 0, 30));
+
+    // Feb has 28 days in 2027 (not a leap year), so should use last day
+    expect(occurrences.map(d => formatLocalDate(d))).toEqual([
+      '2027-01-31',
+      '2027-02-28', // Last day of Feb
+      '2027-03-31',
+      '2027-04-30', // Last day of Apr (since we started on 31st)
+    ]);
+  });
+
+  test('should handle month boundaries correctly', () => {
+    const config: RecurrenceConfig = {
+      frequency: 'monthly',
+      daysOfWeek: null,
+      startDate: new Date(2026, 3, 1), // April 1
+      endDate: null,
+    };
+
+    const occurrences = generateOccurrences(config, 4, new Date(2026, 2, 31)); // March 31
+
+    expect(occurrences.map(d => formatLocalDate(d))).toEqual([
+      '2026-04-01',
+      '2026-05-01',
+      '2026-06-01',
+      '2026-07-01',
+    ]);
+  });
+});
+
+describe('Edge Cases and Bug Fixes', () => {
+  test('should handle start date that is exactly the target day (bi-weekly)', () => {
+    const config: RecurrenceConfig = {
+      frequency: 'bi-weekly',
+      daysOfWeek: ['T'],
+      startDate: new Date(2026, 3, 21), // Tuesday
+      endDate: null,
+    };
+
+    const next = getNextOccurrence(config, new Date(2026, 3, 20)); // Day before
+
+    expect(next ? formatLocalDate(next) : null).toBe('2026-04-21');
+  });
+
+  test('should handle timezone issues with date parsing', () => {
+    // This tests the fix for the timezone bug where '2026-04-21T00:00:00'
+    // was parsed as April 20 in GMT+8 due to UTC offset
+    const dateStr = '2026-04-21';
+    const [year, month, day] = dateStr.split('-').map(Number);
+    const parsed = new Date(year, month - 1, day);
+
+    expect(parsed.getDate()).toBe(21);
+    expect(parsed.getMonth()).toBe(3); // April (0-indexed)
+    expect(parsed.getFullYear()).toBe(2026);
+  });
+
+  test('should handle empty daysOfWeek for weekly/bi-weekly', () => {
+    const config: RecurrenceConfig = {
+      frequency: 'weekly',
+      daysOfWeek: [],
+      startDate: new Date(2026, 3, 21),
+      endDate: null,
+    };
+
+    const occurrences = generateOccurrences(config, 3);
+
+    expect(occurrences.length).toBe(0);
+  });
+
+  test('should handle null daysOfWeek for daily/monthly', () => {
+    const dailyConfig: RecurrenceConfig = {
+      frequency: 'daily',
+      daysOfWeek: null,
+      startDate: new Date(2026, 3, 21),
+      endDate: null,
+    };
+
+    const monthlyConfig: RecurrenceConfig = {
+      frequency: 'monthly',
+      daysOfWeek: null,
+      startDate: new Date(2026, 3, 21),
+      endDate: null,
+    };
+
+    const dailyOccurrences = generateOccurrences(dailyConfig, 3);
+    const monthlyOccurrences = generateOccurrences(monthlyConfig, 3);
+
+    expect(dailyOccurrences.length).toBe(3);
+    expect(monthlyOccurrences.length).toBe(3);
+  });
+
+  test('should handle end date that falls between occurrences', () => {
+    const config: RecurrenceConfig = {
+      frequency: 'bi-weekly',
+      daysOfWeek: ['T'],
+      startDate: new Date(2026, 3, 21),
+      endDate: new Date(2026, 4, 10), // May 10
+    };
+
+    const occurrences = generateAllOccurrences(config, new Date(2026, 5, 30));
+
+    expect(occurrences.length).toBe(2);
+    expect(formatLocalDate(occurrences[0])).toBe('2026-04-21');
+    expect(formatLocalDate(occurrences[1])).toBe('2026-05-05');
+  });
+});
+
+describe('Production generateAllOccurrences (clamps to today)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  test('should start from today when startDate is in the past', () => {
+    // Freeze "today" to April 22, 2026
+    vi.setSystemTime(new Date(2026, 3, 22, 12, 0, 0));
+
+    const config: RecurrenceConfig = {
+      frequency: 'daily',
+      daysOfWeek: null,
+      startDate: new Date(2026, 3, 21), // April 21 (yesterday)
+      endDate: new Date(2026, 3, 25), // April 25
+    };
+
+    const occurrences = prodGenerateAllOccurrences(config, new Date(2026, 3, 30));
+
+    // April 21 (past) is skipped: currentDate is clamped to today (Apr 22).
+    // For daily frequency, getNextOccurrence returns the current date,
+    // so generated occurrences are Apr 22, Apr 23, Apr 24, Apr 25.
+    expect(occurrences.map((d) => formatLocalDate(d))).toEqual([
+      '2026-04-22',
+      '2026-04-23',
+      '2026-04-24',
+      '2026-04-25',
+    ]);
+  });
+
+  test('should start from startDate when it is in the future', () => {
+    // Freeze "today" to April 1, 2026 — before all test dates
+    vi.setSystemTime(new Date(2026, 3, 1, 12, 0, 0));
+
+    const config: RecurrenceConfig = {
+      frequency: 'daily',
+      daysOfWeek: null,
+      startDate: new Date(2026, 3, 21), // April 21 (future)
+      endDate: new Date(2026, 3, 23), // April 23
+    };
+
+    const occurrences = prodGenerateAllOccurrences(config, new Date(2026, 3, 30));
+
+    expect(occurrences.map((d) => formatLocalDate(d))).toEqual([
+      '2026-04-21',
+      '2026-04-22',
+      '2026-04-23',
+    ]);
+  });
+
+  test('should skip past bi-weekly occurrences but keep future ones', () => {
+    // Freeze today to April 28, 2026 — after first Tuesday, before second
+    vi.setSystemTime(new Date(2026, 3, 28, 12, 0, 0));
+
+    const config: RecurrenceConfig = {
+      frequency: 'bi-weekly',
+      daysOfWeek: ['T'],
+      startDate: new Date(2026, 3, 21), // Tue Apr 21 (past)
+      endDate: new Date(2026, 5, 1), // June 1
+    };
+
+    const occurrences = prodGenerateAllOccurrences(config, new Date(2026, 5, 30));
+
+    // Apr 21 is in the past, so should be skipped.
+    // Bi-weekly series anchored at Apr 21: Apr 21, May 5, May 19, June 2.
+    // May 19 is within untilDate; June 2 is beyond endDate (June 1).
+    expect(occurrences.map((d) => formatLocalDate(d))).toEqual([
+      '2026-05-05',
+      '2026-05-19',
+    ]);
+  });
+
+  test('should return empty array when all occurrences are before today', () => {
+    // Freeze today well after endDate
+    vi.setSystemTime(new Date(2027, 0, 1, 12, 0, 0));
+
+    const config: RecurrenceConfig = {
+      frequency: 'daily',
+      daysOfWeek: null,
+      startDate: new Date(2026, 3, 21),
+      endDate: new Date(2026, 3, 25),
+    };
+
+    const occurrences = prodGenerateAllOccurrences(config, new Date(2026, 5, 30));
+
+    expect(occurrences.length).toBe(0);
+  });
+});
+
+// Helper to format date as YYYY-MM-DD in local time (not UTC)
+function formatLocalDate(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+// Helper function for testing with end dates.
+// Deterministic: iterates from one day before startDate (so startDate itself can
+// be the first occurrence) up to untilDate, without clamping to the current
+// system time. This keeps the unit tests time-independent.
+function generateAllOccurrences(config: RecurrenceConfig, untilDate: Date): Date[] {
+  const occurrences: Date[] = [];
+  let currentDate = new Date(config.startDate);
+  currentDate.setHours(0, 0, 0, 0);
+  // Back up one day so the first getNextOccurrence call can return startDate.
+  currentDate.setDate(currentDate.getDate() - 1);
+
+  while (true) {
+    const nextDate = getNextOccurrence(config, currentDate);
+    if (!nextDate) break;
+    if (nextDate > untilDate) break;
+    if (config.endDate && nextDate > config.endDate) break;
+
+    occurrences.push(nextDate);
+    currentDate = new Date(nextDate);
+    currentDate.setDate(currentDate.getDate() + 1);
+  }
+
+  return occurrences;
+}

@@ -67,6 +67,92 @@ export type Database = {
         }
         Relationships: []
       }
+      initiative_slides: {
+        Row: {
+          created_at: string
+          deleted_at: string | null
+          description_md: string | null
+          id: string
+          initiative_id: string
+          media_type: string
+          position: number
+          storage_path: string | null
+          title: string
+          updated_at: string
+          video_url: string | null
+        }
+        Insert: {
+          created_at?: string
+          deleted_at?: string | null
+          description_md?: string | null
+          id?: string
+          initiative_id: string
+          media_type: string
+          position: number
+          storage_path?: string | null
+          title: string
+          updated_at?: string
+          video_url?: string | null
+        }
+        Update: {
+          created_at?: string
+          deleted_at?: string | null
+          description_md?: string | null
+          id?: string
+          initiative_id?: string
+          media_type?: string
+          position?: number
+          storage_path?: string | null
+          title?: string
+          updated_at?: string
+          video_url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "initiative_slides_initiative_id_fkey"
+            columns: ["initiative_id"]
+            isOneToOne: false
+            referencedRelation: "initiatives"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      initiatives: {
+        Row: {
+          created_at: string
+          deleted_at: string | null
+          demo_setup_md: string
+          id: string
+          narrative_md: string
+          stage: string
+          target_groups: string[]
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          deleted_at?: string | null
+          demo_setup_md: string
+          id?: string
+          narrative_md: string
+          stage: string
+          target_groups?: string[]
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          deleted_at?: string | null
+          demo_setup_md?: string
+          id?: string
+          narrative_md?: string
+          stage?: string
+          target_groups?: string[]
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       meeting_activities: {
         Row: {
           activity_type: string
@@ -110,6 +196,7 @@ export type Database = {
           assigned_user_id: string | null
           created_at: string
           description: string
+          due_days_before: number | null
           id: string
           is_completed: boolean
           meeting_id: string
@@ -119,6 +206,7 @@ export type Database = {
           assigned_user_id?: string | null
           created_at?: string
           description: string
+          due_days_before?: number | null
           id?: string
           is_completed?: boolean
           meeting_id: string
@@ -128,6 +216,7 @@ export type Database = {
           assigned_user_id?: string | null
           created_at?: string
           description?: string
+          due_days_before?: number | null
           id?: string
           is_completed?: boolean
           meeting_id?: string
@@ -181,6 +270,8 @@ export type Database = {
       meeting_series: {
         Row: {
           buffer_minutes: number | null
+          chairman_id: string | null
+          coordinator_id: string | null
           created_at: string
           created_by: string | null
           days_of_week: string[] | null
@@ -199,6 +290,8 @@ export type Database = {
         }
         Insert: {
           buffer_minutes?: number | null
+          chairman_id?: string | null
+          coordinator_id?: string | null
           created_at?: string
           created_by?: string | null
           days_of_week?: string[] | null
@@ -217,6 +310,8 @@ export type Database = {
         }
         Update: {
           buffer_minutes?: number | null
+          chairman_id?: string | null
+          coordinator_id?: string | null
           created_at?: string
           created_by?: string | null
           days_of_week?: string[] | null
@@ -235,6 +330,34 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "meeting_series_chairman_id_fkey"
+            columns: ["chairman_id"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meeting_series_chairman_id_fkey"
+            columns: ["chairman_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meeting_series_coordinator_id_fkey"
+            columns: ["coordinator_id"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meeting_series_coordinator_id_fkey"
+            columns: ["coordinator_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "meeting_series_template_id_fkey"
             columns: ["template_id"]
             isOneToOne: false
@@ -245,6 +368,8 @@ export type Database = {
       }
       meetings: {
         Row: {
+          chairman_id: string | null
+          coordinator_id: string | null
           created_at: string
           date: string
           description: string | null
@@ -253,6 +378,7 @@ export type Database = {
           instance_number: number | null
           is_override: boolean | null
           override_fields: Json | null
+          room_id: string | null
           series_id: string | null
           start_time: string | null
           status: string
@@ -261,6 +387,8 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          chairman_id?: string | null
+          coordinator_id?: string | null
           created_at?: string
           date: string
           description?: string | null
@@ -269,6 +397,7 @@ export type Database = {
           instance_number?: number | null
           is_override?: boolean | null
           override_fields?: Json | null
+          room_id?: string | null
           series_id?: string | null
           start_time?: string | null
           status?: string
@@ -277,6 +406,8 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          chairman_id?: string | null
+          coordinator_id?: string | null
           created_at?: string
           date?: string
           description?: string | null
@@ -285,6 +416,7 @@ export type Database = {
           instance_number?: number | null
           is_override?: boolean | null
           override_fields?: Json | null
+          room_id?: string | null
           series_id?: string | null
           start_time?: string | null
           status?: string
@@ -293,6 +425,41 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "meetings_chairman_id_fkey"
+            columns: ["chairman_id"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meetings_chairman_id_fkey"
+            columns: ["chairman_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meetings_coordinator_id_fkey"
+            columns: ["coordinator_id"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meetings_coordinator_id_fkey"
+            columns: ["coordinator_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meetings_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "rooms"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "meetings_series_id_fkey"
             columns: ["series_id"]
@@ -309,29 +476,110 @@ export type Database = {
           },
         ]
       }
-      profiles: {
+      people: {
         Row: {
           created_at: string
           division: string | null
+          email: string | null
           id: string
           name: string
+          organization: string | null
           rank: string | null
           updated_at: string
         }
         Insert: {
           created_at?: string
           division?: string | null
-          id: string
+          email?: string | null
+          id?: string
           name: string
+          organization?: string | null
           rank?: string | null
           updated_at?: string
         }
         Update: {
           created_at?: string
           division?: string | null
+          email?: string | null
           id?: string
           name?: string
+          organization?: string | null
           rank?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      room_bookings: {
+        Row: {
+          created_at: string
+          date: string
+          end_time: string
+          id: string
+          meeting_id: string | null
+          room_id: string
+          start_time: string
+          status: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          date: string
+          end_time: string
+          id?: string
+          meeting_id?: string | null
+          room_id: string
+          start_time: string
+          status?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          date?: string
+          end_time?: string
+          id?: string
+          meeting_id?: string | null
+          room_id?: string
+          start_time?: string
+          status?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "room_bookings_meeting_id_fkey"
+            columns: ["meeting_id"]
+            isOneToOne: false
+            referencedRelation: "meetings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "room_bookings_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "rooms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rooms: {
+        Row: {
+          capacity: number
+          created_at: string
+          id: string
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          capacity?: number
+          created_at?: string
+          id?: string
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          capacity?: number
+          created_at?: string
+          id?: string
+          name?: string
           updated_at?: string
         }
         Relationships: []
@@ -340,6 +588,7 @@ export type Database = {
         Row: {
           created_at: string
           description: string
+          due_days_before: number | null
           id: string
           template_id: string
           updated_at: string
@@ -347,6 +596,7 @@ export type Database = {
         Insert: {
           created_at?: string
           description: string
+          due_days_before?: number | null
           id?: string
           template_id: string
           updated_at?: string
@@ -354,6 +604,7 @@ export type Database = {
         Update: {
           created_at?: string
           description?: string
+          due_days_before?: number | null
           id?: string
           template_id?: string
           updated_at?: string
@@ -361,6 +612,49 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "template_checklist_tasks_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      template_participants: {
+        Row: {
+          created_at: string
+          id: string
+          person_id: string
+          template_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          person_id: string
+          template_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          person_id?: string
+          template_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "template_participants_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "template_participants_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "template_participants_template_id_fkey"
             columns: ["template_id"]
             isOneToOne: false
             referencedRelation: "templates"
@@ -396,41 +690,159 @@ export type Database = {
           name?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "templates_chairman_id_fkey"
+            columns: ["chairman_id"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "templates_chairman_id_fkey"
+            columns: ["chairman_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "templates_coordinator_id_fkey"
+            columns: ["coordinator_id"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "templates_coordinator_id_fkey"
+            columns: ["coordinator_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
       }
-      users: {
+      user_approvals: {
         Row: {
-          created_at: string
-          division: string | null
+          approved_at: string | null
+          approved_by: string | null
+          created_at: string | null
+          email: string
           id: string
-          name: string
-          rank: string | null
-          updated_at: string
+          rejected_at: string | null
+          rejected_by: string | null
+          rejection_reason: string | null
+          requested_at: string | null
+          status: string
+          updated_at: string | null
+          user_id: string
         }
         Insert: {
-          created_at?: string
-          division?: string | null
+          approved_at?: string | null
+          approved_by?: string | null
+          created_at?: string | null
+          email: string
           id?: string
-          name: string
-          rank?: string | null
-          updated_at?: string
+          rejected_at?: string | null
+          rejected_by?: string | null
+          rejection_reason?: string | null
+          requested_at?: string | null
+          status?: string
+          updated_at?: string | null
+          user_id: string
         }
         Update: {
-          created_at?: string
-          division?: string | null
+          approved_at?: string | null
+          approved_by?: string | null
+          created_at?: string | null
+          email?: string
           id?: string
-          name?: string
-          rank?: string | null
-          updated_at?: string
+          rejected_at?: string | null
+          rejected_by?: string | null
+          rejection_reason?: string | null
+          requested_at?: string | null
+          status?: string
+          updated_at?: string | null
+          user_id?: string
         }
         Relationships: []
       }
     }
     Views: {
-      [_ in never]: never
+      users: {
+        Row: {
+          created_at: string | null
+          division: string | null
+          id: string | null
+          name: string | null
+          rank: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          division?: string | null
+          id?: string | null
+          name?: string | null
+          rank?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          division?: string | null
+          id?: string | null
+          name?: string | null
+          rank?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
-      [_ in never]: never
+      check_admin_exists: {
+        Args: { admin_email: string }
+        Returns: {
+          email: string
+          user_exists: boolean
+          user_id: string
+        }[]
+      }
+      check_room_availability: {
+        Args: {
+          p_date: string
+          p_end_time: string
+          p_exclude_meeting_id?: string
+          p_room_id: string
+          p_start_time: string
+        }
+        Returns: boolean
+      }
+      get_available_rooms: {
+        Args: {
+          p_capacity?: number
+          p_date: string
+          p_end_time: string
+          p_exclude_meeting_id?: string
+          p_start_time: string
+        }
+        Returns: {
+          room_capacity: number
+          room_id: string
+          room_name: string
+        }[]
+      }
+      suggest_alternative_slots: {
+        Args: {
+          p_date: string
+          p_duration_minutes: number
+          p_room_id: string
+          p_search_range_hours?: number
+          p_start_time: string
+        }
+        Returns: {
+          suggested_date: string
+          suggested_end_time: string
+          suggested_start_time: string
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never

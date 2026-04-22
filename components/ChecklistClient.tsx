@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useMemo, memo } from 'react';
 import { 
   ChevronRight, ArrowUpRight, CheckCircle2, Calendar, Users,
   MessageSquare, MoreHorizontal, FileText, Check, Plus,
@@ -20,6 +20,7 @@ interface Task {
   description: string;
   assigned_user_id: string | null;
   is_completed: boolean;
+  due_days_before: number | null;
   created_at: string;
   assignee?: {
     name: string;
@@ -40,7 +41,7 @@ interface Activity {
   };
 }
 
-export function ChecklistClient({ meetingId, currentUser }: ChecklistClientProps) {
+function ChecklistClientComponent({ meetingId, currentUser }: ChecklistClientProps) {
   const supabase = createClient();
   const [filter, setFilter] = useState<'All' | 'Pending'>('All');
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -48,11 +49,40 @@ export function ChecklistClient({ meetingId, currentUser }: ChecklistClientProps
   const [loading, setLoading] = useState(true);
   const [commentInput, setCommentInput] = useState('');
   const [newTaskInput, setNewTaskInput] = useState('');
+  const [newTaskDueDate, setNewTaskDueDate] = useState<string>('');
+  const [meetingDate, setMeetingDate] = useState<string | null>(null);
 
-  // Fetch tasks and activities on mount
+  const profileMapRef = useRef<Map<string, { name: string }>>(new Map());
+
+  // Convenience wrappers that use the ref
+  function fetchTasks() { fetchTasksWithMap(profileMapRef.current); }
+  function fetchActivities() { fetchActivitiesWithMap(profileMapRef.current); }
+
+  // Build profile lookup map and fetch data on mount
   useEffect(() => {
-    fetchTasks();
-    fetchActivities();
+    async function init() {
+      // Fetch meeting date for due date computation
+      const { data: meetingData } = await supabase
+        .from('meetings')
+        .select('date')
+        .eq('id', meetingId)
+        .single();
+      if (meetingData) setMeetingDate(meetingData.date);
+
+      // Fetch profiles for user name lookups (no FK constraints exist in the DB)
+      const { data: allProfiles } = await supabase
+        .from('people')
+        .select('id, name');
+      
+      const map = new Map<string, { name: string }>();
+      (allProfiles || []).forEach((p: any) => map.set(p.id, { name: p.name }));
+      profileMapRef.current = map;
+
+      fetchTasksWithMap(map);
+      fetchActivitiesWithMap(map);
+    }
+
+    init();
     
     // Subscribe to real-time changes
     const tasksSubscription = supabase
@@ -66,7 +96,7 @@ export function ChecklistClient({ meetingId, currentUser }: ChecklistClientProps
           filter: `meeting_id=eq.${meetingId}`,
         },
         () => {
-          fetchTasks();
+          fetchTasksWithMap(profileMapRef.current);
         }
       )
       .subscribe();
@@ -82,7 +112,7 @@ export function ChecklistClient({ meetingId, currentUser }: ChecklistClientProps
           filter: `meeting_id=eq.${meetingId}`,
         },
         () => {
-          fetchActivities();
+          fetchActivitiesWithMap(profileMapRef.current);
         }
       )
       .subscribe();
@@ -93,13 +123,10 @@ export function ChecklistClient({ meetingId, currentUser }: ChecklistClientProps
     };
   }, [meetingId]);
 
-  async function fetchTasks() {
+  async function fetchTasksWithMap(profileMap: Map<string, { name: string }>) {
     const { data, error } = await supabase
       .from('meeting_checklist_tasks')
-      .select(`
-        *,
-        assignee:users(name)
-      `)
+      .select('*')
       .eq('meeting_id', meetingId)
       .order('created_at', { ascending: true });
 
@@ -108,25 +135,25 @@ export function ChecklistClient({ meetingId, currentUser }: ChecklistClientProps
       return;
     }
 
-    const tasksWithAssignees = (data || []).map((task: any) => ({
-      ...task,
-      assignee: task.assignee ? {
-        name: task.assignee.name,
-        initials: task.assignee.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase(),
-      } : null,
-    }));
+    const tasksWithAssignees = (data || []).map((task: any) => {
+      const profile = task.assigned_user_id ? profileMap.get(task.assigned_user_id) : null;
+      return {
+        ...task,
+        assignee: profile ? {
+          name: profile.name,
+          initials: profile.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase(),
+        } : null,
+      };
+    });
 
     setTasks(tasksWithAssignees);
     setLoading(false);
   }
 
-  async function fetchActivities() {
+  async function fetchActivitiesWithMap(profileMap: Map<string, { name: string }>) {
     const { data, error } = await supabase
       .from('meeting_activities')
-      .select(`
-        *,
-        user:users(name)
-      `)
+      .select('*')
       .eq('meeting_id', meetingId)
       .order('created_at', { ascending: false })
       .limit(20);
@@ -136,13 +163,16 @@ export function ChecklistClient({ meetingId, currentUser }: ChecklistClientProps
       return;
     }
 
-    const activitiesWithUsers = (data || []).map((activity: any) => ({
-      ...activity,
-      user: activity.user ? {
-        name: activity.user.name,
-        initials: activity.user.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase(),
-      } : null,
-    }));
+    const activitiesWithUsers = (data || []).map((activity: any) => {
+      const profile = activity.user_id ? profileMap.get(activity.user_id) : null;
+      return {
+        ...activity,
+        user: profile ? {
+          name: profile.name,
+          initials: profile.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase(),
+        } : null,
+      };
+    });
 
     setActivities(activitiesWithUsers);
   }
@@ -171,8 +201,28 @@ export function ChecklistClient({ meetingId, currentUser }: ChecklistClientProps
     fetchActivities();
   }
 
+  // Calculate due_days_before from an absolute date
+  const calculateDueDaysBefore = (absoluteDateStr: string, meetingDateStr: string): number | null => {
+    if (!absoluteDateStr || !meetingDateStr) return null;
+    const meetingDate = new Date(meetingDateStr + 'T00:00:00');
+    const dueDate = new Date(absoluteDateStr + 'T00:00:00');
+    const diffMs = meetingDate.getTime() - dueDate.getTime();
+    const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+    return diffDays >= 0 ? diffDays : null;
+  };
+
+  // Get absolute due date string for date input (YYYY-MM-DD)
+  const getAbsoluteDueDate = (due_days_before: number | null, meetingDateStr: string): string => {
+    if (due_days_before === null || !meetingDateStr) return '';
+    const d = new Date(meetingDateStr + 'T00:00:00');
+    d.setDate(d.getDate() - due_days_before);
+    return d.toISOString().split('T')[0];
+  };
+
   async function addTask() {
     if (!newTaskInput.trim()) return;
+
+    const due_days_before = (newTaskDueDate && meetingDate) ? calculateDueDaysBefore(newTaskDueDate, meetingDate) : null;
 
     const { error } = await supabase
       .from('meeting_checklist_tasks')
@@ -180,6 +230,7 @@ export function ChecklistClient({ meetingId, currentUser }: ChecklistClientProps
         meeting_id: meetingId,
         description: newTaskInput.trim(),
         is_completed: false,
+        due_days_before,
       });
 
     if (error) {
@@ -197,8 +248,26 @@ export function ChecklistClient({ meetingId, currentUser }: ChecklistClientProps
     });
 
     setNewTaskInput('');
+    setNewTaskDueDate('');
     fetchTasks();
     fetchActivities();
+  }
+
+  async function updateTaskDueDate(taskId: string, absoluteDateStr: string) {
+    if (!meetingDate) return;
+    const due_days_before = absoluteDateStr ? calculateDueDaysBefore(absoluteDateStr, meetingDate) : null;
+
+    const { error } = await supabase
+      .from('meeting_checklist_tasks')
+      .update({ due_days_before })
+      .eq('id', taskId);
+
+    if (error) {
+      console.error('Error updating task due date:', error);
+      return;
+    }
+
+    fetchTasks();
   }
 
   async function postActivity() {
@@ -223,12 +292,12 @@ export function ChecklistClient({ meetingId, currentUser }: ChecklistClientProps
     fetchActivities();
   }
 
-  const completedCount = tasks.filter(t => t.is_completed).length;
-  const progress = tasks.length > 0 ? Math.round((completedCount / tasks.length) * 100) : 0;
-
-  const filteredTasks = filter === 'All' 
-    ? tasks 
-    : tasks.filter(t => !t.is_completed);
+  // Memoize expensive computations
+  const completedCount = useMemo(() => tasks.filter(t => t.is_completed).length, [tasks]);
+  const progress = useMemo(() => tasks.length > 0 ? Math.round((completedCount / tasks.length) * 100) : 0, [tasks.length, completedCount]);
+  const filteredTasks = useMemo(() => filter === 'All'
+    ? tasks
+    : tasks.filter(t => !t.is_completed), [tasks, filter]);
 
   if (loading) {
     return (
@@ -407,6 +476,45 @@ export function ChecklistClient({ meetingId, currentUser }: ChecklistClientProps
                         </span>
                       </div>
 
+                      {meetingDate && (() => {
+                        const absoluteDueDate = getAbsoluteDueDate(task.due_days_before ?? null, meetingDate);
+                        const d = absoluteDueDate ? new Date(absoluteDueDate + 'T00:00:00') : null;
+                        const today = new Date();
+                        today.setHours(0, 0, 0, 0);
+                        const isOverdue = d && d.getTime() < today.getTime() && !task.is_completed;
+                        const isToday = d && d.getTime() === today.getTime() && !task.is_completed;
+                        const label = d ? d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : null;
+                        return (
+                          <div className={cn(
+                            "flex items-center gap-2 mt-1",
+                            task.is_completed ? "opacity-40" : ""
+                          )}>
+                            <Calendar className={cn(
+                              "h-3 w-3 shrink-0",
+                              isOverdue ? "text-coral-text" : isToday ? "text-status-amber" : "text-text-tertiary"
+                            )} />
+                            {label && (
+                              <>
+                                <span className={cn(
+                                  "text-[11px] font-medium",
+                                  isOverdue ? "text-coral-text" : isToday ? "text-status-amber" : "text-text-tertiary"
+                                )}>
+                                  Due {label}{isOverdue ? ' · Overdue' : isToday ? ' · Today' : ''}
+                                </span>
+                                <span className="text-[10px] text-text-tertiary">·</span>
+                              </>
+                            )}
+                            <input
+                              type="date"
+                              value={absoluteDueDate}
+                              onChange={(e) => updateTaskDueDate(task.id, e.target.value)}
+                              className="text-[11px] bg-transparent border-none focus:outline-none text-text-tertiary hover:text-text-secondary cursor-pointer p-0"
+                              title="Click to change due date"
+                            />
+                          </div>
+                        );
+                      })()}
+
                       {task.assignee && (
                         <div className="flex items-center gap-2 mt-2">
                           <span className={cn(
@@ -426,23 +534,41 @@ export function ChecklistClient({ meetingId, currentUser }: ChecklistClientProps
 
             {/* Add Task Input */}
             <div className="p-4 bg-status-grey-bg/20 border-t border-border/20">
-              <div className="bg-white border border-border/50 rounded-full flex items-center gap-3 px-4 py-2 w-full">
-                <Plus className="h-4 w-4 text-text-tertiary shrink-0" />
-                <input 
-                  type="text" 
-                  placeholder="Add a new action item..."
-                  className="flex-1 bg-transparent border-none focus:outline-none text-sm font-normal text-text-secondary placeholder:text-text-tertiary"
-                  value={newTaskInput}
-                  onChange={(e) => setNewTaskInput(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && addTask()}
-                />
-                <button 
-                  onClick={addTask}
-                  disabled={!newTaskInput.trim()}
-                  className="px-3 py-1 font-bold text-xs text-primary transition-all hover:bg-primary/10 rounded-full disabled:opacity-50"
-                >
-                  SAVE
-                </button>
+              <div className="flex flex-col gap-2">
+                <div className="bg-white border border-border/50 rounded-full flex items-center gap-3 px-4 py-2 w-full">
+                  <Plus className="h-4 w-4 text-text-tertiary shrink-0" />
+                  <input
+                    type="text"
+                    placeholder="Add a new action item..."
+                    className="flex-1 bg-transparent border-none focus:outline-none text-sm font-normal text-text-secondary placeholder:text-text-tertiary"
+                    value={newTaskInput}
+                    onChange={(e) => setNewTaskInput(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && addTask()}
+                  />
+                  <button
+                    onClick={addTask}
+                    disabled={!newTaskInput.trim()}
+                    className="px-3 py-1 font-bold text-xs text-primary transition-all hover:bg-primary/10 rounded-full disabled:opacity-50"
+                  >
+                    SAVE
+                  </button>
+                </div>
+                <div className="flex items-center gap-2 px-2">
+                  <Calendar className="h-3.5 w-3.5 text-text-tertiary" />
+                  <span className="text-xs text-text-tertiary">Due date:</span>
+                  <input
+                    type="date"
+                    value={newTaskDueDate}
+                    onChange={(e) => setNewTaskDueDate(e.target.value)}
+                    className="text-xs bg-transparent border-none focus:outline-none text-text-secondary cursor-pointer"
+                    title="Select due date (will be stored as days before meeting)"
+                  />
+                  {newTaskDueDate && meetingDate && (
+                    <span className="text-xs text-text-tertiary">
+                      ({calculateDueDaysBefore(newTaskDueDate, meetingDate)} days before)
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -557,7 +683,7 @@ export function ChecklistClient({ meetingId, currentUser }: ChecklistClientProps
                  Meeting Venue
                </h4>
                <p className="text-xs font-normal text-text-secondary">
-                 North Wing, Room 402 - Main Campus
+                 See meeting details for venue
                </p>
              </div>
           </div>
@@ -567,3 +693,6 @@ export function ChecklistClient({ meetingId, currentUser }: ChecklistClientProps
     </div>
   );
 }
+
+// Export memoized version to prevent unnecessary re-renders
+export const ChecklistClient = memo(ChecklistClientComponent);

@@ -37,7 +37,7 @@ export function UserSelectInput({
     async function fetchUsers() {
       setLoading(true);
       const { data, error } = await supabase
-        .from('profiles')
+        .from('people')
         .select('id, name, division')
         .order('name');
       

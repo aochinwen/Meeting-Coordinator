@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useMemo, memo } from 'react';
 import { 
   ChevronRight, Calendar, Clock, Users, MapPin, FileText, 
   CheckCircle2, MessageSquare, Plus, Check, Edit, Trash2,
@@ -11,10 +11,39 @@ import { User } from '@supabase/supabase-js';
 import { createClient } from '@/utils/supabase/client';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { DeleteMeetingModal } from './DeleteMeetingModal';
+import { AddParticipantsModal } from './AddParticipantsModal';
+import { EditMeetingVenueModal } from './EditMeetingVenueModal';
+import { EditMeetingModal } from './EditMeetingModal';
+import { addMeetingParticipants, removeMeetingParticipant } from '@/lib/meetings';
+import { getConfirmedBookingForMeeting } from '@/lib/rooms';
+
+interface RoomBooking {
+  id: string;
+  room_id: string;
+  meeting_id: string | null;
+  date: string;
+  start_time: string;
+  end_time: string;
+  status: string | null;
+  room: {
+    id: string;
+    name: string;
+    capacity: number;
+  } | null;
+}
 
 interface MeetingDetailClientProps {
   meetingId: string;
   currentUser?: User;
+  initialData?: {
+    meeting: Meeting | null;
+    participants: Participant[];
+    tasks: Task[];
+    activities: Activity[];
+    profileMap: Record<string, { name: string; division?: string | null; rank?: string | null }>;
+    roomBooking: RoomBooking | null;
+  };
 }
 
 interface Meeting {
@@ -35,11 +64,11 @@ interface Participant {
   user_id: string;
   status: string | null;
   is_required: boolean | null;
-  user?: {
+  user: {
     name: string;
     division?: string | null;
     rank?: string | null;
-  };
+  } | null;
 }
 
 interface Task {
@@ -47,10 +76,11 @@ interface Task {
   description: string;
   assigned_user_id: string | null;
   is_completed: boolean;
+  due_days_before?: number | null;
   created_at: string;
-  assignee?: {
+  assignee: {
     name: string;
-  };
+  } | null;
 }
 
 interface Activity {
@@ -58,28 +88,50 @@ interface Activity {
   user_id: string | null;
   activity_type: string;
   content: string;
-  metadata: Record<string, unknown>;
+  metadata: unknown;
   created_at: string;
-  user?: {
+  user: {
     name: string;
-  };
+  } | null;
 }
 
-export function MeetingDetailClient({ meetingId, currentUser }: MeetingDetailClientProps) {
+function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: MeetingDetailClientProps) {
   const supabase = createClient();
   const router = useRouter();
-  const [meeting, setMeeting] = useState<Meeting | null>(null);
-  const [participants, setParticipants] = useState<Participant[]>([]);
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [activities, setActivities] = useState<Activity[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [meeting, setMeeting] = useState<Meeting | null>(initialData?.meeting || null);
+  const [roomBooking, setRoomBooking] = useState<RoomBooking | null>(initialData?.roomBooking || null);
+  const [participants, setParticipants] = useState<Participant[]>(initialData?.participants || []);
+  const [tasks, setTasks] = useState<Task[]>(initialData?.tasks || []);
+  const [activities, setActivities] = useState<Activity[]>(initialData?.activities || []);
+  const [loading, setLoading] = useState(!initialData);
   const [newTaskInput, setNewTaskInput] = useState('');
+  const [newTaskDueDate, setNewTaskDueDate] = useState<string>('');
   const [commentInput, setCommentInput] = useState('');
   const [copied, setCopied] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isAddParticipantsOpen, setIsAddParticipantsOpen] = useState(false);
+  const [isAddingParticipants, setIsAddingParticipants] = useState(false);
+  const [isEditVenueOpen, setIsEditVenueOpen] = useState(false);
+  const [isEditMeetingOpen, setIsEditMeetingOpen] = useState(false);
+
+  type ProfileInfo = { name: string; division?: string | null; rank?: string | null };
+  const profileMapRef = useRef<Map<string, ProfileInfo>>(
+    initialData?.profileMap
+      ? new Map(Object.entries(initialData.profileMap))
+      : new Map()
+  );
+
+  // No-arg wrappers for real-time callbacks and event handlers
+  function fetchTasks() { fetchTasksWithMap(profileMapRef.current); }
+  function fetchActivities() { fetchActivitiesWithMap(profileMapRef.current); }
 
   useEffect(() => {
-    fetchMeetingData();
-    
+    // Only fetch if we don't have initial data (fallback for client-side navigation)
+    if (!initialData) {
+      fetchMeetingData();
+    }
+
+    // Real-time subscriptions for live updates
     const tasksSubscription = supabase
       .channel('meeting_checklist_tasks')
       .on(
@@ -116,14 +168,24 @@ export function MeetingDetailClient({ meetingId, currentUser }: MeetingDetailCli
       tasksSubscription.unsubscribe();
       activitiesSubscription.unsubscribe();
     };
-  }, [meetingId]);
+  }, [meetingId, initialData]);
 
   async function fetchMeetingData() {
+    // Fetch profiles once for all lookups (no FK constraints exist in the DB)
+    const { data: allProfiles } = await supabase
+      .from('people')
+      .select('id, name, division, rank');
+    
+    const profileMap = new Map<string, ProfileInfo>();
+    (allProfiles || []).forEach((p: any) => profileMap.set(p.id, { name: p.name, division: p.division, rank: p.rank }));
+    profileMapRef.current = profileMap;
+
     await Promise.all([
       fetchMeeting(),
-      fetchParticipants(),
-      fetchTasks(),
-      fetchActivities()
+      fetchRoomBooking(),
+      fetchParticipantsWithMap(profileMap),
+      fetchTasksWithMap(profileMap),
+      fetchActivitiesWithMap(profileMap)
     ]);
     setLoading(false);
   }
@@ -136,20 +198,22 @@ export function MeetingDetailClient({ meetingId, currentUser }: MeetingDetailCli
       .single();
 
     if (error) {
-      console.error('Error fetching meeting:', error);
+      console.error('Error fetching meeting:', JSON.stringify(error, null, 2));
       return;
     }
 
     setMeeting(data as any);
   }
 
-  async function fetchParticipants() {
+  async function fetchRoomBooking() {
+    const data = await getConfirmedBookingForMeeting(meetingId, supabase);
+    setRoomBooking(data as RoomBooking | null);
+  }
+
+  async function fetchParticipantsWithMap(profileMap: Map<string, ProfileInfo>) {
     const { data, error } = await supabase
       .from('meeting_participants')
-      .select(`
-        *,
-        user:user_id(name, division, rank)
-      `)
+      .select('*')
       .eq('meeting_id', meetingId);
 
     if (error) {
@@ -157,16 +221,17 @@ export function MeetingDetailClient({ meetingId, currentUser }: MeetingDetailCli
       return;
     }
 
-    setParticipants(data as any || []);
+    const mappedParticipants = (data || []).map((p: any) => ({
+      ...p,
+      user: profileMap.get(p.user_id) || null
+    }));
+    setParticipants(mappedParticipants as any);
   }
 
-  async function fetchTasks() {
+  async function fetchTasksWithMap(profileMap: Map<string, ProfileInfo>) {
     const { data, error } = await supabase
       .from('meeting_checklist_tasks')
-      .select(`
-        *,
-        assignee:assigned_user_id(name)
-      `)
+      .select('*')
       .eq('meeting_id', meetingId)
       .order('created_at', { ascending: true });
 
@@ -175,16 +240,17 @@ export function MeetingDetailClient({ meetingId, currentUser }: MeetingDetailCli
       return;
     }
 
-    setTasks(data as any || []);
+    const mappedTasks = (data || []).map((t: any) => ({
+      ...t,
+      assignee: t.assigned_user_id ? profileMap.get(t.assigned_user_id) || null : null
+    }));
+    setTasks(mappedTasks as any);
   }
 
-  async function fetchActivities() {
+  async function fetchActivitiesWithMap(profileMap: Map<string, ProfileInfo>) {
     const { data, error } = await supabase
       .from('meeting_activities')
-      .select(`
-        *,
-        user:user_id(name)
-      `)
+      .select('*')
       .eq('meeting_id', meetingId)
       .order('created_at', { ascending: false })
       .limit(20);
@@ -194,7 +260,11 @@ export function MeetingDetailClient({ meetingId, currentUser }: MeetingDetailCli
       return;
     }
 
-    setActivities(data as any || []);
+    const mappedActivities = (data || []).map((a: any) => ({
+      ...a,
+      user: a.user_id ? profileMap.get(a.user_id) || null : null
+    }));
+    setActivities(mappedActivities as any);
   }
 
   async function toggleTask(taskId: string, currentStatus: boolean) {
@@ -220,8 +290,28 @@ export function MeetingDetailClient({ meetingId, currentUser }: MeetingDetailCli
     fetchActivities();
   }
 
+  // Calculate due_days_before from an absolute date
+  const calculateDueDaysBefore = (absoluteDateStr: string, meetingDateStr: string): number | null => {
+    if (!absoluteDateStr || !meetingDateStr) return null;
+    const meetingDate = new Date(meetingDateStr + 'T00:00:00');
+    const dueDate = new Date(absoluteDateStr + 'T00:00:00');
+    const diffMs = meetingDate.getTime() - dueDate.getTime();
+    const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+    return diffDays >= 0 ? diffDays : null;
+  };
+
+  // Get absolute due date string for date input (YYYY-MM-DD)
+  const getAbsoluteDueDate = (due_days_before: number | null, meetingDateStr: string): string => {
+    if (due_days_before === null || !meetingDateStr) return '';
+    const d = new Date(meetingDateStr + 'T00:00:00');
+    d.setDate(d.getDate() - due_days_before);
+    return d.toISOString().split('T')[0];
+  };
+
   async function addTask() {
     if (!newTaskInput.trim()) return;
+
+    const due_days_before = (newTaskDueDate && meeting) ? calculateDueDaysBefore(newTaskDueDate, meeting.date) : null;
 
     const { error } = await supabase
       .from('meeting_checklist_tasks')
@@ -229,6 +319,7 @@ export function MeetingDetailClient({ meetingId, currentUser }: MeetingDetailCli
         meeting_id: meetingId,
         description: newTaskInput.trim(),
         is_completed: false,
+        due_days_before,
       });
 
     if (error) {
@@ -245,8 +336,26 @@ export function MeetingDetailClient({ meetingId, currentUser }: MeetingDetailCli
     });
 
     setNewTaskInput('');
+    setNewTaskDueDate('');
     fetchTasks();
     fetchActivities();
+  }
+
+  async function updateTaskDueDate(taskId: string, absoluteDateStr: string) {
+    if (!meeting) return;
+    const due_days_before = absoluteDateStr ? calculateDueDaysBefore(absoluteDateStr, meeting.date) : null;
+
+    const { error } = await supabase
+      .from('meeting_checklist_tasks')
+      .update({ due_days_before })
+      .eq('id', taskId);
+
+    if (error) {
+      console.error('Error updating task due date:', error);
+      return;
+    }
+
+    fetchTasks();
   }
 
   async function postActivity() {
@@ -284,7 +393,7 @@ export function MeetingDetailClient({ meetingId, currentUser }: MeetingDetailCli
 
   if (loading) {
     return (
-      <div className="max-w-[1280px] mx-auto pb-24 h-full flex flex-col pt-8 space-y-8 px-8">
+      <div className="max-w-[1280px] mx-auto pb-24 flex flex-col pt-8 space-y-8 px-8">
         <div className="flex items-center justify-center h-64">
           <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full"></div>
         </div>
@@ -294,26 +403,41 @@ export function MeetingDetailClient({ meetingId, currentUser }: MeetingDetailCli
 
   if (!meeting) {
     return (
-      <div className="max-w-[1280px] mx-auto pb-24 h-full flex flex-col pt-8 space-y-8 px-8">
+      <div className="max-w-[1280px] mx-auto pb-24 flex flex-col pt-8 space-y-8 px-8">
         <div className="text-center text-text-tertiary">Meeting not found</div>
       </div>
     );
   }
 
-  const completedTasks = tasks.filter(t => t.is_completed).length;
-  const progress = tasks.length > 0 ? Math.round((completedTasks / tasks.length) * 100) : 0;
-  const formattedDate = new Date(meeting.date).toLocaleDateString('en-US', { 
+  // Memoize expensive computations
+  const completedTasks = useMemo(() => tasks.filter(t => t.is_completed).length, [tasks]);
+  const progress = useMemo(() => tasks.length > 0 ? Math.round((completedTasks / tasks.length) * 100) : 0, [tasks.length, completedTasks]);
+  const formattedDate = useMemo(() => new Date(meeting.date + 'T00:00:00').toLocaleDateString('en-US', {
     weekday: 'long',
-    day: 'numeric', 
-    month: 'long', 
-    year: 'numeric' 
-  });
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric'
+  }), [meeting.date]);
 
-  const getInitials = (name: string) => {
+  const getInitials = useMemo(() => (name: string) => {
     return name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
+  }, []);
+
+  const getTaskDueDateLabel = (due_days_before: number | null, meetingDate: string): { label: string; isOverdue: boolean; isToday: boolean } | null => {
+    if (due_days_before === null) return null;
+    const d = new Date(meetingDate + 'T00:00:00');
+    d.setDate(d.getDate() - due_days_before);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const dueMs = d.getTime();
+    const todayMs = today.getTime();
+    const isOverdue = dueMs < todayMs;
+    const isToday = dueMs === todayMs;
+    const label = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    return { label, isOverdue, isToday };
   };
 
-  const getStatusColor = (status: string | null) => {
+  const getStatusColor = useMemo(() => (status: string | null) => {
     switch (status) {
       case 'accepted':
         return 'bg-mint text-status-green';
@@ -324,10 +448,10 @@ export function MeetingDetailClient({ meetingId, currentUser }: MeetingDetailCli
       default:
         return 'bg-status-grey-bg text-text-secondary';
     }
-  };
+  }, []);
 
   return (
-    <div className="max-w-[1280px] mx-auto pb-24 h-full flex flex-col pt-8 space-y-8 px-8">
+    <div className="max-w-[1280px] mx-auto pb-24 flex flex-col pt-8 space-y-8 px-8">
       {/* Header */}
       <div className="flex items-start justify-between shrink-0">
         <div className="flex flex-col gap-3">
@@ -364,6 +488,22 @@ export function MeetingDetailClient({ meetingId, currentUser }: MeetingDetailCli
           <button className="px-5 py-2.5 bg-primary text-white rounded-full text-sm font-medium shadow-md transition-all active:scale-95 hover:bg-primary/90 flex items-center gap-2">
             <Mail className="h-4 w-4" />
             Send Invites
+          </button>
+          
+          <button
+            onClick={() => setIsEditMeetingOpen(true)}
+            className="px-5 py-2.5 bg-board border border-border text-text-primary rounded-full text-sm font-medium transition-all active:scale-95 hover:bg-surface flex items-center gap-2"
+          >
+            <Edit className="h-4 w-4" />
+            Edit
+          </button>
+
+          <button 
+            onClick={() => setIsDeleteModalOpen(true)}
+            className="px-5 py-2.5 bg-coral-bg text-coral-text border border-coral-text/30 rounded-full text-sm font-medium transition-all active:scale-95 hover:bg-coral-text/10 flex items-center gap-2"
+          >
+            <Trash2 className="h-4 w-4" />
+            Delete
           </button>
         </div>
       </div>
@@ -487,6 +627,40 @@ export function MeetingDetailClient({ meetingId, currentUser }: MeetingDetailCli
                         </span>
                       </div>
 
+                      {(() => {
+                        const due = getTaskDueDateLabel(task.due_days_before ?? null, meeting.date);
+                        const absoluteDueDate = getAbsoluteDueDate(task.due_days_before ?? null, meeting.date);
+                        return (
+                          <div className={cn(
+                            "flex items-center gap-2 mt-1",
+                            task.is_completed ? "opacity-40" : ""
+                          )}>
+                            <Calendar className={cn(
+                              "h-3 w-3 shrink-0",
+                              due?.isOverdue && !task.is_completed ? "text-coral-text" : due?.isToday && !task.is_completed ? "text-status-amber" : "text-text-tertiary"
+                            )} />
+                            {due ? (
+                              <>
+                                <span className={cn(
+                                  "text-[11px] font-medium",
+                                  due.isOverdue && !task.is_completed ? "text-coral-text" : due.isToday && !task.is_completed ? "text-status-amber" : "text-text-tertiary"
+                                )}>
+                                  Due {due.label}{due.isOverdue && !task.is_completed ? ' · Overdue' : due.isToday && !task.is_completed ? ' · Today' : ''}
+                                </span>
+                                <span className="text-[10px] text-text-tertiary">·</span>
+                              </>
+                            ) : null}
+                            <input
+                              type="date"
+                              value={absoluteDueDate}
+                              onChange={(e) => updateTaskDueDate(task.id, e.target.value)}
+                              className="text-[11px] bg-transparent border-none focus:outline-none text-text-tertiary hover:text-text-secondary cursor-pointer p-0"
+                              title="Click to change due date"
+                            />
+                          </div>
+                        );
+                      })()}
+
                       {task.assignee && (
                         <div className="flex items-center gap-2 mt-2">
                           <span className="inline-flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-bold shadow-sm bg-mint text-status-green">
@@ -502,33 +676,58 @@ export function MeetingDetailClient({ meetingId, currentUser }: MeetingDetailCli
             </div>
 
             <div className="p-4 bg-status-grey-bg/20 border-t border-border/20">
-              <div className="bg-white border border-border/50 rounded-full flex items-center gap-3 px-4 py-2 w-full">
-                <Plus className="h-4 w-4 text-text-tertiary shrink-0" />
-                <input 
-                  type="text" 
-                  placeholder="Add a new action item..."
-                  className="flex-1 bg-transparent border-none focus:outline-none text-sm font-normal text-text-secondary placeholder:text-text-tertiary"
-                  value={newTaskInput}
-                  onChange={(e) => setNewTaskInput(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && addTask()}
-                />
-                <button 
-                  onClick={addTask}
-                  disabled={!newTaskInput.trim()}
-                  className="px-3 py-1 font-bold text-xs text-primary transition-all hover:bg-primary/10 rounded-full disabled:opacity-50"
-                >
-                  SAVE
-                </button>
+              <div className="flex flex-col gap-2">
+                <div className="bg-white border border-border/50 rounded-full flex items-center gap-3 px-4 py-2 w-full">
+                  <Plus className="h-4 w-4 text-text-tertiary shrink-0" />
+                  <input
+                    type="text"
+                    placeholder="Add a new action item..."
+                    className="flex-1 bg-transparent border-none focus:outline-none text-sm font-normal text-text-secondary placeholder:text-text-tertiary"
+                    value={newTaskInput}
+                    onChange={(e) => setNewTaskInput(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && addTask()}
+                  />
+                  <button
+                    onClick={addTask}
+                    disabled={!newTaskInput.trim()}
+                    className="px-3 py-1 font-bold text-xs text-primary transition-all hover:bg-primary/10 rounded-full disabled:opacity-50"
+                  >
+                    SAVE
+                  </button>
+                </div>
+                <div className="flex items-center gap-2 px-2">
+                  <Calendar className="h-3.5 w-3.5 text-text-tertiary" />
+                  <span className="text-xs text-text-tertiary">Due date:</span>
+                  <input
+                    type="date"
+                    value={newTaskDueDate}
+                    onChange={(e) => setNewTaskDueDate(e.target.value)}
+                    className="text-xs bg-transparent border-none focus:outline-none text-text-secondary cursor-pointer"
+                    title="Select due date (will be stored as days before meeting)"
+                  />
+                  {newTaskDueDate && meeting && (
+                    <span className="text-xs text-text-tertiary">
+                      ({calculateDueDaysBefore(newTaskDueDate, meeting.date)} days before)
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
           </div>
 
           {/* Participants */}
           <div className="bg-white border border-border/20 rounded-3xl shadow-sm overflow-hidden">
-            <div className="px-6 py-4 border-b border-border/20 bg-white">
+            <div className="px-6 py-4 border-b border-border/20 bg-white flex justify-between items-center">
               <h3 className="text-lg font-bold text-text-primary font-literata">
                 Participants ({participants.length})
               </h3>
+              <button
+                onClick={() => setIsAddParticipantsOpen(true)}
+                className="px-4 py-2 bg-primary text-white rounded-full text-xs font-medium shadow-sm transition-all hover:bg-primary/90 flex items-center gap-1.5"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Add
+              </button>
             </div>
 
             <div className="p-6">
@@ -541,7 +740,7 @@ export function MeetingDetailClient({ meetingId, currentUser }: MeetingDetailCli
                   {participants.map((participant) => (
                     <div 
                       key={participant.id}
-                      className="flex items-center gap-3 p-3 bg-surface rounded-2xl"
+                      className="flex items-center gap-3 p-3 bg-surface rounded-2xl group"
                     >
                       <div className="h-10 w-10 rounded-full bg-sage flex items-center justify-center text-white text-sm font-bold">
                         {participant.user ? getInitials(participant.user.name) : '?'}
@@ -554,12 +753,21 @@ export function MeetingDetailClient({ meetingId, currentUser }: MeetingDetailCli
                           {participant.user?.division || 'No division'}
                         </p>
                       </div>
-                      <span className={cn(
-                        "px-2 py-1 rounded-lg text-[10px] font-bold uppercase",
-                        getStatusColor(participant.status)
-                      )}>
-                        {participant.status}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className={cn(
+                          "px-2 py-1 rounded-lg text-[10px] font-bold uppercase",
+                          getStatusColor(participant.status)
+                        )}>
+                          {participant.status}
+                        </span>
+                        <button
+                          onClick={() => handleRemoveParticipant(participant.user_id)}
+                          className="p-1.5 text-text-tertiary hover:text-coral-text hover:bg-coral-bg rounded-full transition-all opacity-0 group-hover:opacity-100"
+                          title="Remove participant"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -662,16 +870,175 @@ export function MeetingDetailClient({ meetingId, currentUser }: MeetingDetailCli
             </div>
             
             <div className="p-6 flex flex-col gap-1 z-20 bg-white relative">
-              <h4 className="text-sm font-bold text-text-primary font-literata">
-                Meeting Venue
-              </h4>
+              <div className="flex items-center justify-between">
+                <h4 className="text-sm font-bold text-text-primary font-literata">
+                  Meeting Venue
+                </h4>
+                <button
+                  onClick={() => setIsEditVenueOpen(true)}
+                  className="p-1.5 text-text-tertiary hover:text-primary hover:bg-primary/10 rounded-lg transition-colors"
+                  title="Edit venue"
+                >
+                  <Edit className="h-4 w-4" />
+                </button>
+              </div>
               <p className="text-xs font-normal text-text-secondary">
-                North Wing, Room 402 - Main Campus
+                {roomBooking?.room?.name || 'No venue assigned'}
               </p>
+              {(roomBooking?.room?.capacity ?? 0) > 0 && (
+                <p className="text-[10px] text-text-tertiary">
+                  Capacity: {roomBooking?.room?.capacity} people
+                </p>
+              )}
             </div>
           </div>
         </div>
       </div>
+
+      {/* Delete Meeting Modal */}
+      {meeting && (
+        <DeleteMeetingModal
+          isOpen={isDeleteModalOpen}
+          onClose={() => setIsDeleteModalOpen(false)}
+          meetingId={meeting.id}
+          seriesId={meeting.series_id}
+          meetingDate={meeting.date}
+          meetingTitle={meeting.title}
+          onSuccess={() => {
+            router.push('/');
+          }}
+        />
+      )}
+
+      {/* Add Participants Modal */}
+      <AddParticipantsModal
+        isOpen={isAddParticipantsOpen}
+        onClose={() => setIsAddParticipantsOpen(false)}
+        onAdd={handleAddParticipants}
+        existingParticipantIds={participants.map(p => p.user_id)}
+      />
+
+      {/* Edit Venue Modal */}
+      {meeting && (
+        <EditMeetingVenueModal
+          isOpen={isEditVenueOpen}
+          onClose={() => setIsEditVenueOpen(false)}
+          meeting={{
+            id: meeting.id,
+            title: meeting.title,
+            date: meeting.date,
+            start_time: meeting.start_time,
+            end_time: meeting.end_time,
+            series_id: meeting.series_id,
+          }}
+          currentBooking={roomBooking ? {
+            id: roomBooking.id,
+            room_id: roomBooking.room_id,
+            room_name: roomBooking.room?.name || 'Unknown',
+            start_time: roomBooking.start_time,
+            end_time: roomBooking.end_time,
+          } : null}
+          participantIds={participants.map(p => p.user_id)}
+          onVenueUpdated={(newMeetingId) => {
+            // If series was regenerated with a new meeting ID, navigate to it
+            if (newMeetingId && newMeetingId !== meetingId) {
+              router.push(`/meetings/${newMeetingId}`);
+            } else {
+              // Otherwise just refresh current data
+              fetchMeeting();
+              fetchRoomBooking();
+            }
+          }}
+        />
+      )}
+
+      {/* Edit Meeting Modal */}
+      {meeting && (
+        <EditMeetingModal
+          isOpen={isEditMeetingOpen}
+          onClose={() => setIsEditMeetingOpen(false)}
+          meetingId={meeting.id}
+          seriesId={meeting.series_id}
+          meetingDate={meeting.date}
+          currentValues={{
+            title: meeting.title,
+            description: meeting.description || '',
+            date: meeting.date,
+            start_time: meeting.start_time || '',
+            end_time: meeting.end_time || '',
+          }}
+          onSuccess={async (newMeetingId?: string) => {
+            try {
+              // If series was updated, the meeting may have a new ID
+              // Use the new ID if provided, otherwise try to find by date
+              if (newMeetingId && newMeetingId !== meetingId) {
+                // Navigate to the new meeting URL
+                router.push(`/meetings/${newMeetingId}`);
+                return;
+              }
+              await Promise.all([
+                fetchMeeting(),
+                fetchRoomBooking(),
+                fetchActivitiesWithMap(profileMapRef.current)
+              ]);
+            } catch (err) {
+              console.error('Error refreshing meeting data:', err);
+            }
+          }}
+        />
+      )}
     </div>
   );
+
+  async function handleAddParticipants(userIds: string[]) {
+    if (!meetingId || userIds.length === 0) return;
+    
+    setIsAddingParticipants(true);
+    try {
+      await addMeetingParticipants(meetingId, userIds, true);
+      // Refresh participants list
+      await fetchParticipantsWithMap(profileMapRef.current);
+      // Log activity
+      await supabase.from('meeting_activities').insert({
+        meeting_id: meetingId,
+        user_id: currentUser?.id || null,
+        activity_type: 'participants_added',
+        content: `added ${userIds.length} participant${userIds.length > 1 ? 's' : ''} to the meeting`,
+        metadata: { added_count: userIds.length },
+      });
+      await fetchActivitiesWithMap(profileMapRef.current);
+    } catch (error) {
+      console.error('Error adding participants:', error);
+      throw error;
+    } finally {
+      setIsAddingParticipants(false);
+    }
+  }
+
+  async function handleRemoveParticipant(userId: string) {
+    if (!meetingId) return;
+    
+    const participant = participants.find(p => p.user_id === userId);
+    if (!participant) return;
+
+    try {
+      await removeMeetingParticipant(meetingId, userId);
+      // Refresh participants list
+      await fetchParticipantsWithMap(profileMapRef.current);
+      // Log activity
+      await supabase.from('meeting_activities').insert({
+        meeting_id: meetingId,
+        user_id: currentUser?.id || null,
+        activity_type: 'participant_removed',
+        content: `removed ${participant.user?.name || 'a participant'} from the meeting`,
+        metadata: { removed_user_id: userId },
+      });
+      await fetchActivitiesWithMap(profileMapRef.current);
+    } catch (error) {
+      console.error('Error removing participant:', error);
+    }
+  }
 }
+
+// Export memoized version to prevent unnecessary re-renders
+export const MeetingDetailClient = memo(MeetingDetailClientComponent);

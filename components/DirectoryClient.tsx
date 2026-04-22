@@ -1,43 +1,68 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo, memo } from 'react';
 import { Plus, Search, MoreHorizontal, ChevronDown, ChevronRight, Edit2, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Database } from '@/types/supabase';
 import { createClient } from '@/utils/supabase/client';
 import { AddUserModal } from './AddUserModal';
+import { EditUserModal } from './EditUserModal';
+import { DeleteUserModal } from './DeleteUserModal';
 
-type User = Database['public']['Tables']['users']['Row'];
+type User = Database['public']['Tables']['people']['Row'];
 
 interface DirectoryClientProps {
   initialUsers: User[];
   activeTeamsCount: number;
 }
 
-export function DirectoryClient({ initialUsers, activeTeamsCount }: DirectoryClientProps) {
+function DirectoryClientComponent({ initialUsers, activeTeamsCount }: DirectoryClientProps) {
   const [users, setUsers] = useState<User[]>(initialUsers);
   const [search, setSearch] = useState('');
   const [organizationFilter, setOrganizationFilter] = useState('All Organizations');
   const [rankFilter, setRankFilter] = useState('Filter by Rank');
   const [currentPage, setCurrentPage] = useState(1);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [deletingUser, setDeletingUser] = useState<User | null>(null);
   const supabase = createClient();
 
-  const ITEMS_PER_PAGE = 4;
+  const ITEMS_PER_PAGE = 10;
 
-  const filteredUsers = users.filter((u) => {
+  const totalMembers = users.length;
+  const activeTeams = useMemo(() => new Set(users.map(u => u.division).filter(Boolean)).size, [users]);
+
+  // Memoize filtered and paginated users to prevent unnecessary re-computation
+  const filteredUsers = useMemo(() => users.filter((u) => {
     const matchesSearch = u.name.toLowerCase().includes(search.toLowerCase()) ||
                           (u.division && u.division.toLowerCase().includes(search.toLowerCase()));
     const matchesRank = rankFilter === 'Filter by Rank' || u.rank === rankFilter;
     return matchesSearch && matchesRank;
-  });
+  }), [users, search, rankFilter]);
 
   const totalPages = Math.ceil(filteredUsers.length / ITEMS_PER_PAGE);
-  const paginatedUsers = filteredUsers.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+  const paginatedUsers = useMemo(() =>
+    filteredUsers.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE),
+    [filteredUsers, currentPage]
+  );
 
-  const formatEmail = (name: string) => {
-    return `${name.toLowerCase().replace(/\s+/g, '.')}@example.com`;
+  // Reset to first page when filters change
+  useMemo(() => {
+    setCurrentPage(1);
+  }, [search, rankFilter]);
+
+  const formatEmail = (user: User) => {
+    return user.email || `${user.name.toLowerCase().replace(/\s+/g, '.')}@example.com`;
   };
+
+  // Extract unique ranks from users for autocomplete
+  const existingRanks = useMemo(() => {
+    const ranks = new Set<string>();
+    users.forEach(u => {
+      if (u.rank) ranks.add(u.rank);
+    });
+    return Array.from(ranks).sort();
+  }, [users]);
 
   const getRankBadgeProps = (rank: string | null | undefined) => {
     if (!rank) return { bg: 'bg-gray-100', text: 'text-gray-800' };
@@ -55,20 +80,57 @@ export function DirectoryClient({ initialUsers, activeTeamsCount }: DirectoryCli
     return { bg: bgs[idx], textColor: textColors[idx] };
   };
 
-  // Mock organizations for presentation
-  const getOrganization = (id: string) => {
-    const orgs = ['Green Earth Initiative', 'Terra Foundations', 'Rooted Logistics'];
-    const idx = parseInt(id.replace(/\D/g, '') || '0', 10) % orgs.length;
-    return orgs[idx];
+  const getOrganization = (user: User) => {
+    return user.organization || '—';
   };
 
-  const handleAddUser = async (newUser: { name: string; division: string; rank: string }) => {
+  const handleEditUser = async (userId: string, updates: { name: string; email: string; organization: string; division: string; rank: string }) => {
     const { data, error } = await supabase
-      .from('profiles')
+      .from('people')
+      .update({
+        name: updates.name,
+        email: updates.email || null,
+        organization: updates.organization || null,
+        division: updates.division,
+        rank: updates.rank,
+      })
+      .eq('id', userId)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Failed to update user', error);
+      throw error;
+    }
+
+    if (data) {
+      setUsers(prev => prev.map(u => u.id === userId ? data : u).sort((a, b) => a.name.localeCompare(b.name)));
+    }
+  };
+
+  const handleDeleteUser = async (userId: string) => {
+    const { error } = await supabase
+      .from('people')
+      .delete()
+      .eq('id', userId);
+
+    if (error) {
+      console.error('Failed to delete user', error);
+      throw error;
+    }
+
+    setUsers(prev => prev.filter(u => u.id !== userId));
+  };
+
+  const handleAddUser = async (newUser: { name: string; email: string; organization: string; division: string; rank: string }) => {
+    const { data, error } = await supabase
+      .from('people')
       .insert([
         {
-          id: crypto.randomUUID(), // Mock ID, real implementation uses auth triggers
+          id: crypto.randomUUID(),
           name: newUser.name,
+          email: newUser.email || null,
+          organization: newUser.organization || null,
           division: newUser.division,
           rank: newUser.rank,
         }
@@ -82,16 +144,16 @@ export function DirectoryClient({ initialUsers, activeTeamsCount }: DirectoryCli
     }
 
     if (data) {
-      setUsers([...users, data].sort((a, b) => a.name.localeCompare(b.name)));
+      setUsers(prev => [...prev, data].sort((a, b) => a.name.localeCompare(b.name)));
     }
   };
 
   return (
-    <div className="max-w-[1280px] mx-auto pb-24 h-full flex flex-col pt-8 space-y-8">
+    <div className="max-w-[1280px] mx-auto pb-12 pt-8 space-y-8 px-4 sm:px-6 lg:px-8">
       {/* Header */}
-      <div className="flex items-end justify-between shrink-0">
+      <div className="flex flex-col gap-4 sm:gap-6 sm:flex-row sm:items-end sm:justify-between shrink-0">
         <div className="flex flex-col gap-2">
-          <h1 className="text-4xl font-bold tracking-tight text-text-primary font-literata">
+          <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-text-primary font-literata">
             People Directory
           </h1>
           <p className="text-base font-light text-text-secondary">
@@ -101,7 +163,7 @@ export function DirectoryClient({ initialUsers, activeTeamsCount }: DirectoryCli
         
         <button 
           onClick={() => setIsAddModalOpen(true)}
-          className="flex items-center gap-2 px-6 py-3 bg-primary text-white rounded-2xl text-base font-bold shadow-md transition-all active:scale-95"
+          className="flex items-center gap-2 px-5 sm:px-6 py-3 bg-primary text-white rounded-2xl text-sm sm:text-base font-bold shadow-md transition-all active:scale-95 self-start sm:self-auto"
         >
           <Plus className="h-4 w-4" />
           Add User
@@ -109,8 +171,8 @@ export function DirectoryClient({ initialUsers, activeTeamsCount }: DirectoryCli
       </div>
 
       {/* Controls */}
-      <div className="grid grid-cols-4 gap-4 shrink-0">
-        <div className="col-span-2 relative">
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 shrink-0">
+        <div className="col-span-1 sm:col-span-2 relative">
           <div className="bg-white rounded-[24px] shadow-sm flex items-center px-4 py-3 border border-transparent focus-within:ring-2 focus-within:ring-primary/20 transition-all">
             <Search className="h-4 w-4 text-gray-500 shrink-0" />
             <input 
@@ -122,13 +184,13 @@ export function DirectoryClient({ initialUsers, activeTeamsCount }: DirectoryCli
             />
           </div>
         </div>
-        <div className="col-span-1">
+        <div className="col-span-1 hidden sm:block">
           <div className="bg-white rounded-[24px] shadow-sm flex items-center justify-between px-4 py-3 cursor-pointer">
             <span className="text-base text-text-primary font-light">{organizationFilter}</span>
             <ChevronDown className="h-4 w-4 text-text-primary" />
           </div>
         </div>
-        <div className="col-span-1">
+        <div className="col-span-1 hidden sm:block">
           <div className="bg-white rounded-[24px] shadow-sm flex items-center justify-between px-4 py-3 cursor-pointer">
             <span className="text-base text-text-primary font-light">{rankFilter}</span>
             <ChevronDown className="h-4 w-4 text-text-primary" />
@@ -136,14 +198,14 @@ export function DirectoryClient({ initialUsers, activeTeamsCount }: DirectoryCli
         </div>
       </div>
 
-      {/* Directory Table */}
-      <div className="bg-white rounded-[24px] shadow-sm overflow-hidden flex-1 flex flex-col min-h-0 border border-border/20">
+      {/* Directory Table - Desktop */}
+      <div className="bg-white rounded-[24px] shadow-sm overflow-hidden border border-border/20 hidden md:block">
         {/* Table Header */}
         <div className="grid grid-cols-12 gap-4 px-6 py-4 bg-surface border-b border-border/30 text-xs tracking-[0.6px] uppercase text-text-secondary font-bold shrink-0">
           <div className="col-span-3">Name</div>
           <div className="col-span-3">Organization</div>
           <div className="col-span-3">Division</div>
-          <div className="col-span-1">Rank</div>
+          <div className="col-span-1 hidden sm:block">Rank</div>
           <div className="col-span-2 text-right">Actions</div>
         </div>
 
@@ -162,12 +224,12 @@ export function DirectoryClient({ initialUsers, activeTeamsCount }: DirectoryCli
                   </div>
                   <div className="flex flex-col min-w-0">
                     <h4 className="text-base font-bold text-text-primary truncate">{user.name}</h4>
-                    <p className="text-sm font-light text-text-secondary truncate">{formatEmail(user.name)}</p>
+                    <p className="text-sm font-light text-text-secondary truncate">{formatEmail(user)}</p>
                   </div>
                 </div>
                 
                 <div className="col-span-3 flex items-center">
-                  <span className="text-base text-text-primary font-medium">{getOrganization(user.id)}</span>
+                  <span className="text-base text-text-primary font-medium">{getOrganization(user)}</span>
                 </div>
                 
                 <div className="col-span-3 flex items-center">
@@ -181,10 +243,16 @@ export function DirectoryClient({ initialUsers, activeTeamsCount }: DirectoryCli
                 </div>
                 
                 <div className="col-span-2 flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button className="p-2 text-text-secondary hover:bg-surface rounded-lg transition-colors">
+                  <button
+                    onClick={() => setEditingUser(user)}
+                    className="p-2 text-text-secondary hover:bg-surface rounded-lg transition-colors"
+                  >
                     <Edit2 className="h-4 w-4" />
                   </button>
-                  <button className="p-2 text-text-secondary hover:bg-red-50 hover:text-red-600 rounded-lg transition-colors">
+                  <button
+                    onClick={() => setDeletingUser(user)}
+                    className="p-2 text-text-secondary hover:bg-red-50 hover:text-red-600 rounded-lg transition-colors"
+                  >
                     <Trash2 className="h-4 w-4" />
                   </button>
                 </div>
@@ -198,9 +266,12 @@ export function DirectoryClient({ initialUsers, activeTeamsCount }: DirectoryCli
         </div>
 
         {/* Pagination bar */}
-        <div className="bg-surface border-t border-border/30 px-6 py-4 flex items-center justify-between shrink-0">
+        <div className="bg-surface border-t border-border/30 px-4 sm:px-6 py-4 flex flex-col sm:flex-row gap-3 sm:gap-0 sm:items-center sm:justify-between shrink-0">
           <span className="text-sm font-light text-text-secondary">
             Showing {(currentPage - 1) * ITEMS_PER_PAGE + 1} to {Math.min(currentPage * ITEMS_PER_PAGE, filteredUsers.length)} of {filteredUsers.length} people
+          </span>
+          <span className="sm:hidden text-xs text-text-secondary">
+            Page {currentPage} / {totalPages}
           </span>
           <div className="flex items-center gap-2">
             <button 
@@ -211,19 +282,21 @@ export function DirectoryClient({ initialUsers, activeTeamsCount }: DirectoryCli
               Previous
             </button>
             
-            {Array.from({ length: totalPages }).map((_, i) => (
-              <button 
-                key={i}
-                onClick={() => setCurrentPage(i + 1)}
-                className={cn("h-9 w-9 flex items-center justify-center rounded-2xl text-sm font-bold transition-colors",
-                  currentPage === i + 1 
-                    ? "bg-primary text-white shadow-sm" 
-                    : "bg-transparent text-text-primary hover:bg-white"
-                )}
-              >
-                {i + 1}
-              </button>
-            ))}
+            <div className="hidden sm:flex items-center gap-2">
+              {Array.from({ length: totalPages }).map((_, i) => (
+                <button 
+                  key={i}
+                  onClick={() => setCurrentPage(i + 1)}
+                  className={cn("h-9 w-9 flex items-center justify-center rounded-2xl text-sm font-bold transition-colors",
+                    currentPage === i + 1 
+                      ? "bg-primary text-white shadow-sm" 
+                      : "bg-transparent text-text-primary hover:bg-white"
+                  )}
+                >
+                  {i + 1}
+                </button>
+              ))}
+            </div>
 
             <button 
               onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
@@ -236,39 +309,118 @@ export function DirectoryClient({ initialUsers, activeTeamsCount }: DirectoryCli
         </div>
       </div>
 
+      {/* Directory Cards - Mobile */}
+      <div className="md:hidden flex flex-col gap-3">
+        {paginatedUsers.length > 0 ? paginatedUsers.map((user) => {
+          const avatar = getAvatarProps(user.name);
+          const rankBadge = getRankBadgeProps(user.rank);
+          const initials = user.name.split(' ').map(n => n[0]).join('').substring(0, 2);
+          
+          return (
+            <div key={user.id} className="bg-white border border-border/30 rounded-2xl p-4 space-y-3">
+              <div className="flex items-start gap-3">
+                <div className={cn("h-10 w-10 rounded-full flex items-center justify-center font-bold text-sm shrink-0", avatar.bg, avatar.textColor)}>
+                  {initials}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h4 className="text-base font-bold text-text-primary truncate">{user.name}</h4>
+                  <p className="text-sm font-light text-text-secondary truncate">{formatEmail(user)}</p>
+                </div>
+                <span className={cn("inline-flex items-center px-2 py-1 rounded-full text-xs font-bold", rankBadge.bg, rankBadge.text)}>
+                  {user.rank}
+                </span>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <div>
+                  <p className="text-xs text-text-tertiary uppercase">Org</p>
+                  <p className="text-text-primary font-medium">{getOrganization(user)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-text-tertiary uppercase">Division</p>
+                  <p className="text-text-secondary font-light">{user.division}</p>
+                </div>
+              </div>
+              
+              <div className="flex items-center justify-end gap-1 pt-2 border-t border-border/20">
+                <button
+                  onClick={() => setEditingUser(user)}
+                  className="p-2 text-text-secondary hover:bg-surface rounded-lg transition-colors"
+                >
+                  <Edit2 className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={() => setDeletingUser(user)}
+                  className="p-2 text-text-secondary hover:bg-red-50 hover:text-red-600 rounded-lg transition-colors"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+          );
+        }) : (
+          <div className="p-8 text-center text-text-tertiary bg-white border border-border/30 rounded-2xl">
+            No people found.
+          </div>
+        )}
+        
+        {/* Mobile Pagination */}
+        {filteredUsers.length > 0 && (
+          <div className="flex items-center justify-between pt-2">
+            <button 
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+              className="h-10 w-10 flex items-center justify-center rounded-2xl bg-surface hover:bg-border-hover transition-colors disabled:opacity-50"
+              aria-label="Previous page"
+            >
+              <ChevronRight className="h-4 w-4 rotate-180" />
+            </button>
+            <span className="text-xs text-text-secondary">Page {currentPage} / {totalPages}</span>
+            <button 
+              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+              disabled={currentPage === totalPages}
+              className="h-10 w-10 flex items-center justify-center rounded-2xl bg-surface hover:bg-border-hover transition-colors disabled:opacity-50"
+              aria-label="Next page"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+        )}
+      </div>
+
       {/* Stats OVERLAY CARDS */}
-      <div className="grid grid-cols-3 gap-6 shrink-0 mt-6">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 shrink-0 mt-6">
         <div className="bg-sage/20 border border-primary/10 rounded-[24px] p-6 flex flex-col gap-4">
           <div className="flex items-start justify-between">
             <div>
               <h3 className="text-sm tracking-widest uppercase text-text-secondary font-light">Total Members</h3>
-              <p className="text-3xl font-bold text-primary font-literata">{initialUsers.length}</p>
+              <p className="text-3xl font-bold text-primary font-literata">{totalMembers}</p>
             </div>
             <UsersIcon className="h-6 w-6 text-status-green" />
           </div>
-          <p className="text-xs text-status-green font-medium">+12% from last quarter</p>
+          <p className="text-xs text-status-green font-medium">Active directory</p>
         </div>
         
         <div className="bg-amber/20 border border-status-amber/10 rounded-[24px] p-6 flex flex-col gap-4">
           <div className="flex items-start justify-between">
             <div>
               <h3 className="text-sm tracking-widest uppercase text-text-secondary font-light">Active Teams</h3>
-              <p className="text-3xl font-bold text-status-amber font-literata">{activeTeamsCount}</p>
+              <p className="text-3xl font-bold text-status-amber font-literata">{activeTeams}</p>
             </div>
             <ActivityIcon className="h-6 w-6 text-status-amber" />
           </div>
-          <p className="text-xs text-status-amber font-medium">Distributed across 6 continents</p>
+          <p className="text-xs text-status-amber font-medium">Across divisions</p>
         </div>
         
         <div className="bg-warm border border-text-secondary/10 rounded-[24px] p-6 flex flex-col gap-4">
           <div className="flex items-start justify-between">
             <div>
               <h3 className="text-sm tracking-widest uppercase text-text-secondary font-light">Pending Invites</h3>
-              <p className="text-3xl font-bold text-text-primary font-literata">18</p>
+              <p className="text-3xl font-bold text-text-primary font-literata">—</p>
             </div>
             <InviteIcon className="h-6 w-6 text-text-secondary" />
           </div>
-          <p className="text-xs text-text-secondary font-medium">Avg. acceptance time: 4 hours</p>
+          <p className="text-xs text-text-secondary font-medium">Invitation tracking</p>
         </div>
       </div>
 
@@ -277,9 +429,27 @@ export function DirectoryClient({ initialUsers, activeTeamsCount }: DirectoryCli
         onClose={() => setIsAddModalOpen(false)} 
         onAdd={handleAddUser} 
       />
+
+      <EditUserModal
+        isOpen={editingUser !== null}
+        onClose={() => setEditingUser(null)}
+        user={editingUser}
+        existingRanks={existingRanks}
+        onSave={handleEditUser}
+      />
+
+      <DeleteUserModal
+        isOpen={deletingUser !== null}
+        onClose={() => setDeletingUser(null)}
+        user={deletingUser}
+        onDelete={handleDeleteUser}
+      />
     </div>
   );
 }
+
+// Export memoized version to prevent unnecessary re-renders
+export const DirectoryClient = memo(DirectoryClientComponent);
 
 // Temporary icons until proper import
 function UsersIcon(props: any) {

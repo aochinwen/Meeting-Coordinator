@@ -1,19 +1,20 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
-  Users, User as UserIcon, PlusCircle, Settings, Calendar as CalendarIcon, 
+  Users, User as UserIcon, PlusCircle, Calendar as CalendarIcon, 
   Clock, Repeat, UserPlus, Lightbulb, AlertTriangle, Eye, Sparkles, AlertCircle
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { User } from '@supabase/supabase-js';
 import { createClient } from '@/utils/supabase/client';
-import { createMeetingSeries, checkConflicts } from '@/lib/meetings';
-import { formatRecurrencePattern, calculateEndTime } from '@/lib/recurrence';
-import { generateOccurrences, RecurrenceConfig } from '@/lib/recurrence';
+import { createMeetingSeries, checkConflicts, addMeetingParticipants } from '@/lib/meetings';
+import { formatRecurrencePattern, calculateEndTime, generateOccurrences, getEndDateForCount, RecurrenceConfig } from '@/lib/recurrence';
+import { bookRoom, bookRoomForRecurrentMeetings, Room } from '@/lib/rooms';
 import { MeetingTemplateModal } from '@/components/MeetingTemplateModal';
 import { MeetingCreatedModal } from '@/components/MeetingCreatedModal';
+import { RoomSelector } from '@/components/RoomSelector';
 
 interface ScheduleClientProps {
   initialTemplates?: Template[];
@@ -43,32 +44,77 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
   // Users for participant selection
   const [users, setUsers] = useState<UserData[]>([]);
   
+  // Read URL params synchronously at mount so initial state is prefilled when
+  // arriving from the Room Calendar drag flow. Using window.location here
+  // (instead of `useSearchParams` + a post-mount effect) avoids a flash of
+  // default values between first paint and the effect running, and sidesteps
+  // any Next 16 prerendering/Suspense quirks around the `useSearchParams` hook.
+  const prefill = (() => {
+    if (typeof window === 'undefined') return null;
+    const sp = new URLSearchParams(window.location.search);
+    const room = sp.get('room');
+    const date = sp.get('date');
+    const time = sp.get('time');
+    const endTime = sp.get('endTime');
+    if (!room && !date && !time) return null;
+    let durationMins: number | null = null;
+    if (time && endTime) {
+      const [sh, sm] = time.split(':').map(Number);
+      const [eh, em] = endTime.split(':').map(Number);
+      const m = (eh - sh) * 60 + (em - sm);
+      if (Number.isFinite(m) && m > 0) durationMins = m;
+    }
+    return { room, date, time, endTime, durationMins };
+  })();
+
   // Form state
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [schedulingMode, setSchedulingMode] = useState<'smart' | 'manual'>('smart');
-  const [duration, setDuration] = useState(30);
+  const [duration, setDuration] = useState<number>(prefill?.durationMins ?? 30);
+  const [isCustomDuration, setIsCustomDuration] = useState(false);
+  const [customEndTime, setCustomEndTime] = useState<string>(() => {
+    const [hours, minutes] = (prefill?.time ?? '10:00').split(':').map(Number);
+    const totalMinutes = hours * 60 + minutes + (prefill?.durationMins ?? 30);
+    const endHours = Math.floor(totalMinutes / 60) % 24;
+    const endMinutes = totalMinutes % 60;
+    return `${endHours.toString().padStart(2, '0')}:${endMinutes.toString().padStart(2, '0')}`;
+  });
   const [bufferTime, setBufferTime] = useState(5);
-  const [frequency, setFrequency] = useState<'weekly' | 'bi-weekly' | 'monthly'>('weekly');
+  const [frequency, setFrequency] = useState<'daily' | 'weekly' | 'bi-weekly' | 'monthly'>('weekly');
   const [selectedDays, setSelectedDays] = useState<string[]>(['M', 'W']);
-  const [isRecurring, setIsRecurring] = useState(true);
+  // A dragged range represents a one-off booking, not a series.
+  const [isRecurring, setIsRecurring] = useState(prefill ? false : true);
+  const [endRule, setEndRule] = useState<'never' | 'count' | 'date'>('date');
+  const [endCount, setEndCount] = useState(10);
+  const [endDate, setEndDate] = useState<string>(() => {
+    const d = new Date();
+    d.setMonth(d.getMonth() + 3);
+    return d.toISOString().split('T')[0];
+  });
   const [startDate, setStartDate] = useState(() => {
+    if (prefill?.date) return prefill.date;
     const today = new Date();
     return today.toISOString().split('T')[0];
   });
-  const [startTime, setStartTime] = useState('10:00');
+  const [startTime, setStartTime] = useState(prefill?.time ?? '10:00');
   const [selectedParticipants, setSelectedParticipants] = useState<string[]>([]);
   
   // Meeting Roles - Chairman and Coordinator
   const [chairmanId, setChairmanId] = useState<string>('');
   const [coordinatorId, setCoordinatorId] = useState<string>('');
   
+  // Room selection
+  const [selectedRoomId, setSelectedRoomId] = useState<string | null>(prefill?.room ?? null);
+  const [roomBookingErrors, setRoomBookingErrors] = useState<string[]>([]);
+  
   // Derived state for UI
-  const endTime = calculateEndTime(startTime, duration);
+  const calculatedEndTime = calculateEndTime(startTime, duration);
+  const endTime = isCustomDuration ? customEndTime : calculatedEndTime;
   
   // Preview occurrences
   const [previewDates, setPreviewDates] = useState<Date[]>([]);
+  const [totalOccurrences, setTotalOccurrences] = useState<number | null>(null);
   
   // Conflict detection
   const [conflicts, setConflicts] = useState<Array<{
@@ -81,7 +127,9 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
   }>>([]);
   
   // Modal states
-  const [showTemplateModal, setShowTemplateModal] = useState(true);
+  // Skip the template picker when the user arrived via a drag-selected
+  // timeslot — they've already expressed intent for a specific slot/room.
+  const [showTemplateModal, setShowTemplateModal] = useState(!prefill);
   const [showCreatedModal, setShowCreatedModal] = useState(false);
   const [createdMeeting, setCreatedMeeting] = useState<{
     id: string;
@@ -93,14 +141,58 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
     occurrencesCount?: number;
   } | null>(null);
   
-  // Load users on mount
+  // Apply URL prefill after mount. The lazy `useState` initializers above
+  // cover client-only navigation, but under Next.js SSR the initializers
+  // run on the server (where `window` is undefined) and React does NOT
+  // re-run them during client hydration — so without this effect the form
+  // would hydrate to defaults even when query params are present.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const sp = new URLSearchParams(window.location.search);
+    const room = sp.get('room');
+    const date = sp.get('date');
+    const time = sp.get('time');
+    const endTimeParam = sp.get('endTime');
+    if (!room && !date && !time) return;
+    if (room) setSelectedRoomId(room);
+    if (date) setStartDate(date);
+    if (time) setStartTime(time);
+    if (time && endTimeParam) {
+      const [sh, sm] = time.split(':').map(Number);
+      const [eh, em] = endTimeParam.split(':').map(Number);
+      const mins = (eh - sh) * 60 + (em - sm);
+      if (Number.isFinite(mins) && mins > 0) setDuration(mins);
+    }
+    setIsRecurring(false);
+    setShowTemplateModal(false);
+    // Empty deps — run once on mount. We deliberately ignore later URL
+    // changes so user edits to form fields aren't overwritten.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Load users on mount (exclude rejected users from user_approvals)
   useEffect(() => {
     async function loadUsers() {
-      const { data, error } = await supabase
-        .from('profiles')
+      // First, get rejected user IDs from user_approvals
+      const { data: rejectedApprovals } = await supabase
+        .from('user_approvals')
+        .select('user_id')
+        .eq('status', 'rejected');
+
+      const rejectedIds = rejectedApprovals?.map(a => a.user_id) || [];
+
+      // Then fetch people, excluding rejected users
+      let query = supabase
+        .from('people')
         .select('id, name, division')
         .order('name');
-      
+
+      if (rejectedIds.length > 0) {
+        query = query.not('id', 'in', `(${rejectedIds.join(',')})`);
+      }
+
+      const { data, error } = await query;
+
       if (!error && data) {
         setUsers(data);
       }
@@ -108,22 +200,78 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
     loadUsers();
   }, []);
   
-  // Update preview when recurrence settings change
-  useEffect(() => {
-    if (isRecurring && frequency && startDate) {
+  // Derive end_date from the end rule
+  const resolvedEndDate: string | null = (() => {
+    if (!isRecurring) return null;
+    if (endRule === 'never') return null;
+    if (endRule === 'date') return endDate || null;
+    if (endRule === 'count') {
       const config: RecurrenceConfig = {
         frequency,
         daysOfWeek: selectedDays,
         startDate: new Date(startDate),
         endDate: null,
       };
-      const occurrences = generateOccurrences(config, 5);
-      setPreviewDates(occurrences);
+      const d = getEndDateForCount(config, endCount);
+      return d ? d.toISOString().split('T')[0] : null;
+    }
+    return null;
+  })();
+
+  // Update preview when recurrence settings change
+  useEffect(() => {
+    if (isRecurring && frequency && startDate) {
+      const parsedEnd = resolvedEndDate ? new Date(resolvedEndDate + 'T00:00:00') : null;
+      const config: RecurrenceConfig = {
+        frequency,
+        daysOfWeek: selectedDays,
+        startDate: new Date(startDate),
+        endDate: parsedEnd,
+      };
+      const startDateMinus1 = new Date(startDate + 'T00:00:00');
+      startDateMinus1.setDate(startDateMinus1.getDate() - 1);
+      const preview = generateOccurrences(config, 5, startDateMinus1);
+      setPreviewDates(preview);
+
+      if (parsedEnd) {
+        const allForCount = generateOccurrences(config, 10000, startDateMinus1);
+        setTotalOccurrences(allForCount.length);
+      } else {
+        setTotalOccurrences(null);
+      }
     } else {
       setPreviewDates([]);
+      setTotalOccurrences(null);
     }
-  }, [frequency, selectedDays, startDate, isRecurring]);
-  
+  }, [frequency, selectedDays, startDate, isRecurring, endRule, endCount, endDate]);
+
+  // Full list of occurrence dates (YYYY-MM-DD) for the room-availability
+  // check. For one-off meetings this is just `[startDate]`. For recurring
+  // meetings we enumerate every date — capped at 100 to match the endCount
+  // UI max and to keep the pre-submit query bounded when endRule='never'.
+  const allOccurrenceDates = useMemo<string[]>(() => {
+    if (!startDate) return [];
+    if (!isRecurring) return [startDate];
+
+    const parsedEnd = resolvedEndDate ? new Date(resolvedEndDate + 'T00:00:00') : null;
+    const config: RecurrenceConfig = {
+      frequency,
+      daysOfWeek: selectedDays,
+      startDate: new Date(startDate),
+      endDate: parsedEnd,
+    };
+    const startDateMinus1 = new Date(startDate + 'T00:00:00');
+    startDateMinus1.setDate(startDateMinus1.getDate() - 1);
+    const cap = endRule === 'count' ? Math.max(1, Math.min(100, endCount)) : 100;
+    const all = generateOccurrences(config, cap, startDateMinus1);
+    return all.map((d) => {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    });
+  }, [isRecurring, startDate, frequency, selectedDays, resolvedEndDate, endRule, endCount]);
+
   // Check for conflicts when relevant fields change
   useEffect(() => {
     async function detectConflicts() {
@@ -138,7 +286,7 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
       }
     }
     detectConflicts();
-  }, [selectedParticipants, startDate, startTime]);
+  }, [selectedParticipants, startDate, startTime, endTime]);
   
   const toggleDay = (day: string) => {
     if (selectedDays.includes(day)) {
@@ -200,12 +348,69 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
           frequency,
           days_of_week: selectedDays,
           start_date: startDate,
+          end_date: resolvedEndDate || undefined,
           start_time: startTime,
           end_time: endTime,
           duration_minutes: duration,
           buffer_minutes: bufferTime,
           participants: selectedParticipants,
+          chairman_id: chairmanId || undefined,
+          coordinator_id: coordinatorId || undefined,
         }, currentUser?.id);
+        
+        // Book room for recurring meetings if selected
+        if (selectedRoomId) {
+          const { data: seriesMeetings } = await supabase
+            .from('meetings')
+            .select('id, date, start_time, end_time')
+            .eq('series_id', seriesId)
+            .order('date');
+          
+          if (seriesMeetings && seriesMeetings.length > 0) {
+            const bookingResult = await bookRoomForRecurrentMeetings(
+              selectedRoomId,
+              seriesMeetings.map(m => ({
+                meetingId: m.id,
+                date: m.date,
+                startTime: m.start_time || startTime,
+                endTime: m.end_time || endTime,
+              }))
+            );
+            
+            if (!bookingResult.success && bookingResult.failedDates.length > 0) {
+              setRoomBookingErrors(
+                bookingResult.failedDates.map(f => 
+                  `${f.date}: ${f.error}${f.suggestions ? ` (Alternatives: ${f.suggestions.slice(0, 3).map(s => `${s.startTime}-${s.endTime}`).join(', ')})` : ''}`
+                )
+              );
+            }
+          }
+        }
+        
+        // Add checklist tasks to all meetings in the series if any
+        if (meetingTasks.length > 0) {
+          const { data: seriesMeetings } = await supabase
+            .from('meetings')
+            .select('id')
+            .eq('series_id', seriesId);
+          
+          if (seriesMeetings && seriesMeetings.length > 0) {
+            const allTasks = seriesMeetings.flatMap(meeting =>
+              meetingTasks.map(task => ({
+                meeting_id: meeting.id,
+                description: task.description,
+                is_completed: false,
+                due_days_before: task.due_days_before ?? null,
+              }))
+            );
+            
+            const { error: taskError } = await supabase
+              .from('meeting_checklist_tasks')
+              .insert(allTasks);
+            
+            if (taskError) console.error('Error adding tasks to series:', taskError);
+          }
+        }
       } else {
         // Create single one-time meeting directly
         const { data: meeting, error } = await supabase
@@ -217,6 +422,8 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
             start_time: startTime,
             end_time: endTime,
             status: 'scheduled',
+            chairman_id: chairmanId || null,
+            coordinator_id: coordinatorId || null,
           })
           .select('id')
           .single();
@@ -226,21 +433,11 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
         
         // Add participants if any
         if (selectedParticipants.length > 0) {
-          const { error: participantError } = await supabase
-            .from('meeting_participants')
-            .insert(
-              selectedParticipants.map(userId => ({
-                meeting_id: seriesId,
-                user_id: userId,
-                status: 'invited',
-                is_required: true,
-              }))
-            );
-          if (participantError) console.error('Error adding participants:', participantError);
+          await addMeetingParticipants(seriesId, selectedParticipants, true);
         }
         
-        // Copy checklist tasks from template if selected
-        if (selectedTemplate && meetingTasks.length > 0) {
+        // Add checklist tasks if any
+        if (meetingTasks.length > 0) {
           const { error: taskError } = await supabase
             .from('meeting_checklist_tasks')
             .insert(
@@ -248,9 +445,27 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
                 meeting_id: seriesId,
                 description: task.description,
                 is_completed: false,
+                due_days_before: task.due_days_before ?? null,
               }))
             );
           if (taskError) console.error('Error adding tasks:', taskError);
+        }
+        
+        // Book room for single meeting if selected
+        if (selectedRoomId) {
+          const bookingResult = await bookRoom({
+            roomId: selectedRoomId,
+            meetingId: seriesId,
+            date: startDate,
+            startTime: startTime,
+            endTime: endTime,
+          });
+          
+          if (!bookingResult.success) {
+            setRoomBookingErrors([
+              `Room booking failed: ${bookingResult.error}${bookingResult.suggestions ? ` (Alternatives: ${bookingResult.suggestions.slice(0, 3).map(s => `${s.startTime}-${s.endTime}`).join(', ')})` : ''}`
+            ]);
+          }
         }
       }
       
@@ -276,28 +491,53 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
   };
   
   // Meeting checklist tasks
-  const [meetingTasks, setMeetingTasks] = useState<Array<{ id: string; description: string }>>([]);
+  const [meetingTasks, setMeetingTasks] = useState<Array<{ id: string; description: string; due_days_before: number | null; dueDateMode: 'days' | 'date' }>>([]);
   const [newMeetingTask, setNewMeetingTask] = useState('');
 
   const handleAddMeetingTask = () => {
     if (!newMeetingTask.trim()) return;
-    setMeetingTasks([...meetingTasks, { id: crypto.randomUUID(), description: newMeetingTask.trim() }]);
+    setMeetingTasks([...meetingTasks, { id: crypto.randomUUID(), description: newMeetingTask.trim(), due_days_before: null, dueDateMode: 'days' }]);
     setNewMeetingTask('');
   };
 
   const removeMeetingTask = (taskId: string) => {
     setMeetingTasks(meetingTasks.filter(t => t.id !== taskId));
   };
+
+  const updateTaskDueDays = (taskId: string, value: number | null) => {
+    setMeetingTasks(meetingTasks.map(t => t.id === taskId ? { ...t, due_days_before: value } : t));
+  };
+
+  const toggleTaskDueDateMode = (taskId: string) => {
+    setMeetingTasks(meetingTasks.map(t => {
+      if (t.id !== taskId) return t;
+      return { ...t, dueDateMode: t.dueDateMode === 'days' ? 'date' : 'days' };
+    }));
+  };
+
+  const handleTaskDatePickerChange = (taskId: string, dateStr: string) => {
+    if (!dateStr || !startDate) {
+      updateTaskDueDays(taskId, null);
+      return;
+    }
+    const meetingDate = new Date(startDate + 'T00:00:00');
+    const pickedDate = new Date(dateStr + 'T00:00:00');
+    const diffMs = meetingDate.getTime() - pickedDate.getTime();
+    const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+    updateTaskDueDays(taskId, diffDays);
+  };
+
+  const computeTaskAbsoluteDate = (due_days_before: number | null, meetingDateStr: string): string => {
+    if (due_days_before === null || !meetingDateStr) return '';
+    const d = new Date(meetingDateStr + 'T00:00:00');
+    d.setDate(d.getDate() - due_days_before);
+    return d.toISOString().split('T')[0];
+  };
+
   const handleTemplateSelect = async (templateId: string | null) => {
     setSelectedTemplate(templateId);
     
     if (templateId) {
-      // Find template info from initial templates
-      const template = initialTemplates.find(t => t.id === templateId);
-      if (template) {
-        setTitle(template.name);
-      }
-      
       // Fetch full template data including chairman and tasks
       try {
         const { data: templateData } = await supabase
@@ -314,13 +554,15 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
         // Fetch checklist tasks
         const { data: tasksData } = await supabase
           .from('template_checklist_tasks')
-          .select('description')
+          .select('description, due_days_before')
           .eq('template_id', templateId);
         
         if (tasksData) {
-          setMeetingTasks(tasksData.map((task, index) => ({
+          setMeetingTasks((tasksData as any[]).map((task) => ({
             id: crypto.randomUUID(),
-            description: task.description
+            description: task.description,
+            due_days_before: task.due_days_before ?? null,
+            dueDateMode: 'days' as const,
           })));
         }
       } catch (error) {
@@ -339,12 +581,12 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
   const recurrenceDisplay = isRecurring ? formatRecurrencePattern(frequency, selectedDays) : 'One-time meeting';
 
   return (
-    <div className="max-w-[1280px] mx-auto pb-24 pt-8 space-y-8">
+    <div className="max-w-[1280px] mx-auto pb-24 pt-8 space-y-8 px-4 sm:px-6 lg:px-8">
       {/* Header */}
           <div className="flex flex-col gap-6">
-            <div className="flex items-end justify-between shrink-0">
+            <div className="flex flex-col gap-4 sm:gap-6 sm:flex-row sm:items-end sm:justify-between shrink-0">
               <div className="flex flex-col gap-2">
-                <h1 className="text-4xl font-bold tracking-tight text-text-primary font-literata">
+                <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-text-primary font-literata">
                   Schedule New Meeting
                 </h1>
                 <p className="text-base font-light text-text-secondary">
@@ -360,11 +602,34 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
               </div>
             )}
 
+            {roomBookingErrors.length > 0 && (
+              <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4">
+                <div className="flex items-start gap-3">
+                  <AlertCircle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-amber-800 mb-2">
+                      Some room bookings could not be completed:
+                    </p>
+                    <ul className="space-y-1">
+                      {roomBookingErrors.map((err, idx) => (
+                        <li key={idx} className="text-sm text-amber-700 font-light">
+                          {err}
+                        </li>
+                      ))}
+                    </ul>
+                    <p className="text-xs text-amber-600 mt-2">
+                      The meetings were created successfully. You can modify room bookings individually from the meeting details.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="flex gap-4">
               <button 
                 onClick={handleSubmit}
                 disabled={isSubmitting}
-                className="px-6 py-3 bg-primary text-white rounded-2xl text-base font-bold shadow-md transition-all active:scale-95 hover:bg-primary/90 disabled:opacity-50"
+                className="w-full sm:w-auto px-5 sm:px-6 py-3 bg-primary text-white rounded-2xl text-sm sm:text-base font-bold shadow-md transition-all active:scale-95 hover:bg-primary/90 disabled:opacity-50"
               >
                 {isSubmitting ? 'Creating...' : 'Publish Schedule'}
               </button>
@@ -372,11 +637,45 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
           </div>
 
       {/* Grid Layout */}
-      <div className="grid grid-cols-12 gap-8 shrink-0">
-        
+      <div className="flex flex-col sm:flex-row gap-6 sm:gap-8 shrink-0 w-full">
+
         {/* Left Column - Configuration */}
-        <div className="col-span-8 flex flex-col gap-8">
-          
+        <div className="w-full sm:flex-[2] flex flex-col gap-6 sm:gap-8 min-w-0">
+
+          {/* Meeting Details */}
+          <div className="bg-white border border-border/20 rounded-[24px] p-6 flex flex-col gap-6 shadow-sm">
+            <div className="flex items-center gap-3">
+              <CalendarIcon className="h-5 w-5 text-text-primary" />
+              <h2 className="text-xl font-bold text-text-primary font-literata">
+                Meeting Details
+              </h2>
+            </div>
+
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-2">
+                <label className="text-sm font-bold text-text-primary">Meeting Name <span className="text-coral-text">*</span></label>
+                <input
+                  type="text"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="Enter meeting name..."
+                  className="w-full px-4 py-3 bg-surface border-none rounded-2xl text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/20 text-sm font-light"
+                />
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <label className="text-sm font-bold text-text-primary">Description</label>
+                <textarea
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Add meeting description or agenda..."
+                  rows={3}
+                  className="w-full px-4 py-3 bg-surface border-none rounded-2xl text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/20 text-sm font-light resize-none"
+                />
+              </div>
+            </div>
+          </div>
+
           {/* Recurrence Settings */}
           <div className="bg-white border border-border/20 rounded-[24px] p-6 flex flex-col gap-6 shadow-sm">
             <div className="flex items-center justify-between">
@@ -404,47 +703,132 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
             </div>
             
             {isRecurring && (
-              <div className="grid grid-cols-2 gap-8">
-                <div className="flex flex-col gap-3">
-                  <label className="text-xs font-bold text-text-secondary uppercase tracking-widest">Frequency</label>
-                  <div className="flex bg-status-grey-bg rounded-[16px] p-1">
-                    {(['weekly', 'bi-weekly', 'monthly'] as const).map((freq) => (
-                      <button
-                        key={freq}
-                        onClick={() => setFrequency(freq)}
-                        className={cn(
-                          "flex-1 py-1.5 rounded-[12px] text-sm font-bold transition-all capitalize",
-                          frequency === freq 
-                            ? "bg-white text-text-primary shadow-sm" 
-                            : "text-text-primary hover:bg-white/50"
-                        )}
-                      >
-                        {freq === 'weekly' ? 'Weekly' : freq === 'bi-weekly' ? 'Bi-Weekly' : 'Monthly'}
-                      </button>
-                    ))}
+              <div className="flex flex-col gap-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 sm:gap-8">
+                  <div className="flex flex-col gap-3">
+                    <label className="text-xs font-bold text-text-secondary uppercase tracking-widest">Frequency</label>
+                    <div className="flex bg-status-grey-bg rounded-[16px] p-1">
+                      {(['daily', 'weekly', 'bi-weekly', 'monthly'] as const).map((freq) => (
+                        <button
+                          key={freq}
+                          onClick={() => setFrequency(freq)}
+                          className={cn(
+                            "flex-1 py-1.5 rounded-[12px] text-sm font-bold transition-all capitalize",
+                            frequency === freq 
+                              ? "bg-white text-text-primary shadow-sm" 
+                              : "text-text-primary hover:bg-white/50"
+                          )}
+                        >
+                          {freq === 'daily' ? 'Daily' : freq === 'weekly' ? 'Weekly' : freq === 'bi-weekly' ? 'Bi-Weekly' : 'Monthly'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-3">
+                    <label className="text-xs font-bold text-text-secondary uppercase tracking-widest">Repeat Days</label>
+                    <div className="flex items-center gap-2 mt-1">
+                      {['M', 'T', 'W', 'Th', 'F'].map((day) => {
+                        const mappedDay = day === 'Th' ? 'T' : day;
+                        return (
+                          <button
+                            key={day}
+                            onClick={() => toggleDay(day)}
+                            className={cn(
+                              "h-10 w-10 rounded-full flex items-center justify-center text-sm font-bold transition-all border",
+                              selectedDays.includes(day)
+                                ? "bg-primary text-white border-primary"
+                                : "bg-status-grey-bg text-text-primary border-transparent hover:bg-cream"
+                            )}
+                          >
+                            {mappedDay}
+                          </button>
+                        )
+                      })}
+                    </div>
                   </div>
                 </div>
 
-                <div className="flex flex-col gap-3">
-                  <label className="text-xs font-bold text-text-secondary uppercase tracking-widest">Repeat Days</label>
-                  <div className="flex items-center gap-2 mt-1">
-                    {['M', 'T', 'W', 'Th', 'F'].map((day) => {
-                      const mappedDay = day === 'Th' ? 'T' : day;
-                      return (
-                        <button
-                          key={day}
-                          onClick={() => toggleDay(day)}
-                          className={cn(
-                            "h-10 w-10 rounded-full flex items-center justify-center text-sm font-bold transition-all border",
-                            selectedDays.includes(day)
-                              ? "bg-primary text-white border-primary"
-                              : "bg-status-grey-bg text-text-primary border-transparent hover:bg-cream"
-                          )}
-                        >
-                          {mappedDay}
-                        </button>
-                      )
-                    })}
+                {/* End Rule */}
+                <div className="flex flex-col gap-3 border-t border-border/20 pt-5">
+                  <label className="text-xs font-bold text-text-secondary uppercase tracking-widest">Ends</label>
+                  <div className="flex flex-col gap-3">
+                    {/* Never */}
+                    <div
+                      className={cn(
+                        "flex items-center gap-4 p-4 rounded-2xl border-2 cursor-pointer transition-all",
+                        endRule === 'never' ? "border-primary bg-surface/50" : "border-border/50 hover:border-primary/30"
+                      )}
+                      onClick={() => setEndRule('never')}
+                    >
+                      <div className={cn("h-5 w-5 rounded-full border-2 flex items-center justify-center shrink-0", endRule === 'never' ? "border-primary bg-primary" : "border-border/50")}>
+                        {endRule === 'never' && <div className="h-2 w-2 rounded-full bg-white" />}
+                      </div>
+                      <div>
+                        <h4 className="font-bold text-text-primary text-sm">No end</h4>
+                        <p className="text-xs font-light text-text-secondary">Series continues indefinitely</p>
+                      </div>
+                    </div>
+
+                    {/* After N occurrences */}
+                    <div
+                      className={cn(
+                        "flex items-center gap-4 p-4 rounded-2xl border-2 cursor-pointer transition-all",
+                        endRule === 'count' ? "border-primary bg-surface/50" : "border-border/50 hover:border-primary/30"
+                      )}
+                      onClick={() => setEndRule('count')}
+                    >
+                      <div className={cn("h-5 w-5 rounded-full border-2 flex items-center justify-center shrink-0", endRule === 'count' ? "border-primary bg-primary" : "border-border/50")}>
+                        {endRule === 'count' && <div className="h-2 w-2 rounded-full bg-white" />}
+                      </div>
+                      <div className="flex-1">
+                        <h4 className="font-bold text-text-primary text-sm mb-1">After occurrences</h4>
+                        {endRule === 'count' ? (
+                          <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                            <input
+                              type="number"
+                              min={1}
+                              max={100}
+                              value={endCount}
+                              onChange={(e) => setEndCount(Math.max(1, Math.min(100, parseInt(e.target.value) || 1)))}
+                              className="w-20 px-3 py-1.5 bg-white border border-border rounded-xl text-sm font-bold text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/20 text-center"
+                            />
+                            <span className="text-xs font-light text-text-secondary">occurrences (max 100)</span>
+                          </div>
+                        ) : (
+                          <p className="text-xs font-light text-text-secondary">Stop after a set number of meetings</p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Until date */}
+                    <div
+                      className={cn(
+                        "flex items-center gap-4 p-4 rounded-2xl border-2 cursor-pointer transition-all",
+                        endRule === 'date' ? "border-primary bg-surface/50" : "border-border/50 hover:border-primary/30"
+                      )}
+                      onClick={() => setEndRule('date')}
+                    >
+                      <div className={cn("h-5 w-5 rounded-full border-2 flex items-center justify-center shrink-0", endRule === 'date' ? "border-primary bg-primary" : "border-border/50")}>
+                        {endRule === 'date' && <div className="h-2 w-2 rounded-full bg-white" />}
+                      </div>
+                      <div className="flex-1">
+                        <h4 className="font-bold text-text-primary text-sm mb-1">Until date</h4>
+                        {endRule === 'date' ? (
+                          <div onClick={(e) => e.stopPropagation()}>
+                            <input
+                              type="date"
+                              value={endDate}
+                              min={startDate}
+                              onChange={(e) => setEndDate(e.target.value)}
+                              className="w-full px-3 py-1.5 bg-white border border-border rounded-xl text-sm font-light text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                            />
+                          </div>
+                        ) : (
+                          <p className="text-xs font-light text-text-secondary">Stop on a specific calendar date</p>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -455,110 +839,99 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
                 This meeting will occur once on the selected date.
               </p>
             )}
-          </div>
 
-          {/* Scheduling Mode & Session Timing */}
-          <div className="bg-white border border-border/20 rounded-[24px] p-6 flex flex-col gap-8 shadow-sm">
-            <div className="flex items-center gap-3">
-              <Settings className="h-5 w-5 text-text-primary" />
-              <h2 className="text-xl font-bold text-text-primary font-literata">
-                Scheduling Mode & Session Timing
-              </h2>
-            </div>
-            
-            <div className="grid grid-cols-2 gap-8">
-              {/* Left Side - Mode */}
-              <div className="flex flex-col gap-4">
-                <label className="text-sm font-bold text-text-primary">Scheduling Mode</label>
-                
-                <div 
-                  className={cn(
-                    "flex items-start gap-4 p-4 rounded-2xl border-2 cursor-pointer transition-all",
-                    schedulingMode === 'smart' ? "border-primary bg-surface/50" : "border-border/50 hover:border-primary/30"
-                  )}
-                  onClick={() => setSchedulingMode('smart')}
-                >
-                  <div className={cn("mt-1 h-5 w-5 rounded-full border-2 flex items-center justify-center shrink-0", schedulingMode === 'smart' ? "border-primary bg-primary" : "border-border/50")}>
-                    {schedulingMode === 'smart' && <div className="h-2 w-2 rounded-full bg-white" />}
-                  </div>
-                  <div>
-                    <h4 className="font-bold text-text-primary text-sm mb-1">Smart Availability</h4>
-                    <p className="text-xs font-light text-text-secondary">System finds best slots for everyone</p>
-                  </div>
-                </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t border-border/20 pt-5">
+              <div className="flex flex-col gap-3">
+                <label className="text-sm font-bold text-text-primary">Start Date</label>
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="w-full px-4 py-3 bg-surface border-none rounded-2xl text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/20 text-sm font-light"
+                />
+              </div>
 
-                <div 
-                  className={cn(
-                    "flex items-start gap-4 p-4 rounded-2xl border-2 cursor-pointer transition-all",
-                    schedulingMode === 'manual' ? "border-primary bg-surface/50" : "border-border/50 hover:border-primary/30"
-                  )}
-                  onClick={() => setSchedulingMode('manual')}
-                >
-                  <div className={cn("mt-1 h-5 w-5 rounded-full border-2 flex items-center justify-center shrink-0", schedulingMode === 'manual' ? "border-primary bg-primary" : "border-border/50")}>
-                    {schedulingMode === 'manual' && <div className="h-2 w-2 rounded-full bg-white" />}
-                  </div>
-                  <div>
-                    <h4 className="font-bold text-text-primary text-sm mb-1">Manual Slotting</h4>
-                    <p className="text-xs font-light text-text-secondary">Pick exact time and date manually</p>
-                  </div>
+              <div className="flex flex-col gap-3">
+                <label className="text-sm font-bold text-text-primary">Start Time</label>
+                <input
+                  type="time"
+                  value={startTime}
+                  onChange={(e) => setStartTime(e.target.value)}
+                  className="w-full px-4 py-3 bg-surface border-none rounded-2xl text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/20 text-sm font-light"
+                />
+                <div className="flex flex-wrap items-center gap-2 pt-1">
+                  {[15, 30, 60].map((dur) => (
+                    <button
+                      key={dur}
+                      type="button"
+                      onClick={() => {
+                        setDuration(dur);
+                        setIsCustomDuration(false);
+                      }}
+                      className={cn(
+                        "px-4 py-2 rounded-full text-sm font-bold transition-all",
+                        !isCustomDuration && duration === dur
+                          ? "bg-primary text-white shadow-sm"
+                          : "bg-status-grey-bg text-text-primary hover:bg-cream"
+                      )}
+                    >
+                      {dur === 60 ? '1h' : `${dur}m`}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => setIsCustomDuration(true)}
+                    className={cn(
+                      "px-4 py-2 rounded-full text-sm font-bold transition-all",
+                      isCustomDuration
+                        ? "bg-primary text-white shadow-sm"
+                        : "bg-status-grey-bg text-text-primary hover:bg-cream"
+                    )}
+                  >
+                    Custom
+                  </button>
                 </div>
               </div>
 
-              {/* Right Side - Timing */}
-              <div className="flex flex-col gap-6">
-                <div className="flex flex-col gap-3">
-                  <label className="text-sm font-bold text-text-primary">Duration</label>
-                  <div className="flex items-center gap-2">
-                    {[15, 30, 60, 'custom'].map((dur) => (
-                      <button
-                        key={dur}
-                        onClick={() => setDuration(typeof dur === 'number' ? dur : 30)}
-                        className={cn(
-                          "px-4 py-2 rounded-full text-sm font-bold transition-all",
-                          duration === dur || (dur === 'custom' && ![15, 30, 60].includes(duration))
-                          ? "bg-primary text-white shadow-sm" 
-                          : "bg-status-grey-bg text-text-primary hover:bg-cream"
-                      )}
-                      >
-                        {dur === 60 ? '1h' : typeof dur === 'number' ? `${dur}m` : 'Custom'}
-                      </button>
-                    ))}
-                  </div>
-                </div>
+              <div className="flex flex-col gap-3 md:col-span-2">
+                <label className="text-sm font-bold text-text-primary">End Time</label>
+                <input
+                  type="time"
+                  value={endTime}
+                  disabled={!isCustomDuration}
+                  onChange={(e) => {
+                    if (isCustomDuration) {
+                      const newEndTime = e.target.value;
+                      setCustomEndTime(newEndTime);
+                      const [startH, startM] = startTime.split(':').map(Number);
+                      const [endH, endM] = newEndTime.split(':').map(Number);
+                      let diffMinutes = (endH * 60 + endM) - (startH * 60 + startM);
+                      if (diffMinutes < 0) diffMinutes += 24 * 60;
+                      setDuration(diffMinutes);
+                    }
+                  }}
+                  className={cn(
+                    "w-full px-4 py-3 bg-surface border-none rounded-2xl text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/20 text-sm font-light",
+                    !isCustomDuration && "opacity-60 cursor-not-allowed"
+                  )}
+                />
+                {!isCustomDuration && (
+                  <p className="text-xs font-light text-text-secondary">
+                    End time is calculated from duration
+                  </p>
+                )}
+              </div>
 
-                <div className="flex flex-col gap-3">
-                  <label className="text-sm font-bold text-text-primary">Start Date</label>
-                  <input
-                    type="date"
-                    value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
-                    className="w-full px-4 py-3 bg-surface border-none rounded-2xl text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/20 text-sm font-light"
-                  />
-                </div>
-
-                <div className="flex flex-col gap-3">
-                  <label className="text-sm font-bold text-text-primary">Start Time</label>
-                  <input
-                    type="time"
-                    value={startTime}
-                    onChange={(e) => setStartTime(e.target.value)}
-                    className="w-full px-4 py-3 bg-surface border-none rounded-2xl text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/20 text-sm font-light"
-                  />
-                </div>
-
-                <div className="flex flex-col gap-3">
-                  <label className="text-sm font-bold text-text-primary">Buffer Time</label>
-                  <select 
-                    value={bufferTime}
-                    onChange={(e) => setBufferTime(Number(e.target.value))}
-                    className="w-full px-4 py-3 bg-surface border-none rounded-2xl text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/20 appearance-none text-sm font-light"
-                  >
-                    <option value={0}>None</option>
-                    <option value={5}>5 minutes</option>
-                    <option value={10}>10 minutes</option>
-                    <option value={15}>15 minutes</option>
-                  </select>
-                </div>
+              <div className="md:col-span-2 bg-white border border-border/20 rounded-[20px] p-4">
+                <RoomSelector
+                  date={startDate}
+                  startTime={startTime}
+                  endTime={endTime}
+                  selectedRoomId={selectedRoomId}
+                  onRoomSelect={setSelectedRoomId}
+                  minCapacity={selectedParticipants.length + 1}
+                  occurrenceDates={allOccurrenceDates}
+                />
               </div>
             </div>
           </div>
@@ -572,8 +945,7 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
               </h2>
             </div>
             
-            <div className="grid grid-cols-3 gap-4">
-              {/* Template Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
               {initialTemplates.map((template) => (
                 <div 
                   key={template.id}
@@ -587,7 +959,7 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
                 >
                   {selectedTemplate === template.id && (
                     <div className="absolute top-3 right-3 h-5 w-5 bg-primary rounded-full flex items-center justify-center">
-                     <div className="w-2 h-2 bg-white rounded-full"></div>
+                      <div className="w-2 h-2 bg-white rounded-full"></div>
                     </div>
                   )}
                   <Users className="h-5 w-5 text-text-primary mb-3" />
@@ -598,7 +970,6 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
                 </div>
               ))}
 
-              {/* Custom Template Card */}
               <div 
                 onClick={() => handleTemplateSelect(null)}
                 className={cn(
@@ -623,7 +994,7 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
               </h2>
             </div>
             
-            <div className="grid grid-cols-2 gap-5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
               <div>
                 <label className="block text-sm font-semibold text-text-primary mb-2">Chairman</label>
                 <select 
@@ -655,31 +1026,37 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
             <div>
               <label className="block text-sm font-semibold text-text-primary mb-2">Invitees</label>
               <div className="flex flex-col gap-2 max-h-48 overflow-y-auto border border-border rounded-2xl p-2">
-                {users.map((user) => (
-                  <div
-                    key={user.id}
-                    className={cn(
-                      "flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-colors",
-                      selectedParticipants.includes(user.id)
-                        ? "bg-mint/50 border border-sage/30"
-                        : "hover:bg-surface border border-transparent"
-                    )}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selectedParticipants.includes(user.id)}
-                      onChange={() => toggleParticipant(user.id)}
-                      className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
-                    />
-                    <div className="h-8 w-8 rounded-full bg-primary flex items-center justify-center text-white text-xs font-bold">
-                      {user.name.charAt(0)}
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-sm font-bold text-text-primary">{user.name}</p>
-                      <p className="text-xs text-text-tertiary">{user.division}</p>
-                    </div>
+                {users.length === 0 ? (
+                  <div className="p-4 text-center text-sm text-text-tertiary">
+                    No users available. Add people in the Directory first.
                   </div>
-                ))}
+                ) : (
+                  users.map((user) => (
+                    <div
+                      key={user.id}
+                      className={cn(
+                        "flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-colors",
+                        selectedParticipants.includes(user.id)
+                          ? "bg-mint/50 border border-sage/30"
+                          : "hover:bg-surface border border-transparent"
+                      )}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedParticipants.includes(user.id)}
+                        onChange={() => toggleParticipant(user.id)}
+                        className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
+                      />
+                      <div className="h-8 w-8 rounded-full bg-primary flex items-center justify-center text-white text-xs font-bold">
+                        {user.name.charAt(0)}
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-sm font-bold text-text-primary">{user.name}</p>
+                        <p className="text-xs text-text-tertiary">{user.division}</p>
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           </div>
@@ -704,17 +1081,64 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
               {meetingTasks.map((task) => (
                 <div 
                   key={task.id} 
-                  className="flex items-center gap-4 p-4 bg-board border border-border/50 rounded-2xl hover:border-border transition-colors group"
+                  className="flex items-start gap-4 p-4 bg-board border border-border/50 rounded-2xl hover:border-border transition-colors group"
                 >
-                  <div className="w-6 h-6 rounded border border-border flex items-center justify-center text-transparent bg-white">
+                  <div className="w-6 h-6 rounded border border-border flex items-center justify-center text-transparent bg-white mt-1 shrink-0">
                     <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                     </svg>
                   </div>
-                  <span className="flex-1 text-base text-text-primary font-light">{task.description}</span>
+                  <div className="flex-1 flex flex-col gap-2">
+                    <span className="text-base text-text-primary font-light">{task.description}</span>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <button
+                        onClick={() => toggleTaskDueDateMode(task.id)}
+                        className="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border border-border bg-white text-text-tertiary hover:border-primary/50 hover:text-primary transition-colors shrink-0"
+                      >
+                        {task.dueDateMode === 'days' ? '# days' : 'pick date'}
+                      </button>
+                      {task.dueDateMode === 'days' ? (
+                        <>
+                          <input
+                            type="number"
+                            placeholder="days before meeting"
+                            value={task.due_days_before ?? ''}
+                            onChange={(e) => {
+                              const val = e.target.value === '' ? null : parseInt(e.target.value, 10);
+                              updateTaskDueDays(task.id, isNaN(val as number) ? null : val);
+                            }}
+                            className="w-36 px-2 py-1 text-xs border border-border rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-primary/30 text-text-primary placeholder:text-text-tertiary"
+                          />
+                          <span className="text-xs text-text-tertiary">
+                            {task.due_days_before === null
+                              ? 'no due date'
+                              : task.due_days_before >= 0
+                              ? `${task.due_days_before} day${task.due_days_before !== 1 ? 's' : ''} before`
+                              : `${Math.abs(task.due_days_before)} day${Math.abs(task.due_days_before) !== 1 ? 's' : ''} after`}
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <input
+                            type="date"
+                            value={computeTaskAbsoluteDate(task.due_days_before, startDate)}
+                            onChange={(e) => handleTaskDatePickerChange(task.id, e.target.value)}
+                            className="px-2 py-1 text-xs border border-border rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-primary/30 text-text-primary"
+                          />
+                          {task.due_days_before !== null && startDate && (
+                            <span className="text-xs text-text-tertiary">
+                              {task.due_days_before >= 0
+                                ? `${task.due_days_before} day${task.due_days_before !== 1 ? 's' : ''} before`
+                                : `${Math.abs(task.due_days_before)} day${Math.abs(task.due_days_before) !== 1 ? 's' : ''} after`}
+                            </span>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </div>
                   <button 
                     onClick={() => removeMeetingTask(task.id)}
-                    className="text-text-tertiary hover:text-coral-text transition-colors p-2 rounded-xl hover:bg-coral-text/10 opacity-0 group-hover:opacity-100"
+                    className="text-text-tertiary hover:text-coral-text transition-colors p-2 rounded-xl hover:bg-coral-text/10 opacity-0 group-hover:opacity-100 mt-0.5"
                   >
                     <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -749,7 +1173,7 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
         </div>
 
         {/* Right Column - Summary & Tips */}
-        <div className="col-span-4 flex flex-col gap-6">
+        <div className="w-full sm:flex-1 flex flex-col gap-6 min-w-0">
           
           {/* Schedule Summary Card */}
           <div className="bg-primary rounded-[24px] p-8 flex flex-col gap-6 text-white shadow-lg relative overflow-hidden">
@@ -886,17 +1310,24 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
               {previewDates.length > 0 && (
                 <div className="flex items-start gap-3">
                   <CalendarIcon className="h-4 w-4 text-text-tertiary shrink-0 mt-0.5" />
-                  <div className="text-sm font-light text-text-primary leading-snug">
-                    <p className="font-bold mb-1">Upcoming occurrences:</p>
+                  <div className="text-sm font-light text-text-primary leading-snug w-full">
+                    <div className="flex items-center justify-between mb-1">
+                      <p className="font-bold">Upcoming occurrences:</p>
+                      {totalOccurrences !== null && (
+                        <span className="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full bg-primary/10 text-primary">
+                          {totalOccurrences} total
+                        </span>
+                      )}
+                    </div>
                     <ul className="space-y-1">
-                      {previewDates.slice(0, 3).map((date, i) => (
+                      {previewDates.slice(0, 5).map((date, i) => (
                         <li key={i} className="text-xs text-text-secondary">
                           {date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
                         </li>
                       ))}
-                      {previewDates.length > 3 && (
+                      {totalOccurrences !== null && totalOccurrences > 5 && (
                         <li className="text-xs text-text-tertiary">
-                          ...and {previewDates.length - 3} more
+                          +{totalOccurrences - 5} more
                         </li>
                       )}
                     </ul>
@@ -933,8 +1364,9 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
         onSelectTemplate={(template) => {
           setShowTemplateModal(false);
           if (template) {
-            setSelectedTemplate(template.id);
-            setTitle(template.name);
+            handleTemplateSelect(template.id);
+          } else {
+            handleTemplateSelect(null);
           }
         }}
       />

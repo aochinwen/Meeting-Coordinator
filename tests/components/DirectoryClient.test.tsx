@@ -10,13 +10,13 @@ describe('DirectoryClient', () => {
 
   it('renders users table properly', async () => {
     mockSupabaseClient.from.mockImplementation((table) => {
-      if (table === 'profiles') {
+      if (table === 'people') {
         return {
           select: vi.fn().mockReturnThis(),
           order: vi.fn().mockResolvedValue({
             data: [
-              { id: '1', name: 'Alice', division: 'Engineering', rank: 'Manager' },
-              { id: '2', name: 'Bob', division: 'Product', rank: 'Director' }
+              { id: '1', name: 'Alice', email: 'alice@example.com', organization: 'Acme', division: 'Engineering', rank: 'Manager' },
+              { id: '2', name: 'Bob', email: 'bob@example.com', organization: 'Acme', division: 'Product', rank: 'Director' }
             ],
             error: null
           })
@@ -26,8 +26,8 @@ describe('DirectoryClient', () => {
     })
 
     const initialUsers = [
-        { id: '1', name: 'Alice', division: 'Engineering', rank: 'Manager', created_at: '', updated_at: '' },
-        { id: '2', name: 'Bob', division: 'Product', rank: 'Director', created_at: '', updated_at: '' }
+        { id: '1', name: 'Alice', email: 'alice@example.com', organization: 'Acme', division: 'Engineering', rank: 'Manager', created_at: '', updated_at: '' },
+        { id: '2', name: 'Bob', email: 'bob@example.com', organization: 'Acme', division: 'Product', rank: 'Director', created_at: '', updated_at: '' }
     ];
 
     render(<DirectoryClient initialUsers={initialUsers} activeTeamsCount={2} />)

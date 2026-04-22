@@ -14,10 +14,11 @@ interface EditMeetingModalProps {
   currentValues: {
     title: string;
     description?: string;
+    date: string;
     start_time?: string;
     end_time?: string;
   };
-  onSuccess?: () => void;
+  onSuccess?: (newMeetingId?: string) => void;
 }
 
 type EditScope = 'single' | 'series' | 'following';
@@ -34,6 +35,7 @@ export function EditMeetingModal({
   const [selectedScope, setSelectedScope] = useState<EditScope>('single');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState(currentValues);
+  const [error, setError] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
@@ -41,37 +43,46 @@ export function EditMeetingModal({
 
   const handleSubmit = async () => {
     setIsSubmitting(true);
-    
+    setError(null);
+
     try {
+      let returnedMeetingId: string | null = null;
+
       if (selectedScope === 'single') {
-        // Update only this occurrence
-        await updateMeetingOccurrence(meetingId, formData, true);
+        // Update only this occurrence - extract only valid meeting fields
+        const { title, description, date, start_time, end_time } = formData;
+        await updateMeetingOccurrence(meetingId, { title, description, date, start_time, end_time }, true);
+        returnedMeetingId = meetingId;
       } else if (selectedScope === 'series' && seriesId) {
-        // Update entire series pattern
-        await updateSeriesPattern(seriesId, {
+        // Update entire series pattern - returns the meeting ID for the date
+        returnedMeetingId = await updateSeriesPattern(seriesId, {
           title: formData.title,
           description: formData.description,
+          start_date: formData.date,
           start_time: formData.start_time,
           end_time: formData.end_time,
-        });
+        }, undefined, formData.date);
       } else if (selectedScope === 'following' && seriesId) {
         // Update series from this date forward
-        await updateSeriesPattern(
+        returnedMeetingId = await updateSeriesPattern(
           seriesId,
           {
             title: formData.title,
             description: formData.description,
+            start_date: formData.date,
             start_time: formData.start_time,
             end_time: formData.end_time,
           },
-          new Date(meetingDate)
+          new Date(meetingDate),
+          formData.date
         );
       }
-      
-      onSuccess?.();
+
+      onSuccess?.(returnedMeetingId || meetingId);
       onClose();
-    } catch (error) {
-      console.error('Error updating meeting:', error);
+    } catch (err: any) {
+      console.error('Error updating meeting:', err);
+      setError(err?.message || 'Failed to update meeting. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -79,7 +90,7 @@ export function EditMeetingModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-      <div className="bg-white rounded-3xl shadow-xl max-w-lg w-full overflow-hidden">
+      <div className="bg-white rounded-3xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
         <div className="px-6 py-4 border-b border-border flex items-center justify-between bg-surface/30">
           <h2 className="text-xl font-bold text-text-primary font-literata">
@@ -93,6 +104,8 @@ export function EditMeetingModal({
           </button>
         </div>
 
+        {/* Scrollable Content */}
+        <div className="overflow-y-auto flex-1">
         {/* Edit Scope Selection (only for recurring meetings) */}
         {isRecurring && (
           <div className="p-6 border-b border-border/30">
@@ -201,6 +214,18 @@ export function EditMeetingModal({
 
           <div>
             <label className="block text-sm font-bold text-text-primary mb-2">
+              Date
+            </label>
+            <input
+              type="date"
+              value={formData.date}
+              onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+              className="w-full px-4 py-3 bg-surface border border-border rounded-2xl text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/20 text-sm"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-bold text-text-primary mb-2">
               Description
             </label>
             <textarea
@@ -235,6 +260,13 @@ export function EditMeetingModal({
               />
             </div>
           </div>
+
+          {error && (
+            <div className="p-4 bg-coral-bg border border-coral-text/30 rounded-2xl text-sm text-coral-text">
+              {error}
+            </div>
+          )}
+        </div>
         </div>
 
         {/* Footer */}

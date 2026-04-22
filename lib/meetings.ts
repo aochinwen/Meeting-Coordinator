@@ -7,6 +7,7 @@
 
 import { createClient } from '@/utils/supabase/client';
 import { generateOccurrences, RecurrenceConfig } from './recurrence';
+import { format } from 'date-fns';
 import type { Database } from '@/types/supabase';
 
 export type MeetingSeries = Database['public']['Tables']['meeting_series']['Row'];
@@ -27,6 +28,8 @@ export interface CreateSeriesInput {
   buffer_minutes: number;
   timezone?: string;
   participants?: string[]; // user IDs
+  chairman_id?: string;
+  coordinator_id?: string;
 }
 
 export interface CreateMeetingInput {
@@ -37,9 +40,11 @@ export interface CreateMeetingInput {
   date: string;
   start_time?: string;
   end_time?: string;
-  status?: 'scheduled' | 'completed' | 'cancelled';
+  status: 'scheduled' | 'completed' | 'cancelled';
   instance_number?: number;
   participants?: string[];
+  chairman_id?: string | null;
+  coordinator_id?: string | null;
 }
 
 /**
@@ -68,6 +73,8 @@ export async function createMeetingSeries(
       buffer_minutes: data.buffer_minutes,
       timezone: data.timezone || 'UTC',
       created_by: createdBy || null,
+      chairman_id: data.chairman_id || null,
+      coordinator_id: data.coordinator_id || null,
     })
     .select('id')
     .single();
@@ -81,7 +88,22 @@ export async function createMeetingSeries(
   
   // 2. Generate initial meeting instances (next 8 weeks)
   await generateSeriesInstances(seriesId, 8, data);
-  
+
+  // 3. Add participants to all generated meeting instances if provided
+  if (data.participants && data.participants.length > 0) {
+    const supabase = createClient();
+    const { data: meetings } = await supabase
+      .from('meetings')
+      .select('id')
+      .eq('series_id', seriesId);
+
+    if (meetings && meetings.length > 0) {
+      for (const meeting of meetings) {
+        await addMeetingParticipants(meeting.id, data.participants, true);
+      }
+    }
+  }
+
   return seriesId;
 }
 
@@ -124,6 +146,8 @@ export async function generateSeriesInstances(
       duration_minutes: series.duration_minutes ?? 30,
       buffer_minutes: series.buffer_minutes ?? 0,
       timezone: series.timezone ?? undefined,
+      chairman_id: series.chairman_id || undefined,
+      coordinator_id: series.coordinator_id || undefined,
     };
   }
   
@@ -137,9 +161,17 @@ export async function generateSeriesInstances(
     .order('date', { ascending: false })
     .limit(1);
   
-  const lastDate = existingMeetings && existingMeetings.length > 0
-    ? new Date(existingMeetings[0].date)
-    : new Date(data.start_date);
+  const lastDate = (() => {
+    if (existingMeetings && existingMeetings.length > 0) {
+      return new Date(existingMeetings[0].date);
+    }
+    // Start one day before start_date so generateOccurrences includes start_date itself
+    // Parse as local date to avoid timezone offset issues
+    const [year, month, day] = data.start_date.split('-').map(Number);
+    const d = new Date(year, month - 1, day);
+    d.setDate(d.getDate() - 1);
+    return d;
+  })();
   
   console.log('Generating from date:', lastDate);
   
@@ -169,11 +201,13 @@ export async function generateSeriesInstances(
     template_id: data?.template_id,
     title: data?.title || 'Meeting',
     description: data?.description,
-    date: date.toISOString().split('T')[0],
+    date: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`,
     start_time: data?.start_time,
     end_time: data?.end_time,
-    status: 'scheduled',
+    status: 'scheduled' as const,
     instance_number: existingMeetings?.length ? existingMeetings.length + index + 1 : index + 1,
+    chairman_id: data?.chairman_id || null,
+    coordinator_id: data?.coordinator_id || null,
   }));
   
   console.log('Meetings to insert:', meetings);
@@ -253,38 +287,45 @@ export async function updateMeetingOccurrence(
   isOverride: boolean = true
 ): Promise<void> {
   const supabase = createClient();
-  
+
   const updateData: Partial<Meeting> = {
     ...changes,
     updated_at: new Date().toISOString(),
   };
-  
+
   if (isOverride) {
     updateData.is_override = true;
-    updateData.override_fields = Object.keys(changes);
+    updateData.override_fields = Object.keys(changes) as unknown as typeof updateData.override_fields;
   }
-  
-  const { error } = await supabase
+
+  console.log('Updating meeting:', meetingId, 'with data:', updateData);
+
+  const { error, data } = await supabase
     .from('meetings')
     .update(updateData)
-    .eq('id', meetingId);
-  
+    .eq('id', meetingId)
+    .select();
+
   if (error) {
-    console.error('Error updating meeting:', error);
-    throw error;
+    console.error('Error updating meeting:', JSON.stringify(error, null, 2));
+    throw new Error(`Failed to update meeting: ${error.message || JSON.stringify(error)}`);
   }
+
+  console.log('Update successful, returned data:', data);
 }
 
 /**
  * Update a meeting series pattern and regenerate future instances
+ * Returns the meeting ID for the specified target date after regeneration
  */
 export async function updateSeriesPattern(
   seriesId: string,
-  changes: Partial<MeetingSeries>,
-  fromDate?: Date
-): Promise<void> {
+  changes: Partial<MeetingSeries> & { start_date?: string },
+  fromDate?: Date,
+  targetDate?: string // The specific date we want to find after regeneration
+): Promise<string | null> {
   const supabase = createClient();
-  
+
   // Update the series
   const { error: updateError } = await supabase
     .from('meeting_series')
@@ -293,28 +334,43 @@ export async function updateSeriesPattern(
       updated_at: new Date().toISOString(),
     })
     .eq('id', seriesId);
-  
+
   if (updateError) {
     console.error('Error updating series:', updateError);
     throw updateError;
   }
-  
+
   // Delete future instances
   const deleteFromDate = fromDate || new Date();
   const { error: deleteError } = await supabase
     .from('meetings')
     .delete()
     .eq('series_id', seriesId)
-    .gte('date', deleteFromDate.toISOString().split('T')[0])
+    .gte('date', format(deleteFromDate, 'yyyy-MM-dd'))
     .eq('is_override', false); // Don't delete overridden instances
-  
+
   if (deleteError) {
     console.error('Error deleting future instances:', deleteError);
     throw deleteError;
   }
-  
+
   // Regenerate instances
   await generateSeriesInstances(seriesId, 8);
+
+  // Find and return the meeting ID for the target date
+  // Use the new start_date if provided, otherwise use targetDate
+  const dateToFind = changes.start_date || targetDate;
+  if (dateToFind) {
+    const { data: meeting } = await supabase
+      .from('meetings')
+      .select('id')
+      .eq('series_id', seriesId)
+      .eq('date', dateToFind)
+      .maybeSingle();
+    return meeting?.id || null;
+  }
+
+  return null;
 }
 
 /**
@@ -371,28 +427,36 @@ export async function deleteSeriesFromDate(
   fromDate: Date
 ): Promise<void> {
   const supabase = createClient();
-  
+
+  // Format date as YYYY-MM-DD using local timezone
+  const dateStr = format(fromDate, 'yyyy-MM-dd');
+
+  // Calculate previous day for series end date
+  const prevDate = new Date(fromDate);
+  prevDate.setDate(prevDate.getDate() - 1);
+  const endDateStr = format(prevDate, 'yyyy-MM-dd');
+
   // Update series end date
   const { error: updateError } = await supabase
     .from('meeting_series')
     .update({
-      end_date: new Date(fromDate.getTime() - 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      end_date: endDateStr,
       updated_at: new Date().toISOString(),
     })
     .eq('id', seriesId);
-  
+
   if (updateError) {
     console.error('Error updating series end date:', updateError);
     throw updateError;
   }
-  
+
   // Delete future instances
   const { error: deleteError } = await supabase
     .from('meetings')
     .delete()
     .eq('series_id', seriesId)
-    .gte('date', fromDate.toISOString().split('T')[0]);
-  
+    .gte('date', dateStr);
+
   if (deleteError) {
     console.error('Error deleting future instances:', deleteError);
     throw deleteError;
@@ -408,18 +472,52 @@ export async function addMeetingParticipants(
   isRequired: boolean = true
 ): Promise<void> {
   const supabase = createClient();
-  
-  const participants = userIds.map(userId => ({
+
+  if (userIds.length === 0) return;
+
+  console.log('addMeetingParticipants called with IDs:', userIds);
+
+  // Validate that user IDs exist in the people table
+  const { data: validPeople, error: peopleError } = await supabase
+    .from('people')
+    .select('id')
+    .in('id', userIds);
+
+  console.log('Validation query returned:', validPeople, 'error:', peopleError);
+
+  if (peopleError) {
+    console.error('Error validating people:', peopleError);
+    throw peopleError;
+  }
+
+  const validPeopleIds = new Set(validPeople?.map(p => p.id) || []);
+  console.log('Valid people IDs found:', Array.from(validPeopleIds));
+
+  const validUserIds = userIds.filter(id => validPeopleIds.has(id));
+
+  console.log('Filtered valid IDs:', validUserIds, 'from original:', userIds);
+
+  if (validUserIds.length === 0) {
+    console.warn('No valid participants to add - all provided IDs are invalid:', userIds);
+    throw new Error(`No valid participants found. IDs checked: ${userIds.join(', ')}`);
+  }
+
+  if (validUserIds.length < userIds.length) {
+    const invalidIds = userIds.filter(id => !validPeopleIds.has(id));
+    console.warn('Filtered out invalid participant IDs:', invalidIds);
+  }
+
+  const participants = validUserIds.map(userId => ({
     meeting_id: meetingId,
     user_id: userId,
     status: 'invited' as const,
     is_required: isRequired,
   }));
-  
+
   const { error } = await supabase
     .from('meeting_participants')
     .insert(participants);
-  
+
   if (error) {
     console.error('Error adding participants:', error);
     throw error;
@@ -469,6 +567,27 @@ export async function getMeetingWithDetails(meetingId: string): Promise<{
 }
 
 /**
+ * Remove a participant from a meeting
+ */
+export async function removeMeetingParticipant(
+  meetingId: string,
+  userId: string
+): Promise<void> {
+  const supabase = createClient();
+
+  const { error } = await supabase
+    .from('meeting_participants')
+    .delete()
+    .eq('meeting_id', meetingId)
+    .eq('user_id', userId);
+
+  if (error) {
+    console.error('Error removing participant:', error);
+    throw error;
+  }
+}
+
+/**
  * Check for scheduling conflicts
  */
 export async function checkConflicts(
@@ -489,6 +608,15 @@ export async function checkConflicts(
 }> {
   const supabase = createClient();
   
+  // Fetch people for name lookup
+  const { data: peopleData } = await supabase
+    .from('people')
+    .select('id, name')
+    .in('id', participantIds);
+  
+  const peopleMap = new Map<string, string>();
+  (peopleData || []).forEach((p: any) => peopleMap.set(p.id, p.name));
+
   // Get participants' existing meetings on the same date
   const { data: existingMeetings, error } = await supabase
     .from('meeting_participants')
@@ -499,8 +627,7 @@ export async function checkConflicts(
         date,
         start_time,
         end_time
-      ),
-      users(name)
+      )
     `)
     .in('user_id', participantIds)
     .eq('meetings.date', date);
@@ -522,7 +649,7 @@ export async function checkConflicts(
     hasConflicts: conflicts.length > 0,
     conflicts: conflicts.map((c: any) => ({
       userId: c.user_id,
-      userName: c.users?.name || 'Unknown',
+      userName: peopleMap.get(c.user_id) || 'Unknown',
       meetingTitle: c.meetings.title,
       meetingDate: c.meetings.date,
       startTime: c.meetings.start_time,

@@ -1,0 +1,33 @@
+Role: Expert Full-Stack Developer.
+Task: Build a SaaS web application for a "Meeting Coordination Platform".
+Tech Stack: Next.js (App Router) with TypeScript, React, Tailwind CSS, Lucide-React (icons), and Supabase (for PostgreSQL database and Authentication). Assume deployment to Vercel.
+
+Core Features to Implement:
+
+Database Schema (Supabase): Design relational tables for Users (Directory), Templates, Meetings (instances), and Checklists. Handle recurrence logic by linking instances to a parent series ID.
+
+Template Builder: A UI to create meeting templates with custom attributes (Chairman, Coordinator) and a default checklist of tasks.
+
+Scheduling Engine: Ability to schedule "Ad-hoc" (one-off) or "Recurring" meetings (Daily/Weekly/Monthly).
+
+Outlook-Style Logic: When editing or canceling a recurring meeting, prompt the user: "This occurrence only" or "Entire series."
+
+Dual-View Dashboard: >    - List View: Table showing Meeting Name, Date, Progress (%), and Status. Include a "More Info" icon that shows a rich-text description in a popover.
+
+Calendar View: Monthly grid with color-coded "pills" (Green: On Track, Amber: Holiday Conflict, Grey: Cancelled).
+
+People Directory & Tagging: A manual "User Management" section to add people (Name, Division, Rank). In any checklist task, allow typing "@" to trigger a searchable autocomplete dropdown of these users from the Supabase DB.
+
+Holiday Logic: Cross-reference a mock public holiday list. Display an amber "Warning Badge" if a meeting or task falls on a holiday.
+
+Status Management: Cancelled meetings should remain in the dashboard but appear greyed out and struck-through. Update their status in the database without deleting the row.
+
+Technical Requirements:
+
+Use strict TypeScript: Define clear interfaces and types for all database models (User, Template, Meeting, ChecklistTask) before building the UI.
+
+Create a highly modular folder structure using Next.js App Router conventions (/app, /components, /lib/supabase).
+
+Use Tailwind CSS for a professional, "Enterprise SaaS" aesthetic (clean whites, greys, and primary blue accents).
+
+Ensure all views (List, Calendar, Template Builder, People Management) are accessible via a persistent sidebar navigation.

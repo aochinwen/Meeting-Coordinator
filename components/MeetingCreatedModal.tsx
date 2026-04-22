@@ -53,7 +53,7 @@ export function MeetingCreatedModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-      <div className="bg-white rounded-3xl shadow-xl max-w-lg w-full overflow-hidden">
+      <div className="bg-white rounded-3xl shadow-xl max-w-lg w-full overflow-hidden relative">
         {/* Success Header */}
         <div className="px-8 pt-8 pb-6 text-center">
           <div className="mx-auto h-16 w-16 rounded-full bg-mint/30 flex items-center justify-center mb-4">
