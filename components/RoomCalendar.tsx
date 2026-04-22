@@ -165,6 +165,7 @@ export function RoomCalendar({ onBookingClick, onTimeSlotClick }: RoomCalendarPr
     if (!dragState) return;
 
     const handlePointerMove = (e: MouseEvent | TouchEvent) => {
+      if ('touches' in e) e.preventDefault();
       const ds = dragStateRef.current;
       if (!ds) return;
       const col = columnRefs.current[ds.dateKey];
@@ -435,7 +436,7 @@ export function RoomCalendar({ onBookingClick, onTimeSlotClick }: RoomCalendarPr
                           isToday && 'bg-primary/[0.03] hover:bg-primary/[0.05]',
                           'border-r border-border/40 last:border-r-0'
                         )}
-                        style={{ height: TOTAL_SLOTS * SLOT_HEIGHT }}
+                        style={{ height: TOTAL_SLOTS * SLOT_HEIGHT, touchAction: 'none' }}
                         onMouseDown={(e) => {
                           // Ignore drags that originate on an existing booking
                           // (those should fall through to the booking's onClick).
