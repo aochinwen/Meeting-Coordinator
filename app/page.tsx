@@ -533,11 +533,11 @@ async function MeetingsListBranch({
                 <div className={cn('h-12 w-12 rounded-full flex items-center justify-center shrink-0', meeting.iconBg)}>
                   <meeting.icon className={cn('h-5 w-5', meeting.iconColor)} />
                 </div>
-                <div className="flex flex-col pr-4">
-                  <div className="flex items-center gap-2">
-                    <h4 className="text-lg font-bold text-text-primary leading-tight font-literata">{meeting.title}</h4>
+                <div className="flex flex-col pr-4 min-w-0 flex-1">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <h4 className="text-lg font-bold text-text-primary leading-tight font-literata truncate">{meeting.title}</h4>
                     {meeting.isRecurring && (
-                      <span className="inline-flex items-center text-text-secondary" title="Recurring meeting">
+                      <span className="inline-flex items-center text-text-secondary shrink-0" title="Recurring meeting">
                         <Repeat className="h-3.5 w-3.5" />
                       </span>
                     )}
