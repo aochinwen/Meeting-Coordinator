@@ -87,7 +87,11 @@ export async function createMeetingSeries(
   const seriesId = series.id;
   
   // 2. Generate initial meeting instances (next 8 weeks)
-  await generateSeriesInstances(seriesId, 8, data);
+  // Skip auto-copying template tasks here: the caller (UI) inserts
+  // tasks from its own state, which may include user edits and
+  // already-resolved due_days_before values. Auto-copying here would
+  // create duplicates with null due dates.
+  await generateSeriesInstances(seriesId, 8, data, { copyTemplateTasks: false });
 
   // 3. Add participants to all generated meeting instances if provided
   if (data.participants && data.participants.length > 0) {
@@ -113,8 +117,10 @@ export async function createMeetingSeries(
 export async function generateSeriesInstances(
   seriesId: string,
   weeksToGenerate: number = 8,
-  seriesData?: CreateSeriesInput
+  seriesData?: CreateSeriesInput,
+  options: { copyTemplateTasks?: boolean } = {}
 ): Promise<void> {
+  const { copyTemplateTasks = true } = options;
   const supabase = createClient();
   
   console.log('Generating series instances for series:', seriesId, 'weeks:', weeksToGenerate);
@@ -225,7 +231,7 @@ export async function generateSeriesInstances(
   console.log('Successfully inserted meetings');
   
   // Copy template checklist tasks to each meeting instance
-  if (data.template_id) {
+  if (copyTemplateTasks && data.template_id) {
     await copyTemplateTasksToMeetings(data.template_id, meetings);
   }
 }
@@ -266,6 +272,7 @@ export async function copyTemplateTasksToMeetings(
       meeting_id: meeting.id,
       description: task.description,
       is_completed: false,
+      due_days_before: task.due_days_before ?? null,
     }))
   );
   

@@ -8,7 +8,7 @@ describe('Meetings Library (Integration Tests)', () => {
   })
 
   describe('createMeetingSeries', () => {
-    it('creates a series and instances, and copies template tasks if applicable', async () => {
+    it('creates a series and instances without auto-copying template tasks (caller handles task insertion)', async () => {
       const input = {
         title: 'Weekly Standup',
         frequency: 'weekly' as const,
@@ -82,10 +82,11 @@ describe('Meetings Library (Integration Tests)', () => {
       expect(seriesId).toBe('series-1')
       expect(mockSupabaseClient.from).toHaveBeenCalledWith('meeting_series')
       expect(mockSupabaseClient.from).toHaveBeenCalledWith('meetings')
-      // Tasks should be copied from template
-      expect(mockSupabaseClient.from).toHaveBeenCalledWith('template_checklist_tasks')
-      // meeting_checklist_tasks may not be called since we didn't mock meetings.select to return created meetings for the copy.
-      // But we can verify it was called if we mock it right, but here we can just verify the template_checklist_tasks was queried.
+      // Template tasks must NOT be auto-copied here. The caller (UI) is the
+      // source of truth for tasks (with user edits and resolved due_days_before),
+      // so auto-copying here would create duplicates with null due dates.
+      expect(mockSupabaseClient.from).not.toHaveBeenCalledWith('template_checklist_tasks')
+      expect(mockSupabaseClient.from).not.toHaveBeenCalledWith('meeting_checklist_tasks')
     })
   })
 
