@@ -10,13 +10,25 @@ import {
   type CalendarEvent,
   type CalendarMode,
 } from '@/lib/calendar';
-import { CalendarHeader } from './CalendarHeader';
 import { EventChip } from './EventChip';
 import { buildDashboardHref, type DashboardParams } from './url';
 
 const WEEKDAY_LABELS_MON_FIRST = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
-export function CalendarView({
+// Calculate day of week (0=Sun, 6=Sat) from YYYY-MM-DD string without timezone issues
+function getDayOfWeek(dateStr: string): number {
+  const [year, month, day] = dateStr.split('-').map(Number);
+  // JavaScript months are 0-indexed
+  const d = new Date(year, month - 1, day);
+  return d.getDay();
+}
+
+function isWeekend(dateStr: string): boolean {
+  const day = getDayOfWeek(dateStr);
+  return day === 0 || day === 6;
+}
+
+export function CalendarGrid({
   current,
   mode,
   anchor,
@@ -28,8 +40,7 @@ export function CalendarView({
   events: CalendarEvent[];
 }) {
   return (
-    <div className="bg-white rounded-[24px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] border border-[rgba(196,200,188,0.2)] p-4 sm:p-6 space-y-5">
-      <CalendarHeader current={current} mode={mode} anchor={anchor} />
+    <div className="space-y-5">
       {mode === 'month' ? (
         <MonthGrid current={current} anchor={anchor} events={events} />
       ) : (
@@ -104,6 +115,7 @@ function MonthGrid({
                   'min-h-[112px] sm:min-h-[120px] border-b border-r border-border/20 p-2 flex flex-col gap-1',
                   !inMonth && 'bg-board/30',
                 )}
+                style={inMonth && isWeekend(d) ? { backgroundColor: 'rgba(120, 168, 134, 0.15)' } : undefined}
               >
                 <Link
                   href={weekHref}
@@ -166,7 +178,11 @@ function WeekView({
           return (
             <div
               key={d}
-              className="bg-board/30 rounded-2xl p-3 flex flex-col gap-3 min-h-[260px]"
+              className={cn(
+                'rounded-2xl p-3 flex flex-col gap-3 min-h-[260px]',
+                !isWeekend(d) && 'bg-board/30'
+              )}
+              style={isWeekend(d) ? { backgroundColor: 'rgba(120, 168, 134, 0.15)' } : undefined}
             >
               <div className="flex items-center justify-between">
                 <span className="text-[11px] tracking-[1.2px] uppercase text-text-tertiary font-light">

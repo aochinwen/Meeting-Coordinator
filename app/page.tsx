@@ -6,7 +6,8 @@ import Link from 'next/link';
 import { DashboardSkeleton } from '@/components/ui/loading-skeleton';
 import { DashboardChrome, type ChromeStats } from '@/components/dashboard/DashboardChrome';
 import { parseTypes, type SelectedTypes } from '@/components/dashboard/types';
-import { CalendarView } from '@/components/dashboard/CalendarView';
+import { CalendarContainer } from '@/components/dashboard/CalendarContainer';
+import { CalendarGrid } from '@/components/dashboard/CalendarView';
 import { TasksList, type TaskListItem } from '@/components/dashboard/TasksList';
 import { buildDashboardHref, type DashboardParams } from '@/components/dashboard/url';
 import {
@@ -38,8 +39,7 @@ const PAGE_SIZE = 10;
 /*                            Shared stats fetcher                            */
 /* -------------------------------------------------------------------------- */
 
-async function fetchStats(): Promise<ChromeStats> {
-  const supabase = await createClient();
+async function fetchStats(supabase: Awaited<ReturnType<typeof createClient>>): Promise<ChromeStats> {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
@@ -147,7 +147,9 @@ async function CalendarBranch({
           showDateFilter={false}
           showSort={false}
         >
-          <CalendarView current={current} mode={mode} anchor={anchor} events={[]} />
+          <CalendarContainer current={current} mode={mode} anchor={anchor}>
+            <CalendarGrid current={current} mode={mode} anchor={anchor} events={[]} />
+          </CalendarContainer>
         </DashboardChrome>
       );
     }
@@ -216,7 +218,9 @@ async function CalendarBranch({
       showDateFilter={false}
       showSort={false}
     >
-      <CalendarView current={current} mode={mode} anchor={anchor} events={events} />
+      <CalendarContainer current={current} mode={mode} anchor={anchor}>
+        <CalendarGrid current={current} mode={mode} anchor={anchor} events={events} />
+      </CalendarContainer>
     </DashboardChrome>
   );
 }
@@ -350,25 +354,31 @@ async function resolveMeetingsForPerson(
 ): Promise<Set<string>> {
   const ids = new Set<string>();
 
-  // Chairman / coordinator on the meeting row.
-  const { data: own } = await supabase
-    .from('meetings')
-    .select('id')
-    .or(`chairman_id.eq.${personId},coordinator_id.eq.${personId}`);
+  // Fetch all meeting associations in parallel for better performance
+  const [
+    { data: own },
+    { data: parts },
+    { data: assignedTasks }
+  ] = await Promise.all([
+    // Chairman / coordinator on the meeting row
+    supabase
+      .from('meetings')
+      .select('id')
+      .or(`chairman_id.eq.${personId},coordinator_id.eq.${personId}`),
+    // Participants
+    supabase
+      .from('meeting_participants')
+      .select('meeting_id')
+      .eq('user_id', personId),
+    // Task assignees -> meetings via meeting_checklist_tasks
+    supabase
+      .from('meeting_task_assignees')
+      .select('meeting_checklist_tasks!inner(meeting_id)')
+      .eq('person_id', personId)
+  ]);
+
   for (const r of own ?? []) ids.add(r.id);
-
-  // Participants.
-  const { data: parts } = await supabase
-    .from('meeting_participants')
-    .select('meeting_id')
-    .eq('user_id', personId);
   for (const r of parts ?? []) ids.add(r.meeting_id);
-
-  // Task assignees -> meetings via meeting_checklist_tasks.
-  const { data: assignedTasks } = await supabase
-    .from('meeting_task_assignees')
-    .select('meeting_checklist_tasks!inner(meeting_id)')
-    .eq('person_id', personId);
   for (const r of (assignedTasks ?? []) as Array<{
     meeting_checklist_tasks: { meeting_id: string } | { meeting_id: string }[];
   }>) {
@@ -769,7 +779,7 @@ async function DashboardContent({
 }) {
   const supabase = await createClient();
   const [stats, { data: peopleRows }] = await Promise.all([
-    fetchStats(),
+    fetchStats(supabase),
     supabase.from('people').select('id, name').order('name', { ascending: true }),
   ]);
   const people = peopleRows || [];

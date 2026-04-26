@@ -1,7 +1,7 @@
 'use client';
 
 import { useTransition } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -12,15 +12,20 @@ import {
 } from '@/lib/calendar';
 import { buildDashboardHref, type DashboardParams } from './url';
 
-interface CalendarHeaderProps {
+interface CalendarContainerProps {
+  children: React.ReactNode;
   current: DashboardParams;
   mode: CalendarMode;
   anchor: string;
 }
 
-export function CalendarHeader({ current, mode, anchor }: CalendarHeaderProps) {
+export function CalendarContainer({
+  children,
+  current,
+  mode,
+  anchor,
+}: CalendarContainerProps) {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
 
   const navigate = (updates: Partial<DashboardParams>) => {
@@ -30,11 +35,11 @@ export function CalendarHeader({ current, mode, anchor }: CalendarHeaderProps) {
     });
   };
 
-  const segBtn =
-    'px-3 py-1.5 rounded-xl text-sm font-light transition-colors';
+  const segBtn = 'px-3 py-1.5 rounded-xl text-sm font-light transition-colors';
 
   return (
-    <div className="relative">
+    <div className="relative bg-white rounded-[24px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] border border-[rgba(196,200,188,0.2)] p-4 sm:p-6 space-y-5">
+      {/* Header with navigation */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="flex items-center gap-2">
           <button
@@ -96,12 +101,17 @@ export function CalendarHeader({ current, mode, anchor }: CalendarHeaderProps) {
         </div>
       </div>
 
-      {/* Loading scrim overlay */}
+      {/* Calendar content */}
+      <div className={cn('transition-opacity', isPending && 'opacity-50')}>
+        {children}
+      </div>
+
+      {/* Full calendar loading scrim */}
       {isPending && (
-        <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/60 backdrop-blur-[1px] rounded-lg -m-2 p-2">
-          <div className="flex items-center gap-2 px-4 py-2 bg-white rounded-xl shadow-lg border border-border">
-            <Loader2 className="h-5 w-5 text-primary animate-spin" />
-            <span className="text-sm font-light text-text-secondary">Loading...</span>
+        <div className="absolute inset-0 z-20 flex items-center justify-center bg-white/60 backdrop-blur-[1px] rounded-[24px]">
+          <div className="flex flex-col items-center gap-3 px-6 py-4 bg-white rounded-2xl shadow-xl border border-border">
+            <Loader2 className="h-8 w-8 text-primary animate-spin" />
+            <span className="text-sm font-light text-text-secondary">Updating calendar...</span>
           </div>
         </div>
       )}
