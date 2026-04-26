@@ -9,9 +9,24 @@ interface FilterDropdownProps {
   filter: string;
   sortBy: string;
   sortOrder: string;
+  view?: string;
+  calView?: string;
+  anchor?: string;
+  types?: string;
 }
 
-export function FilterDropdown({ search, filter, sortBy, sortOrder }: FilterDropdownProps) {
+function extraQs(view?: string, calView?: string, anchor?: string, types?: string) {
+  const usp = new URLSearchParams();
+  if (view) usp.set('view', view);
+  if (calView) usp.set('calView', calView);
+  if (anchor) usp.set('anchor', anchor);
+  if (types) usp.set('types', types);
+  const s = usp.toString();
+  return s ? `&${s}` : '';
+}
+
+export function FilterDropdown({ search, filter, sortBy, sortOrder, view, calView, anchor, types }: FilterDropdownProps) {
+  const extra = extraQs(view, calView, anchor, types);
   const [isOpen, setIsOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -37,28 +52,28 @@ export function FilterDropdown({ search, filter, sortBy, sortOrder }: FilterDrop
       {isOpen && (
         <div className="absolute top-full right-0 mt-2 w-48 bg-white rounded-2xl shadow-lg border border-border/30 py-2 z-20">
           <Link
-            href={`/?search=${encodeURIComponent(search)}&filter=month&sortBy=${sortBy}&sortOrder=${sortOrder}`}
+            href={`/?search=${encodeURIComponent(search)}&filter=month&sortBy=${sortBy}&sortOrder=${sortOrder}${extra}`}
             onClick={() => setIsOpen(false)}
             className={`block px-4 py-2 text-sm font-light hover:bg-board/50 ${filter === 'month' || filter === '' ? 'text-primary font-medium' : 'text-text-secondary'}`}
           >
             Next 30 days (default)
           </Link>
           <Link
-            href={`/?search=${encodeURIComponent(search)}&filter=today&sortBy=${sortBy}&sortOrder=${sortOrder}`}
+            href={`/?search=${encodeURIComponent(search)}&filter=today&sortBy=${sortBy}&sortOrder=${sortOrder}${extra}`}
             onClick={() => setIsOpen(false)}
             className={`block px-4 py-2 text-sm font-light hover:bg-board/50 ${filter === 'today' ? 'text-primary font-medium' : 'text-text-secondary'}`}
           >
             Today only
           </Link>
           <Link
-            href={`/?search=${encodeURIComponent(search)}&filter=week&sortBy=${sortBy}&sortOrder=${sortOrder}`}
+            href={`/?search=${encodeURIComponent(search)}&filter=week&sortBy=${sortBy}&sortOrder=${sortOrder}${extra}`}
             onClick={() => setIsOpen(false)}
             className={`block px-4 py-2 text-sm font-light hover:bg-board/50 ${filter === 'week' ? 'text-primary font-medium' : 'text-text-secondary'}`}
           >
             This week
           </Link>
           <Link
-            href={`/?search=${encodeURIComponent(search)}&filter=all&sortBy=${sortBy}&sortOrder=${sortOrder}`}
+            href={`/?search=${encodeURIComponent(search)}&filter=all&sortBy=${sortBy}&sortOrder=${sortOrder}${extra}`}
             onClick={() => setIsOpen(false)}
             className={`block px-4 py-2 text-sm font-light hover:bg-board/50 ${filter === 'all' ? 'text-primary font-medium' : 'text-text-secondary'}`}
           >
@@ -70,7 +85,8 @@ export function FilterDropdown({ search, filter, sortBy, sortOrder }: FilterDrop
   );
 }
 
-export function SortDropdown({ search, filter, sortBy, sortOrder }: FilterDropdownProps) {
+export function SortDropdown({ search, filter, sortBy, sortOrder, view, calView, anchor, types }: FilterDropdownProps) {
+  const extra = extraQs(view, calView, anchor, types);
   const [isOpen, setIsOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -96,28 +112,28 @@ export function SortDropdown({ search, filter, sortBy, sortOrder }: FilterDropdo
       {isOpen && (
         <div className="absolute top-full right-0 mt-2 w-48 bg-white rounded-2xl shadow-lg border border-border/30 py-2 z-20">
           <Link
-            href={`/?search=${encodeURIComponent(search)}&filter=${filter}&sortBy=date&sortOrder=asc`}
+            href={`/?search=${encodeURIComponent(search)}&filter=${filter}&sortBy=date&sortOrder=asc${extra}`}
             onClick={() => setIsOpen(false)}
             className={`block px-4 py-2 text-sm font-light hover:bg-board/50 ${sortBy === 'date' && sortOrder === 'asc' ? 'text-primary font-medium' : 'text-text-secondary'}`}
           >
             Date (earliest first)
           </Link>
           <Link
-            href={`/?search=${encodeURIComponent(search)}&filter=${filter}&sortBy=date&sortOrder=desc`}
+            href={`/?search=${encodeURIComponent(search)}&filter=${filter}&sortBy=date&sortOrder=desc${extra}`}
             onClick={() => setIsOpen(false)}
             className={`block px-4 py-2 text-sm font-light hover:bg-board/50 ${sortBy === 'date' && sortOrder === 'desc' ? 'text-primary font-medium' : 'text-text-secondary'}`}
           >
             Date (latest first)
           </Link>
           <Link
-            href={`/?search=${encodeURIComponent(search)}&filter=${filter}&sortBy=title&sortOrder=asc`}
+            href={`/?search=${encodeURIComponent(search)}&filter=${filter}&sortBy=title&sortOrder=asc${extra}`}
             onClick={() => setIsOpen(false)}
             className={`block px-4 py-2 text-sm font-light hover:bg-board/50 ${sortBy === 'title' && sortOrder === 'asc' ? 'text-primary font-medium' : 'text-text-secondary'}`}
           >
             Title (A-Z)
           </Link>
           <Link
-            href={`/?search=${encodeURIComponent(search)}&filter=${filter}&sortBy=title&sortOrder=desc`}
+            href={`/?search=${encodeURIComponent(search)}&filter=${filter}&sortBy=title&sortOrder=desc${extra}`}
             onClick={() => setIsOpen(false)}
             className={`block px-4 py-2 text-sm font-light hover:bg-board/50 ${sortBy === 'title' && sortOrder === 'desc' ? 'text-primary font-medium' : 'text-text-secondary'}`}
           >

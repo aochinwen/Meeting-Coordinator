@@ -113,6 +113,28 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
   const [isAddingParticipants, setIsAddingParticipants] = useState(false);
   const [isEditVenueOpen, setIsEditVenueOpen] = useState(false);
   const [isEditMeetingOpen, setIsEditMeetingOpen] = useState(false);
+  const [highlightedTaskId, setHighlightedTaskId] = useState<string | null>(null);
+
+  // Deep-link: ?task=<id> from the dashboard calendar / tasks list scrolls to that task.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const taskId = params.get('task');
+    if (!taskId) return;
+    setHighlightedTaskId(taskId);
+    // Wait for tasks to be in the DOM before scrolling.
+    const tryScroll = (attempt = 0) => {
+      const el = document.getElementById(`task-${taskId}`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      } else if (attempt < 10) {
+        setTimeout(() => tryScroll(attempt + 1), 100);
+      }
+    };
+    tryScroll();
+    const t = setTimeout(() => setHighlightedTaskId(null), 2400);
+    return () => clearTimeout(t);
+  }, []);
 
   type ProfileInfo = { name: string; division?: string | null; rank?: string | null };
   const profileMapRef = useRef<Map<string, ProfileInfo>>(
@@ -594,9 +616,11 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
                 tasks.map((task) => (
                   <div 
                     key={task.id} 
+                    id={`task-${task.id}`}
                     className={cn(
                       "p-6 flex gap-4 transition-colors border-b last:border-b-0 border-border/10",
-                      task.is_completed ? "bg-white/30" : "bg-transparent"
+                      task.is_completed ? "bg-white/30" : "bg-transparent",
+                      highlightedTaskId === task.id && "ring-2 ring-primary/40 ring-offset-2 ring-offset-white bg-status-green-bg/40"
                     )}
                   >
                     <div 
