@@ -14,7 +14,7 @@ import { useRouter } from 'next/navigation';
 import { DeleteMeetingModal } from './DeleteMeetingModal';
 import { AddParticipantsModal } from './AddParticipantsModal';
 import { EditMeetingVenueModal } from './EditMeetingVenueModal';
-import { EditMeetingModal } from './EditMeetingModal';
+import { EditMeetingModal } from '@/components/EditMeetingModal';
 import { addMeetingParticipants, removeMeetingParticipant } from '@/lib/meetings';
 import { getConfirmedBookingForMeeting } from '@/lib/rooms';
 import { PeoplePicker, type PersonOption } from '@/components/ui/PeoplePicker';
@@ -133,6 +133,7 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
     }));
   });
   const [editingAssigneesTaskId, setEditingAssigneesTaskId] = useState<string | null>(null);
+  const [pendingAssignees, setPendingAssignees] = useState<Record<string, string[]>>({});
 
   // Deep-link: ?task=<id> from the dashboard calendar / tasks list scrolls to that task.
   useEffect(() => {
@@ -800,8 +801,8 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
                             <div className="flex-1">
                               <PeoplePicker
                                 people={people}
-                                value={(task.assignees ?? []).map((a) => a.id)}
-                                onChange={(ids) => setTaskAssignees(task.id, ids)}
+                                value={pendingAssignees[task.id] ?? (task.assignees ?? []).map((a) => a.id)}
+                                onChange={(ids) => setPendingAssignees((prev) => ({ ...prev, [task.id]: ids }))}
                                 multiple
                                 placeholder="Add assignees..."
                                 compact
@@ -809,16 +810,45 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
                             </div>
                             <button
                               type="button"
-                              onClick={() => setEditingAssigneesTaskId(null)}
-                              className="text-[11px] font-bold text-text-tertiary hover:text-text-secondary px-2 py-1"
+                              onClick={async () => {
+                                const ids = pendingAssignees[task.id] ?? (task.assignees ?? []).map((a) => a.id);
+                                await setTaskAssignees(task.id, ids);
+                                setPendingAssignees((prev) => {
+                                  const next = { ...prev };
+                                  delete next[task.id];
+                                  return next;
+                                });
+                                setEditingAssigneesTaskId(null);
+                              }}
+                              className="text-[11px] font-bold text-primary hover:text-primary/80 px-2 py-1"
                             >
                               Done
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setPendingAssignees((prev) => {
+                                  const next = { ...prev };
+                                  delete next[task.id];
+                                  return next;
+                                });
+                                setEditingAssigneesTaskId(null);
+                              }}
+                              className="text-[11px] font-bold text-text-tertiary hover:text-text-secondary px-2 py-1"
+                            >
+                              Cancel
                             </button>
                           </div>
                         ) : (task.assignees?.length ?? 0) > 0 ? (
                           <button
                             type="button"
-                            onClick={() => setEditingAssigneesTaskId(task.id)}
+                            onClick={() => {
+                              setPendingAssignees((prev) => ({
+                                ...prev,
+                                [task.id]: (task.assignees ?? []).map((a) => a.id),
+                              }));
+                              setEditingAssigneesTaskId(task.id);
+                            }}
                             className="flex items-center gap-2 hover:bg-board/40 rounded-lg px-1 -ml-1 py-0.5 transition-colors"
                             title="Click to edit assignees"
                           >
@@ -845,7 +875,13 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
                         ) : (
                           <button
                             type="button"
-                            onClick={() => setEditingAssigneesTaskId(task.id)}
+                            onClick={() => {
+                              setPendingAssignees((prev) => ({
+                                ...prev,
+                                [task.id]: (task.assignees ?? []).map((a) => a.id),
+                              }));
+                              setEditingAssigneesTaskId(task.id);
+                            }}
                             className="text-xs text-text-tertiary hover:text-primary inline-flex items-center gap-1 transition-colors"
                           >
                             <Plus className="h-3 w-3" />
