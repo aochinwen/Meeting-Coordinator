@@ -106,6 +106,7 @@ async function CalendarBranch({
   params,
   selectedTypes,
   stats,
+  people,
   mode,
   anchor,
 }: {
@@ -113,6 +114,7 @@ async function CalendarBranch({
   params: ChromeParams;
   selectedTypes: SelectedTypes;
   stats: ChromeStats;
+  people: { id: string; name: string }[];
   mode: CalendarMode;
   anchor: string;
 }) {
@@ -128,6 +130,30 @@ async function CalendarBranch({
   if (params.search) {
     q = q.or(`title.ilike.%${params.search}%,description.ilike.%${params.search}%`);
   }
+
+  if (params.person) {
+    const allowed = await resolveMeetingsForPerson(params.person, supabase);
+    if (allowed.size === 0) {
+      // Short-circuit: no meetings match this person.
+      return (
+        <DashboardChrome
+          current={current}
+          params={params}
+          selectedTypes={selectedTypes}
+          view="calendar"
+          stats={stats}
+          people={people}
+          selectedPersonId={params.person || null}
+          showDateFilter={false}
+          showSort={false}
+        >
+          <CalendarView current={current} mode={mode} anchor={anchor} events={[]} />
+        </DashboardChrome>
+      );
+    }
+    q = q.in('id', Array.from(allowed));
+  }
+
   q = q.order('date', { ascending: true });
 
   const { data: meetings } = await q;
@@ -185,6 +211,8 @@ async function CalendarBranch({
       selectedTypes={selectedTypes}
       view="calendar"
       stats={stats}
+      people={people}
+      selectedPersonId={params.person || null}
       showDateFilter={false}
       showSort={false}
     >
@@ -202,11 +230,13 @@ async function TasksListBranch({
   params,
   selectedTypes,
   stats,
+  people,
 }: {
   current: DashboardParams;
   params: ChromeParams;
   selectedTypes: SelectedTypes;
   stats: ChromeStats;
+  people: { id: string; name: string }[];
 }) {
   const supabase = await createClient();
   const { start, end } = rangeFromFilter(params.filter);
@@ -218,6 +248,25 @@ async function TasksListBranch({
     .lte('date', end);
   if (params.search) {
     q = q.or(`title.ilike.%${params.search}%,description.ilike.%${params.search}%`);
+  }
+  if (params.person) {
+    const allowed = await resolveMeetingsForPerson(params.person, supabase);
+    if (allowed.size === 0) {
+      return (
+        <DashboardChrome
+          current={current}
+          params={params}
+          selectedTypes={selectedTypes}
+          view="list"
+          stats={stats}
+          people={people}
+          selectedPersonId={params.person || null}
+        >
+          <TasksList tasks={[]} />
+        </DashboardChrome>
+      );
+    }
+    q = q.in('id', Array.from(allowed));
   }
   q = q.order('date', { ascending: true });
 
@@ -262,6 +311,8 @@ async function TasksListBranch({
       selectedTypes={selectedTypes}
       view="list"
       stats={stats}
+      people={people}
+      selectedPersonId={params.person || null}
     >
       <TasksList tasks={items} />
     </DashboardChrome>
@@ -281,19 +332,67 @@ type ChromeParams = {
   calView: string;
   anchor: string;
   types: string;
+  person: string;
 };
+
+/* -------------------------------------------------------------------------- */
+/*               Resolve meeting ids matching a person filter                 */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Returns the set of meeting ids where the given person appears in any role:
+ * chairman, coordinator, participant, or task assignee.
+ * Returns null if no person filter is active (caller should skip filtering).
+ */
+async function resolveMeetingsForPerson(
+  personId: string,
+  supabase: Awaited<ReturnType<typeof createClient>>,
+): Promise<Set<string>> {
+  const ids = new Set<string>();
+
+  // Chairman / coordinator on the meeting row.
+  const { data: own } = await supabase
+    .from('meetings')
+    .select('id')
+    .or(`chairman_id.eq.${personId},coordinator_id.eq.${personId}`);
+  for (const r of own ?? []) ids.add(r.id);
+
+  // Participants.
+  const { data: parts } = await supabase
+    .from('meeting_participants')
+    .select('meeting_id')
+    .eq('user_id', personId);
+  for (const r of parts ?? []) ids.add(r.meeting_id);
+
+  // Task assignees -> meetings via meeting_checklist_tasks.
+  const { data: assignedTasks } = await supabase
+    .from('meeting_task_assignees')
+    .select('meeting_checklist_tasks!inner(meeting_id)')
+    .eq('person_id', personId);
+  for (const r of (assignedTasks ?? []) as Array<{
+    meeting_checklist_tasks: { meeting_id: string } | { meeting_id: string }[];
+  }>) {
+    const mt = r.meeting_checklist_tasks;
+    if (Array.isArray(mt)) mt.forEach((m) => ids.add(m.meeting_id));
+    else if (mt) ids.add(mt.meeting_id);
+  }
+
+  return ids;
+}
 
 async function MeetingsListBranch({
   current,
   params,
   selectedTypes,
   stats,
+  people,
   page,
 }: {
   current: DashboardParams;
   params: ChromeParams;
   selectedTypes: SelectedTypes;
   stats: ChromeStats;
+  people: { id: string; name: string }[];
   page: number;
 }) {
   const supabase = await createClient();
@@ -313,6 +412,28 @@ async function MeetingsListBranch({
     .lte('date', end);
   if (params.search) {
     q = q.or(`title.ilike.%${params.search}%,description.ilike.%${params.search}%`);
+  }
+  if (params.person) {
+    const allowed = await resolveMeetingsForPerson(params.person, supabase);
+    if (allowed.size === 0) {
+      // No meetings match — render empty list with chrome.
+      return (
+        <DashboardChrome
+          current={current}
+          params={params}
+          selectedTypes={selectedTypes}
+          view="list"
+          stats={stats}
+          people={people}
+          selectedPersonId={params.person || null}
+        >
+          <div className="bg-white rounded-[24px] p-12 text-center text-text-tertiary">
+            No meetings found for the selected person.
+          </div>
+        </DashboardChrome>
+      );
+    }
+    q = q.in('id', Array.from(allowed));
   }
   const validSortColumns = ['date', 'title', 'status'];
   const sortColumn = validSortColumns.includes(params.sortBy) ? params.sortBy : 'date';
@@ -380,6 +501,8 @@ async function MeetingsListBranch({
       selectedTypes={selectedTypes}
       view="list"
       stats={stats}
+      people={people}
+      selectedPersonId={params.person || null}
     >
       <div className="bg-white rounded-[24px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] border border-[rgba(196,200,188,0.2)] overflow-hidden hidden md:block">
         <div className="grid grid-cols-12 gap-4 px-6 py-4 bg-[rgba(234,230,222,0.5)] border-b border-[rgba(196,200,188,0.2)] text-xs tracking-[1.2px] uppercase text-text-secondary font-light shrink-0">
@@ -631,6 +754,7 @@ async function DashboardContent({
   calView,
   anchor,
   types,
+  person,
 }: {
   page: number;
   search: string;
@@ -641,8 +765,14 @@ async function DashboardContent({
   calView: CalendarMode;
   anchor: string;
   types: string;
+  person: string;
 }) {
-  const stats = await fetchStats();
+  const supabase = await createClient();
+  const [stats, { data: peopleRows }] = await Promise.all([
+    fetchStats(),
+    supabase.from('people').select('id, name').order('name', { ascending: true }),
+  ]);
+  const people = peopleRows || [];
   const selectedTypes = parseTypes(types);
 
   const params: ChromeParams = {
@@ -654,6 +784,7 @@ async function DashboardContent({
     calView,
     anchor,
     types,
+    person,
   };
 
   // Build the "current" param record used by helper hrefs (omit defaults).
@@ -667,6 +798,7 @@ async function DashboardContent({
     calView: view === 'calendar' && calView !== 'month' ? calView : undefined,
     anchor: view === 'calendar' ? anchor : undefined,
     types: types || undefined,
+    person: person || undefined,
   };
 
   if (view === 'calendar') {
@@ -676,6 +808,7 @@ async function DashboardContent({
         params={params}
         selectedTypes={selectedTypes}
         stats={stats}
+        people={people}
         mode={calView}
         anchor={anchor}
       />
@@ -689,6 +822,7 @@ async function DashboardContent({
         params={params}
         selectedTypes={selectedTypes}
         stats={stats}
+        people={people}
       />
     );
   }
@@ -699,6 +833,7 @@ async function DashboardContent({
       params={params}
       selectedTypes={selectedTypes}
       stats={stats}
+      people={people}
       page={page}
     />
   );
@@ -717,6 +852,7 @@ export default async function DashboardPage({
     calView?: string;
     anchor?: string;
     types?: string;
+    person?: string;
   }>;
 }) {
   const sp = await searchParams;
@@ -730,6 +866,7 @@ export default async function DashboardPage({
   const calView: CalendarMode = sp.calView === 'week' ? 'week' : 'month';
   const anchor = clampAnchor(sp.anchor);
   const types = sp.types ?? '';
+  const person = sp.person ?? '';
 
   return (
     <Suspense fallback={<DashboardSkeleton />}>
@@ -743,6 +880,7 @@ export default async function DashboardPage({
         calView={calView}
         anchor={anchor}
         types={types}
+        person={person}
       />
     </Suspense>
   );

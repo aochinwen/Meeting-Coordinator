@@ -3,6 +3,7 @@ import { Plus, Search, CalendarCheck2, Clock, Users } from 'lucide-react';
 import { FilterDropdown, SortDropdown } from '@/components/DropdownFilter';
 import { ViewToggle } from './ViewToggle';
 import { TypeFilter, type SelectedTypes } from './TypeFilter';
+import { PersonFilter, type PersonFilterOption } from './PersonFilter';
 import type { DashboardParams } from './url';
 
 export type ChromeStats = {
@@ -17,6 +18,8 @@ export function DashboardChrome({
   selectedTypes,
   view,
   stats,
+  people,
+  selectedPersonId,
   showDateFilter = true,
   showSort = true,
   children,
@@ -31,10 +34,13 @@ export function DashboardChrome({
     calView: string;
     anchor: string;
     types: string;
+    person: string;
   };
   selectedTypes: SelectedTypes;
   view: 'list' | 'calendar';
   stats: ChromeStats;
+  people: PersonFilterOption[];
+  selectedPersonId: string | null;
   showDateFilter?: boolean;
   showSort?: boolean;
   children: React.ReactNode;
@@ -111,6 +117,7 @@ export function DashboardChrome({
             {params.calView && <input type="hidden" name="calView" value={params.calView} />}
             {params.anchor && <input type="hidden" name="anchor" value={params.anchor} />}
             {params.types && <input type="hidden" name="types" value={params.types} />}
+            {params.person && <input type="hidden" name="person" value={params.person} />}
           </form>
           <div className="grid grid-cols-2 sm:flex gap-2 shrink-0 w-full sm:w-auto">
             <ViewToggle current={current} view={view} />
@@ -118,6 +125,7 @@ export function DashboardChrome({
         </div>
         <div className="grid grid-cols-2 sm:flex gap-2 shrink-0 w-full sm:w-auto sm:self-end">
           <TypeFilter current={current} selected={selectedTypes} />
+          <PersonFilter current={current} people={people} selectedId={selectedPersonId} />
           {showDateFilter && (
             <FilterDropdown
               search={params.search}

@@ -594,6 +594,332 @@ export async function removeMeetingParticipant(
   }
 }
 
+/* -------------------------------------------------------------------------- */
+/*                          Task editor helpers                               */
+/* -------------------------------------------------------------------------- */
+
+export interface TaskDraft {
+  // Existing task id, undefined for newly added drafts.
+  id?: string;
+  description: string;
+  due_days_before: number | null;
+  // List of person ids assigned to this task.
+  assignee_ids: string[];
+  // Position within the meeting (1-based). Lower = earlier.
+  sort_order: number;
+  // Carried over so completion state is preserved across edits.
+  is_completed?: boolean;
+}
+
+/**
+ * Replace the full task list of a single meeting with the supplied drafts.
+ * - Updates rows that match by id (description, due_days_before, sort_order).
+ * - Inserts rows for drafts without an id.
+ * - Deletes rows whose id is not present in the drafts array.
+ * - Rewrites the assignee junction rows for every task in the new list.
+ *
+ * The legacy meeting_checklist_tasks.assigned_user_id is mirrored to the first
+ * assignee in the list (or null) to keep older read-paths functional.
+ */
+export async function setMeetingTasks(
+  meetingId: string,
+  drafts: TaskDraft[]
+): Promise<void> {
+  const supabase = createClient();
+
+  // 1. Fetch existing task ids to compute deletes.
+  const { data: existing, error: fetchErr } = await supabase
+    .from('meeting_checklist_tasks')
+    .select('id')
+    .eq('meeting_id', meetingId);
+  if (fetchErr) throw fetchErr;
+
+  const existingIds = new Set((existing || []).map((r) => r.id));
+  const keptIds = new Set(drafts.filter((d) => d.id).map((d) => d.id as string));
+  const toDelete = Array.from(existingIds).filter((id) => !keptIds.has(id));
+
+  if (toDelete.length > 0) {
+    const { error } = await supabase
+      .from('meeting_checklist_tasks')
+      .delete()
+      .in('id', toDelete);
+    if (error) throw error;
+  }
+
+  // 2. Update existing tasks.
+  for (const d of drafts) {
+    if (!d.id) continue;
+    const firstAssignee = d.assignee_ids[0] ?? null;
+    const { error } = await supabase
+      .from('meeting_checklist_tasks')
+      .update({
+        description: d.description,
+        due_days_before: d.due_days_before,
+        sort_order: d.sort_order,
+        assigned_user_id: firstAssignee,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', d.id);
+    if (error) throw error;
+  }
+
+  // 3. Insert new tasks and capture their ids.
+  const newDrafts = drafts.filter((d) => !d.id);
+  const insertedIds: Array<{ draft: TaskDraft; id: string }> = [];
+  if (newDrafts.length > 0) {
+    const { data: inserted, error } = await supabase
+      .from('meeting_checklist_tasks')
+      .insert(
+        newDrafts.map((d) => ({
+          meeting_id: meetingId,
+          description: d.description,
+          due_days_before: d.due_days_before,
+          sort_order: d.sort_order,
+          is_completed: d.is_completed ?? false,
+          assigned_user_id: d.assignee_ids[0] ?? null,
+        }))
+      )
+      .select('id');
+    if (error) throw error;
+    (inserted || []).forEach((row, i) => insertedIds.push({ draft: newDrafts[i], id: row.id }));
+  }
+
+  // 4. Rewrite assignee junction for every task in the new list.
+  const allTasks: Array<{ id: string; assignee_ids: string[] }> = [
+    ...drafts.filter((d) => d.id).map((d) => ({ id: d.id as string, assignee_ids: d.assignee_ids })),
+    ...insertedIds.map(({ draft, id }) => ({ id, assignee_ids: draft.assignee_ids })),
+  ];
+
+  if (allTasks.length > 0) {
+    const ids = allTasks.map((t) => t.id);
+    const { error: delErr } = await supabase
+      .from('meeting_task_assignees')
+      .delete()
+      .in('task_id', ids);
+    if (delErr) throw delErr;
+
+    const rows = allTasks.flatMap((t) =>
+      t.assignee_ids.map((person_id) => ({ task_id: t.id, person_id }))
+    );
+    if (rows.length > 0) {
+      const { error: insErr } = await supabase
+        .from('meeting_task_assignees')
+        .insert(rows);
+      if (insErr) throw insErr;
+    }
+  }
+}
+
+/**
+ * Apply the same task template to many meetings (used when a "this + following"
+ * edit propagates the new task list to every newly-generated future occurrence).
+ *
+ * Implementation: deletes all existing tasks for the listed meetings, then
+ * inserts the supplied template fresh for each meeting. New task ids are
+ * generated per meeting; assignees are mirrored from the template.
+ */
+export async function applyTaskTemplateToMeetings(
+  meetingIds: string[],
+  template: Array<Pick<TaskDraft, 'description' | 'due_days_before' | 'sort_order' | 'assignee_ids'>>
+): Promise<void> {
+  if (meetingIds.length === 0) return;
+  const supabase = createClient();
+
+  // Wipe existing tasks for these meetings (cascade removes assignees).
+  const { error: delErr } = await supabase
+    .from('meeting_checklist_tasks')
+    .delete()
+    .in('meeting_id', meetingIds);
+  if (delErr) throw delErr;
+
+  if (template.length === 0) return;
+
+  // Bulk insert tasks across all meetings.
+  const inserts = meetingIds.flatMap((meetingId) =>
+    template.map((t) => ({
+      meeting_id: meetingId,
+      description: t.description,
+      due_days_before: t.due_days_before,
+      sort_order: t.sort_order,
+      is_completed: false,
+      assigned_user_id: t.assignee_ids[0] ?? null,
+    }))
+  );
+  const { data: inserted, error: insErr } = await supabase
+    .from('meeting_checklist_tasks')
+    .insert(inserts)
+    .select('id, meeting_id, sort_order');
+  if (insErr) throw insErr;
+
+  // Build assignee rows by matching back via (meeting_id, sort_order).
+  const byKey = new Map<string, string>();
+  (inserted || []).forEach((row) => byKey.set(`${row.meeting_id}|${row.sort_order}`, row.id));
+
+  const assigneeRows: Array<{ task_id: string; person_id: string }> = [];
+  for (const meetingId of meetingIds) {
+    for (const t of template) {
+      const taskId = byKey.get(`${meetingId}|${t.sort_order}`);
+      if (!taskId) continue;
+      for (const personId of t.assignee_ids) {
+        assigneeRows.push({ task_id: taskId, person_id: personId });
+      }
+    }
+  }
+  if (assigneeRows.length > 0) {
+    const { error } = await supabase.from('meeting_task_assignees').insert(assigneeRows);
+    if (error) throw error;
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/*                Split a recurring series at a given date                    */
+/* -------------------------------------------------------------------------- */
+
+export interface SplitSeriesInput {
+  // Pattern + meeting fields for the new (forward) series.
+  title: string;
+  description?: string | null;
+  frequency: 'daily' | 'weekly' | 'bi-weekly' | 'monthly';
+  days_of_week?: string[] | null;
+  start_date: string; // YYYY-MM-DD - the first occurrence on the new series
+  end_date?: string | null;
+  start_time?: string | null;
+  end_time?: string | null;
+  duration_minutes?: number;
+  buffer_minutes?: number;
+  timezone?: string;
+  chairman_id?: string | null;
+  coordinator_id?: string | null;
+  participants: string[]; // person ids to put on every new occurrence
+  template_id?: string | null;
+}
+
+/**
+ * Split a series at `splitDate`. Past occurrences (< splitDate) remain on the
+ * original series, which has its end_date set to the day before splitDate.
+ * From splitDate forward, a new series is created with the supplied pattern
+ * and instances are generated. Returns the meeting id on the new series that
+ * matches the new start_date (if any).
+ */
+export async function splitSeriesAtDate(
+  originalSeriesId: string,
+  splitDate: Date,
+  newPattern: SplitSeriesInput,
+  createdBy?: string
+): Promise<{ newSeriesId: string; newMeetingId: string | null }> {
+  const supabase = createClient();
+
+  // 1. Truncate the original series at the day before splitDate, and delete
+  //    any non-overridden future instances on or after splitDate. Overridden
+  //    instances are reparented onto the new series so the user keeps them
+  //    visible from the forward date.
+  const splitDateStr = format(splitDate, 'yyyy-MM-dd');
+  const prev = new Date(splitDate);
+  prev.setDate(prev.getDate() - 1);
+  const prevStr = format(prev, 'yyyy-MM-dd');
+
+  const { error: endErr } = await supabase
+    .from('meeting_series')
+    .update({ end_date: prevStr, updated_at: new Date().toISOString() })
+    .eq('id', originalSeriesId);
+  if (endErr) throw endErr;
+
+  const { error: delErr } = await supabase
+    .from('meetings')
+    .delete()
+    .eq('series_id', originalSeriesId)
+    .gte('date', splitDateStr)
+    .eq('is_override', false);
+  if (delErr) throw delErr;
+
+  // 2. Create the new series record.
+  const { data: newSeries, error: insSeriesErr } = await supabase
+    .from('meeting_series')
+    .insert({
+      template_id: newPattern.template_id ?? null,
+      title: newPattern.title,
+      description: newPattern.description ?? null,
+      frequency: newPattern.frequency,
+      days_of_week: newPattern.days_of_week ?? null,
+      start_date: newPattern.start_date,
+      end_date: newPattern.end_date ?? null,
+      start_time: newPattern.start_time ?? null,
+      end_time: newPattern.end_time ?? null,
+      duration_minutes: newPattern.duration_minutes ?? 30,
+      buffer_minutes: newPattern.buffer_minutes ?? 0,
+      timezone: newPattern.timezone ?? 'UTC',
+      created_by: createdBy ?? null,
+      chairman_id: newPattern.chairman_id ?? null,
+      coordinator_id: newPattern.coordinator_id ?? null,
+    })
+    .select('id')
+    .single();
+  if (insSeriesErr || !newSeries) throw insSeriesErr || new Error('Failed to create new series');
+  const newSeriesId = newSeries.id;
+
+  // 3. Reparent any overridden future instances onto the new series.
+  const { error: reErr } = await supabase
+    .from('meetings')
+    .update({ series_id: newSeriesId })
+    .eq('series_id', originalSeriesId)
+    .gte('date', splitDateStr);
+  if (reErr) throw reErr;
+
+  // 4. Generate fresh instances on the new series. Skip auto-copy of template
+  //    tasks — caller will explicitly apply the (possibly edited) task list.
+  await generateSeriesInstances(
+    newSeriesId,
+    8,
+    {
+      template_id: newPattern.template_id ?? undefined,
+      title: newPattern.title,
+      description: newPattern.description ?? undefined,
+      frequency: newPattern.frequency,
+      days_of_week: newPattern.days_of_week ?? undefined,
+      start_date: newPattern.start_date,
+      end_date: newPattern.end_date ?? undefined,
+      start_time: newPattern.start_time ?? undefined,
+      end_time: newPattern.end_time ?? undefined,
+      duration_minutes: newPattern.duration_minutes ?? 30,
+      buffer_minutes: newPattern.buffer_minutes ?? 0,
+      timezone: newPattern.timezone,
+      chairman_id: newPattern.chairman_id ?? undefined,
+      coordinator_id: newPattern.coordinator_id ?? undefined,
+    },
+    { copyTemplateTasks: false }
+  );
+
+  // 5. Add participants to every meeting on the new series.
+  if (newPattern.participants.length > 0) {
+    const { data: forwardMeetings } = await supabase
+      .from('meetings')
+      .select('id')
+      .eq('series_id', newSeriesId);
+    for (const m of forwardMeetings || []) {
+      // Skip meetings that already have these participants (overridden ones).
+      const { data: existing } = await supabase
+        .from('meeting_participants')
+        .select('user_id')
+        .eq('meeting_id', m.id);
+      const existingIds = new Set((existing || []).map((p) => p.user_id));
+      const missing = newPattern.participants.filter((id) => !existingIds.has(id));
+      if (missing.length > 0) {
+        await addMeetingParticipants(m.id, missing, true);
+      }
+    }
+  }
+
+  // 6. Find the new meeting id matching start_date.
+  const { data: anchorMeeting } = await supabase
+    .from('meetings')
+    .select('id')
+    .eq('series_id', newSeriesId)
+    .eq('date', newPattern.start_date)
+    .maybeSingle();
+
+  return { newSeriesId, newMeetingId: anchorMeeting?.id ?? null };
+}
+
 /**
  * Check for scheduling conflicts
  */

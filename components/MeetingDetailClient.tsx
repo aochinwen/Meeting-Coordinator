@@ -17,6 +17,7 @@ import { EditMeetingVenueModal } from './EditMeetingVenueModal';
 import { EditMeetingModal } from './EditMeetingModal';
 import { addMeetingParticipants, removeMeetingParticipant } from '@/lib/meetings';
 import { getConfirmedBookingForMeeting } from '@/lib/rooms';
+import { PeoplePicker, type PersonOption } from '@/components/ui/PeoplePicker';
 
 interface RoomBooking {
   id: string;
@@ -56,6 +57,8 @@ interface Meeting {
   status: string;
   series_id: string | null;
   template_id: string | null;
+  chairman_id: string | null;
+  coordinator_id: string | null;
   created_at: string;
 }
 
@@ -71,16 +74,20 @@ interface Participant {
   } | null;
 }
 
+interface TaskAssigneeInfo {
+  id: string;
+  name: string;
+}
+
 interface Task {
   id: string;
   description: string;
   assigned_user_id: string | null;
   is_completed: boolean;
   due_days_before?: number | null;
+  sort_order: number | null;
   created_at: string;
-  assignee: {
-    name: string;
-  } | null;
+  assignees: TaskAssigneeInfo[];
 }
 
 interface Activity {
@@ -114,6 +121,18 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
   const [isEditVenueOpen, setIsEditVenueOpen] = useState(false);
   const [isEditMeetingOpen, setIsEditMeetingOpen] = useState(false);
   const [highlightedTaskId, setHighlightedTaskId] = useState<string | null>(null);
+  const [people, setPeople] = useState<PersonOption[]>(() => {
+    // Hydrate from initialData.profileMap so the assignee picker works
+    // immediately, before any client-side fetch runs.
+    if (!initialData?.profileMap) return [];
+    return Object.entries(initialData.profileMap).map(([id, p]) => ({
+      id,
+      name: p.name,
+      division: p.division ?? null,
+      rank: p.rank ?? null,
+    }));
+  });
+  const [editingAssigneesTaskId, setEditingAssigneesTaskId] = useState<string | null>(null);
 
   // Deep-link: ?task=<id> from the dashboard calendar / tasks list scrolls to that task.
   useEffect(() => {
@@ -201,6 +220,7 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
     const profileMap = new Map<string, ProfileInfo>();
     (allProfiles || []).forEach((p: any) => profileMap.set(p.id, { name: p.name, division: p.division, rank: p.rank }));
     profileMapRef.current = profileMap;
+    setPeople((allProfiles || []) as PersonOption[]);
 
     await Promise.all([
       fetchMeeting(),
@@ -251,6 +271,8 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
   }
 
   async function fetchTasksWithMap(profileMap: Map<string, ProfileInfo>) {
+    // Order only by created_at on the server. sort_order is applied client-side
+    // below so this works even before migration 008 is applied.
     const { data, error } = await supabase
       .from('meeting_checklist_tasks')
       .select('*')
@@ -262,11 +284,81 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
       return;
     }
 
-    const mappedTasks = (data || []).map((t: any) => ({
+    // Sort client-side: sort_order asc (nulls last), tie-break by created_at.
+    const ordered = [...(data || [])].sort((a: any, b: any) => {
+      const ao = a.sort_order ?? Number.MAX_SAFE_INTEGER;
+      const bo = b.sort_order ?? Number.MAX_SAFE_INTEGER;
+      if (ao !== bo) return ao - bo;
+      return String(a.created_at).localeCompare(String(b.created_at));
+    });
+
+    // Junction-based assignees. If the junction table doesn't exist yet
+    // (pre-migration), this yields no assignees but tasks still render.
+    const taskIds = ordered.map((t: any) => t.id);
+    const assigneeMap = new Map<string, TaskAssigneeInfo[]>();
+    if (taskIds.length > 0) {
+      const { data: assigneeRows } = await supabase
+        .from('meeting_task_assignees')
+        .select('task_id, person_id')
+        .in('task_id', taskIds);
+      for (const row of (assigneeRows || []) as Array<{ task_id: string; person_id: string }>) {
+        const profile = profileMap.get(row.person_id);
+        if (!profile) continue;
+        const list = assigneeMap.get(row.task_id) ?? [];
+        list.push({ id: row.person_id, name: profile.name });
+        assigneeMap.set(row.task_id, list);
+      }
+    }
+
+    const mappedTasks: Task[] = ordered.map((t: any) => ({
       ...t,
-      assignee: t.assigned_user_id ? profileMap.get(t.assigned_user_id) || null : null
+      assignees: assigneeMap.get(t.id) ?? [],
     }));
-    setTasks(mappedTasks as any);
+    setTasks(mappedTasks);
+  }
+
+  // Stable timestamp formatter (avoids SSR/CSR locale hydration mismatch).
+  function formatActivityTime(iso: string): string {
+    const d = new Date(iso);
+    const pad = (n: number) => n.toString().padStart(2, '0');
+    return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+
+  async function setTaskAssignees(taskId: string, personIds: string[]) {
+    // Replace junction rows for this task; mirror first to legacy column.
+    const { error: delErr } = await supabase
+      .from('meeting_task_assignees')
+      .delete()
+      .eq('task_id', taskId);
+    if (delErr) {
+      console.error('Error clearing task assignees:', delErr);
+      return;
+    }
+    if (personIds.length > 0) {
+      const { error: insErr } = await supabase
+        .from('meeting_task_assignees')
+        .insert(personIds.map((person_id) => ({ task_id: taskId, person_id })));
+      if (insErr) {
+        console.error('Error inserting task assignees:', insErr);
+        return;
+      }
+    }
+    await supabase
+      .from('meeting_checklist_tasks')
+      .update({
+        assigned_user_id: personIds[0] ?? null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', taskId);
+    await supabase.from('meeting_activities').insert({
+      meeting_id: meetingId,
+      user_id: currentUser?.id || null,
+      activity_type: 'task_assigned',
+      content: 'updated task assignees',
+      metadata: { task_id: taskId },
+    });
+    fetchTasks();
+    fetchActivities();
   }
 
   async function fetchActivitiesWithMap(profileMap: Map<string, ProfileInfo>) {
@@ -530,6 +622,22 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
         </div>
       </div>
 
+      {/* Chairman & Coordinator */}
+      {(meeting.chairman_id || meeting.coordinator_id) && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 shrink-0">
+          <RoleCard
+            label="Chairman"
+            person={meeting.chairman_id ? profileMapRef.current.get(meeting.chairman_id) : null}
+            getInitials={getInitials}
+          />
+          <RoleCard
+            label="Coordinator"
+            person={meeting.coordinator_id ? profileMapRef.current.get(meeting.coordinator_id) : null}
+            getInitials={getInitials}
+          />
+        </div>
+      )}
+
       {/* Meeting Info Cards */}
       <div className="grid grid-cols-4 gap-6 shrink-0">
         <div className="bg-white border border-border/30 rounded-3xl p-6 flex flex-col gap-3">
@@ -685,14 +793,66 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
                         );
                       })()}
 
-                      {task.assignee && (
-                        <div className="flex items-center gap-2 mt-2">
-                          <span className="inline-flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-bold shadow-sm bg-mint text-status-green">
-                            {getInitials(task.assignee.name)}
-                          </span>
-                          <span className="text-xs text-text-secondary">{task.assignee.name}</span>
-                        </div>
-                      )}
+                      {/* Assignees: avatar stack + inline picker */}
+                      <div className="mt-2">
+                        {editingAssigneesTaskId === task.id ? (
+                          <div className="flex items-start gap-2">
+                            <div className="flex-1">
+                              <PeoplePicker
+                                people={people}
+                                value={(task.assignees ?? []).map((a) => a.id)}
+                                onChange={(ids) => setTaskAssignees(task.id, ids)}
+                                multiple
+                                placeholder="Add assignees..."
+                                compact
+                              />
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setEditingAssigneesTaskId(null)}
+                              className="text-[11px] font-bold text-text-tertiary hover:text-text-secondary px-2 py-1"
+                            >
+                              Done
+                            </button>
+                          </div>
+                        ) : (task.assignees?.length ?? 0) > 0 ? (
+                          <button
+                            type="button"
+                            onClick={() => setEditingAssigneesTaskId(task.id)}
+                            className="flex items-center gap-2 hover:bg-board/40 rounded-lg px-1 -ml-1 py-0.5 transition-colors"
+                            title="Click to edit assignees"
+                          >
+                            <div className="flex -space-x-1">
+                              {(task.assignees ?? []).slice(0, 4).map((a) => (
+                                <span
+                                  key={a.id}
+                                  className="inline-flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-bold shadow-sm bg-mint text-status-green border border-white"
+                                  title={a.name}
+                                >
+                                  {getInitials(a.name)}
+                                </span>
+                              ))}
+                              {(task.assignees?.length ?? 0) > 4 && (
+                                <span className="inline-flex items-center justify-center w-5 h-5 rounded-full text-[9px] font-bold bg-cream text-text-primary border border-white">
+                                  +{(task.assignees?.length ?? 0) - 4}
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-xs text-text-secondary">
+                              {(task.assignees ?? []).map((a) => a.name).join(', ')}
+                            </span>
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setEditingAssigneesTaskId(task.id)}
+                            className="text-xs text-text-tertiary hover:text-primary inline-flex items-center gap-1 transition-colors"
+                          >
+                            <Plus className="h-3 w-3" />
+                            Assign
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 ))
@@ -866,8 +1026,11 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
                         )}{' '}
                         <span className="font-normal">{activity.content}</span>
                       </p>
-                      <span className="text-[10px] font-bold uppercase text-text-tertiary mt-1">
-                        {new Date(activity.created_at).toLocaleString()}
+                      <span
+                        className="text-[10px] font-bold uppercase text-text-tertiary mt-1"
+                        suppressHydrationWarning
+                      >
+                        {formatActivityTime(activity.created_at)}
                       </span>
                     </div>
                   </div>
@@ -1062,6 +1225,37 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
       console.error('Error removing participant:', error);
     }
   }
+}
+
+function RoleCard({
+  label,
+  person,
+  getInitials,
+}: {
+  label: string;
+  person: { name: string; division?: string | null; rank?: string | null } | null | undefined;
+  getInitials: (name: string) => string;
+}) {
+  return (
+    <div className="bg-white border border-border/30 rounded-3xl p-5 flex items-center gap-4">
+      <div className="h-12 w-12 rounded-full bg-mint flex items-center justify-center text-status-green text-sm font-bold shrink-0">
+        {person ? getInitials(person.name) : '—'}
+      </div>
+      <div className="min-w-0">
+        <h3 className="text-xs tracking-wide text-text-tertiary uppercase font-light mb-1">
+          {label}
+        </h3>
+        <p className="text-base font-bold text-text-primary truncate">
+          {person?.name || 'Not assigned'}
+        </p>
+        {person && (person.rank || person.division) && (
+          <p className="text-xs text-text-tertiary truncate">
+            {[person.rank, person.division].filter(Boolean).join(' · ')}
+          </p>
+        )}
+      </div>
+    </div>
+  );
 }
 
 // Export memoized version to prevent unnecessary re-renders

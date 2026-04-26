@@ -200,6 +200,7 @@ export type Database = {
           id: string
           is_completed: boolean
           meeting_id: string
+          sort_order: number | null
           updated_at: string
         }
         Insert: {
@@ -210,6 +211,7 @@ export type Database = {
           id?: string
           is_completed?: boolean
           meeting_id: string
+          sort_order?: number | null
           updated_at?: string
         }
         Update: {
@@ -220,6 +222,7 @@ export type Database = {
           id?: string
           is_completed?: boolean
           meeting_id?: string
+          sort_order?: number | null
           updated_at?: string
         }
         Relationships: [
@@ -228,6 +231,39 @@ export type Database = {
             columns: ["meeting_id"]
             isOneToOne: false
             referencedRelation: "meetings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      meeting_task_assignees: {
+        Row: {
+          created_at: string
+          person_id: string
+          task_id: string
+        }
+        Insert: {
+          created_at?: string
+          person_id: string
+          task_id: string
+        }
+        Update: {
+          created_at?: string
+          person_id?: string
+          task_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meeting_task_assignees_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meeting_task_assignees_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "meeting_checklist_tasks"
             referencedColumns: ["id"]
           },
         ]

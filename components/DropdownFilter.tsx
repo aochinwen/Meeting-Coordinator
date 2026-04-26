@@ -13,20 +13,22 @@ interface FilterDropdownProps {
   calView?: string;
   anchor?: string;
   types?: string;
+  person?: string;
 }
 
-function extraQs(view?: string, calView?: string, anchor?: string, types?: string) {
+function extraQs(view?: string, calView?: string, anchor?: string, types?: string, person?: string) {
   const usp = new URLSearchParams();
   if (view) usp.set('view', view);
   if (calView) usp.set('calView', calView);
   if (anchor) usp.set('anchor', anchor);
   if (types) usp.set('types', types);
+  if (person) usp.set('person', person);
   const s = usp.toString();
   return s ? `&${s}` : '';
 }
 
-export function FilterDropdown({ search, filter, sortBy, sortOrder, view, calView, anchor, types }: FilterDropdownProps) {
-  const extra = extraQs(view, calView, anchor, types);
+export function FilterDropdown({ search, filter, sortBy, sortOrder, view, calView, anchor, types, person }: FilterDropdownProps) {
+  const extra = extraQs(view, calView, anchor, types, person);
   const [isOpen, setIsOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -85,8 +87,8 @@ export function FilterDropdown({ search, filter, sortBy, sortOrder, view, calVie
   );
 }
 
-export function SortDropdown({ search, filter, sortBy, sortOrder, view, calView, anchor, types }: FilterDropdownProps) {
-  const extra = extraQs(view, calView, anchor, types);
+export function SortDropdown({ search, filter, sortBy, sortOrder, view, calView, anchor, types, person }: FilterDropdownProps) {
+  const extra = extraQs(view, calView, anchor, types, person);
   const [isOpen, setIsOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 

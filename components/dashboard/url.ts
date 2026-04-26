@@ -10,6 +10,7 @@ export type DashboardParams = {
   calView?: string;
   anchor?: string;
   types?: string;
+  person?: string;
 };
 
 export function buildDashboardHref(
