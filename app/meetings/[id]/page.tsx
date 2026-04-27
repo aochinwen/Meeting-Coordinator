@@ -12,7 +12,7 @@ export const revalidate = 30; // Revalidate every 30 seconds for real-time data
 // Loading fallback for suspense
 function MeetingDetailSkeleton() {
   return (
-    <div className="max-w-[1280px] mx-auto pb-24 flex flex-col pt-8 space-y-8 px-8">
+    <div className="max-w-[1280px] mx-auto pb-24 flex flex-col pt-6 sm:pt-8 space-y-6 sm:space-y-8 px-4 sm:px-6 lg:px-8">
       <div className="flex items-center justify-center h-64">
         <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full"></div>
       </div>

@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect, useRef, useMemo, memo } from 'react';
-import { 
-  ChevronRight, Calendar, Clock, Users, MapPin, FileText, 
+import {
+  ChevronRight, Calendar, Clock, Users, MapPin, FileText,
   CheckCircle2, MessageSquare, Plus, Check, Edit, Trash2,
   Mail, Copy, ExternalLink, MoreHorizontal, ArrowLeft
 } from 'lucide-react';
@@ -217,7 +217,7 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
     const { data: allProfiles } = await supabase
       .from('people')
       .select('id, name, division, rank');
-    
+
     const profileMap = new Map<string, ProfileInfo>();
     (allProfiles || []).forEach((p: any) => profileMap.set(p.id, { name: p.name, division: p.division, rank: p.rank }));
     profileMapRef.current = profileMap;
@@ -508,7 +508,7 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
 
   if (loading) {
     return (
-      <div className="max-w-[1280px] mx-auto pb-24 flex flex-col pt-8 space-y-8 px-8">
+      <div className="max-w-[1280px] mx-auto pb-24 flex flex-col pt-6 sm:pt-8 space-y-6 sm:space-y-8 px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-center h-64">
           <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full"></div>
         </div>
@@ -518,7 +518,7 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
 
   if (!meeting) {
     return (
-      <div className="max-w-[1280px] mx-auto pb-24 flex flex-col pt-8 space-y-8 px-8">
+      <div className="max-w-[1280px] mx-auto pb-24 flex flex-col pt-6 sm:pt-8 space-y-6 sm:space-y-8 px-4 sm:px-6 lg:px-8">
         <div className="text-center text-text-tertiary">Meeting not found</div>
       </div>
     );
@@ -566,60 +566,63 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
   }, []);
 
   return (
-    <div className="max-w-[1280px] mx-auto pb-24 flex flex-col pt-8 space-y-8 px-8">
+    <div className="max-w-[1280px] mx-auto pb-24 flex flex-col pt-6 sm:pt-8 space-y-6 sm:space-y-8 px-4 sm:px-6 lg:px-8">
       {/* Header */}
-      <div className="flex items-start justify-between shrink-0">
-        <div className="flex flex-col gap-3">
-          <Link href="/" className="flex items-center gap-2 text-sm text-text-secondary hover:text-text-primary transition-colors">
+      <div className="flex flex-col gap-4 shrink-0">
+        {/* Back + Actions row */}
+        <div className="flex items-center justify-between gap-3">
+          <Link href="/" className="flex items-center gap-2 text-sm text-text-secondary hover:text-text-primary transition-colors shrink-0">
             <ArrowLeft className="h-4 w-4" />
-            Back to Dashboard
+            <span className="hidden sm:inline">Back to Dashboard</span>
           </Link>
-          
-          <h1 className="text-4xl font-bold tracking-tight text-text-primary font-literata">
+
+          {/* Action buttons — icon-only on mobile, labeled on sm+ */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleCopyLink}
+              title={copied ? 'Copied!' : 'Copy Link'}
+              className={cn(
+                "h-9 w-9 sm:h-auto sm:w-auto sm:px-4 sm:py-2 border rounded-full text-sm font-medium transition-all flex items-center justify-center sm:gap-2",
+                copied
+                  ? "bg-mint border-status-green text-status-green"
+                  : "bg-board border-border text-text-primary hover:bg-surface"
+              )}
+            >
+              {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+              <span className="hidden sm:inline">{copied ? 'Copied!' : 'Copy Link'}</span>
+            </button>
+
+
+            <button
+              onClick={() => setIsEditMeetingOpen(true)}
+              title="Edit Meeting"
+              className="h-9 w-9 sm:h-auto sm:w-auto sm:px-4 sm:py-2 bg-board border border-border text-text-primary rounded-full text-sm font-medium transition-all active:scale-95 hover:bg-surface flex items-center justify-center sm:gap-2"
+            >
+              <Edit className="h-4 w-4" />
+              <span className="hidden sm:inline">Edit</span>
+            </button>
+
+            <button
+              onClick={() => setIsDeleteModalOpen(true)}
+              title="Delete Meeting"
+              className="h-9 w-9 sm:h-auto sm:w-auto sm:px-4 sm:py-2 bg-coral-bg text-coral-text border border-coral-text/30 rounded-full text-sm font-medium transition-all active:scale-95 hover:bg-coral-text/10 flex items-center justify-center sm:gap-2"
+            >
+              <Trash2 className="h-4 w-4" />
+              <span className="hidden sm:inline">Delete</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Title & description */}
+        <div className="flex flex-col gap-2">
+          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight text-text-primary font-literata leading-tight">
             {meeting.title}
           </h1>
-          
           {meeting.description && (
-            <p className="text-base text-text-secondary max-w-2xl">
+            <p className="text-sm sm:text-base text-text-secondary max-w-2xl">
               {meeting.description}
             </p>
           )}
-        </div>
-
-        <div className="flex gap-3">
-          <button
-            onClick={handleCopyLink}
-            className={cn(
-              "px-5 py-2.5 border rounded-full text-sm font-medium transition-all flex items-center gap-2",
-              copied
-                ? "bg-mint border-status-green text-status-green"
-                : "bg-board border-border text-text-primary hover:bg-surface"
-            )}
-          >
-            {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-            {copied ? 'Copied!' : 'Copy Link'}
-          </button>
-          
-          <button className="px-5 py-2.5 bg-primary text-white rounded-full text-sm font-medium shadow-md transition-all active:scale-95 hover:bg-primary/90 flex items-center gap-2">
-            <Mail className="h-4 w-4" />
-            Send Invites
-          </button>
-          
-          <button
-            onClick={() => setIsEditMeetingOpen(true)}
-            className="px-5 py-2.5 bg-board border border-border text-text-primary rounded-full text-sm font-medium transition-all active:scale-95 hover:bg-surface flex items-center gap-2"
-          >
-            <Edit className="h-4 w-4" />
-            Edit
-          </button>
-
-          <button 
-            onClick={() => setIsDeleteModalOpen(true)}
-            className="px-5 py-2.5 bg-coral-bg text-coral-text border border-coral-text/30 rounded-full text-sm font-medium transition-all active:scale-95 hover:bg-coral-text/10 flex items-center gap-2"
-          >
-            <Trash2 className="h-4 w-4" />
-            Delete
-          </button>
         </div>
       </div>
 
@@ -640,7 +643,7 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
       )}
 
       {/* Meeting Info Cards */}
-      <div className="grid grid-cols-4 gap-6 shrink-0">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-6 shrink-0">
         <div className="bg-white border border-border/30 rounded-3xl p-6 flex flex-col gap-3">
           <div className="h-11 w-11 rounded-full bg-status-green-bg/30 flex items-center justify-center">
             <Calendar className="h-5 w-5 text-primary" />
@@ -685,10 +688,10 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
       </div>
 
       {/* Main Content Grid */}
-      <div className="grid grid-cols-12 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
         {/* Left Column - Tasks & Participants */}
-        <div className="col-span-8 flex flex-col gap-6">
-          
+        <div className="col-span-1 lg:col-span-8 flex flex-col gap-6">
+
           {/* Progress Bar */}
           <div className="bg-surface rounded-3xl p-6 flex flex-col gap-4">
             <div className="flex justify-between items-center">
@@ -700,7 +703,7 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
               </span>
             </div>
             <div className="h-3 w-full bg-cream rounded-full overflow-hidden">
-              <div 
+              <div
                 className="h-full bg-primary rounded-full transition-all duration-300"
                 style={{ width: `${progress}%` }}
               ></div>
@@ -723,8 +726,8 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
                 </div>
               ) : (
                 tasks.map((task) => (
-                  <div 
-                    key={task.id} 
+                  <div
+                    key={task.id}
                     id={`task-${task.id}`}
                     className={cn(
                       "p-6 flex gap-4 transition-colors border-b last:border-b-0 border-border/10",
@@ -732,7 +735,7 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
                       highlightedTaskId === task.id && "ring-2 ring-primary/40 ring-offset-2 ring-offset-white bg-status-green-bg/40"
                     )}
                   >
-                    <div 
+                    <div
                       className="pt-0.5 shrink-0 cursor-pointer"
                       onClick={() => toggleTask(task.id, task.is_completed)}
                     >
@@ -956,9 +959,9 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
                   No participants added yet.
                 </div>
               ) : (
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {participants.map((participant) => (
-                    <div 
+                    <div
                       key={participant.id}
                       className="flex items-center gap-3 p-3 bg-surface rounded-2xl group"
                     >
@@ -997,12 +1000,12 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
         </div>
 
         {/* Right Column - Activity Feed */}
-        <div className="col-span-4 flex flex-col gap-6">
+        <div className="col-span-1 lg:col-span-4 flex flex-col gap-6">
           <div className="bg-white border border-border/20 rounded-3xl shadow-sm p-6 flex flex-col gap-6">
-            
+
             <div className="flex flex-col gap-2">
               <div className="bg-status-grey-bg border border-border/20 rounded-2xl p-[5px]">
-                <textarea 
+                <textarea
                   value={commentInput}
                   onChange={(e) => setCommentInput(e.target.value)}
                   placeholder="Post to the activity stream"
@@ -1010,13 +1013,13 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
                 />
               </div>
               <div className="flex justify-between items-center px-1 mt-1 gap-2">
-                <button 
+                <button
                   onClick={() => setCommentInput('')}
                   className="flex-1 py-2 text-sm font-bold text-coral-text border border-primary/20 rounded-2xl hover:bg-coral-text/5 transition-colors"
                 >
                   Cancel
                 </button>
-                <button 
+                <button
                   onClick={postActivity}
                   disabled={!commentInput.trim()}
                   className="flex-1 py-2 text-sm font-bold text-primary border border-primary/20 rounded-2xl hover:bg-primary/5 transition-colors disabled:opacity-50"
@@ -1027,12 +1030,12 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
             </div>
 
             <div className="flex items-center gap-2 mt-2">
-              <MessageSquare className="h-4 w-4 text-text-primary" strokeWidth={2.5}/>
+              <MessageSquare className="h-4 w-4 text-text-primary" strokeWidth={2.5} />
               <h3 className="text-lg font-bold text-text-primary font-literata">
                 Activity Stream
               </h3>
             </div>
-            
+
             <div className="flex flex-col gap-8 relative pb-2 pt-1 pl-1">
               <div className="absolute left-[17px] top-6 bottom-4 w-0.5 bg-border/20"></div>
 
@@ -1052,7 +1055,7 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
                         </div>
                       )}
                     </div>
-                    
+
                     <div className="flex flex-col w-full -mt-0.5 text-sm">
                       <p className="text-text-primary leading-snug">
                         {activity.user ? (
@@ -1082,7 +1085,7 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
           <div className="bg-white border border-border/20 rounded-3xl overflow-hidden shadow-sm flex flex-col relative h-[220px]">
             <div className="h-[128px] w-full bg-taupe relative overflow-hidden">
               <div className="absolute inset-0 bg-[url('data:image/svg+xml;utf8,<svg width=\'400\' height=\'200\' viewBox=\'0 0 400 200\' fill=\'none\' xmlns=\'http://www.w3.org/2000/svg\'><rect width=\'400\' height=\'200\' fill=\'%23E5E7EB\'/><path d=\'M0 50L400 150M0 100L400 200M0 150L400 250\' stroke=\'%23D1D5DB\' stroke-width=\'4\'/><path d=\'M100 0L200 200M200 0L300 200M300 0L400 200\' stroke=\'%23D1D5DB\' stroke-width=\'4\'/></svg>')] bg-cover bg-center mix-blend-multiply opacity-50"></div>
-              
+
               <div className="absolute inset-x-0 bottom-4 flex justify-center">
                 <div className="w-10 h-14 bg-white/30 backdrop-blur-sm shadow flex items-center justify-center rounded-t-full rounded-b-[4px] relative -bottom-2 z-10 border border-white/50">
                   <div className="w-6 h-6 rounded-full bg-white/80 shadow-inner flex items-center justify-center">
@@ -1091,7 +1094,7 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
                 </div>
               </div>
             </div>
-            
+
             <div className="p-6 flex flex-col gap-1 z-20 bg-white relative">
               <div className="flex items-center justify-between">
                 <h4 className="text-sm font-bold text-text-primary font-literata">
@@ -1215,7 +1218,7 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
 
   async function handleAddParticipants(userIds: string[]) {
     if (!meetingId || userIds.length === 0) return;
-    
+
     setIsAddingParticipants(true);
     try {
       await addMeetingParticipants(meetingId, userIds, true);
@@ -1240,7 +1243,7 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
 
   async function handleRemoveParticipant(userId: string) {
     if (!meetingId) return;
-    
+
     const participant = participants.find(p => p.user_id === userId);
     if (!participant) return;
 
