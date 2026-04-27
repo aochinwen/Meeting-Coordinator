@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Literata, Nunito_Sans } from "next/font/google";
 import { headers } from "next/headers";
 import { Analytics } from "@vercel/analytics/next";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import "./globals.css";
 import { Header } from "@/components/Header";
 import { Sidebar } from "@/components/Sidebar";
@@ -51,6 +52,7 @@ export default async function RootLayout({
         <body className="h-full bg-board text-text-primary font-nunito">
           {children}
           <Analytics />
+          <SpeedInsights />
         </body>
       ) : (
         <body className="h-full flex flex-col bg-board text-text-primary font-nunito">
@@ -62,6 +64,7 @@ export default async function RootLayout({
             </main>
           </div>
           <Analytics />
+          <SpeedInsights />
         </body>
       )}
     </html>
