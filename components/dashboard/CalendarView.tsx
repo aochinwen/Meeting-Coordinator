@@ -112,7 +112,7 @@ function MonthGrid({
               <div
                 key={d}
                 className={cn(
-                  'min-h-[112px] sm:min-h-[120px] border-b border-r border-border/20 p-2 flex flex-col gap-1',
+                  'group min-h-[112px] sm:min-h-[120px] border-b border-r border-border/20 p-2 flex flex-col gap-1 relative',
                   !inMonth && 'bg-board/30',
                 )}
                 style={inMonth && isWeekend(d) ? { backgroundColor: 'rgba(120, 168, 134, 0.15)' } : undefined}
@@ -142,6 +142,14 @@ function MonthGrid({
                       +{overflow} more
                     </Link>
                   )}
+                </div>
+                <div className="mt-auto pt-1 h-[24px] flex items-end">
+                  <Link
+                    href={`/schedule?date=${d}`}
+                    className="opacity-0 group-hover:opacity-100 transition-opacity w-full text-center text-[11px] font-medium bg-primary text-white py-1 rounded-md shadow-sm"
+                  >
+                    + meeting
+                  </Link>
                 </div>
               </div>
             );
@@ -179,7 +187,7 @@ function WeekView({
             <div
               key={d}
               className={cn(
-                'rounded-2xl p-3 flex flex-col gap-3 min-h-[260px]',
+                'group rounded-2xl p-3 flex flex-col gap-3 min-h-[260px] relative',
                 !isWeekend(d) && 'bg-board/30'
               )}
               style={isWeekend(d) ? { backgroundColor: 'rgba(120, 168, 134, 0.15)' } : undefined}
@@ -227,6 +235,15 @@ function WeekView({
                   Nothing scheduled
                 </div>
               ) : null}
+
+              <div className="mt-auto h-[28px] flex items-end">
+                <Link
+                  href={`/schedule?date=${d}`}
+                  className="opacity-0 group-hover:opacity-100 transition-opacity w-full text-center text-xs font-medium bg-primary text-white py-1.5 rounded-md shadow-sm"
+                >
+                  + meeting
+                </Link>
+              </div>
             </div>
           );
         })}
