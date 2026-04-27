@@ -7,6 +7,7 @@ function overlapsTime(aStart: string, aEnd: string, bStart: string, bEnd: string
 
 import { useState, useMemo, useCallback, useEffect, useRef, useLayoutEffect } from 'react';
 import { X, MapPin, Clock, Calendar, AlertTriangle, Check, ChevronRight, DoorOpen, Users, Sparkles } from 'lucide-react';
+import { useConfetti } from '@/lib/useConfetti';
 import { cn } from '@/lib/utils';
 import { format, addDays, startOfWeek, isSameDay, parseISO, getISODay } from 'date-fns';
 import { Room, RoomBooking, getRooms, getRoomBookings, checkRoomAvailability, bookRoom, cancelRoomBooking } from '@/lib/rooms';
@@ -1451,6 +1452,13 @@ function ConfirmationStep({
 
 // Success Step Component
 function SuccessStep({ onClose }: { onClose: () => void }) {
+  const fireConfetti = useConfetti();
+
+  // Fire confetti once when this success screen mounts
+  useEffect(() => {
+    fireConfetti();
+  }, []);
+
   return (
     <div className="p-12 text-center space-y-4">
       <div className="h-16 w-16 rounded-full bg-mint flex items-center justify-center mx-auto">
