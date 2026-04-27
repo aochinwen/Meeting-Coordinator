@@ -1,5 +1,10 @@
 'use client';
 
+// Helper: check if two time ranges overlap (exclusive end)
+function overlapsTime(aStart: string, aEnd: string, bStart: string, bEnd: string): boolean {
+  return aStart < bEnd && aEnd > bStart;
+}
+
 import { useState, useMemo, useCallback, useEffect, useRef, useLayoutEffect } from 'react';
 import { X, MapPin, Clock, Calendar, AlertTriangle, Check, ChevronRight, DoorOpen, Users, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -412,11 +417,19 @@ function SingleOccurrenceSelector({
   const [bookings, setBookings] = useState<Record<string, (RoomBooking & { room: Room })[]>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [currentDate, setCurrentDate] = useState(() => {
-    // Start calendar on the week containing the meeting date
     const meetingDate = parseISO(meeting.date);
     return startOfWeek(meetingDate, { weekStartsOn: 1 });
   });
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(currentBooking?.room_id || null);
+
+  // Draft slot — pre-populated with the meeting's own schedule
+  const [draftSlot, setDraftSlot] = useState<{ date: string; startTime: string; endTime: string } | null>(
+    meeting.start_time && meeting.end_time
+      ? { date: meeting.date, startTime: meeting.start_time.slice(0, 5), endTime: meeting.end_time.slice(0, 5) }
+      : null
+  );
+
+  const calendarBodyRef = useRef<HTMLDivElement>(null);
 
   // Load rooms and bookings
   useEffect(() => {
@@ -466,10 +479,30 @@ function SingleOccurrenceSelector({
     load();
   }, [currentDate]);
 
+  // Auto-scroll to meeting time once calendar loads
+  useLayoutEffect(() => {
+    if (!calendarBodyRef.current || !meeting.start_time || isLoading) return;
+    const [h, m] = meeting.start_time.split(':').map(Number);
+    const SLOT_HEIGHT_PX = 48;
+    const top = ((h - 6) * 60 + m) / 30 * (SLOT_HEIGHT_PX / 2);
+    calendarBodyRef.current.scrollTop = Math.max(0, top - calendarBodyRef.current.clientHeight / 3);
+  }, [isLoading]);
+
   const selectedRoom = useMemo(
     () => rooms.find((r) => r.id === selectedRoomId) ?? null,
     [rooms, selectedRoomId]
   );
+
+  // Compute conflict between draft slot and loaded room bookings (local, no API)
+  const draftHasConflict = useMemo(() => {
+    if (!draftSlot || !selectedRoom) return false;
+    const dateBookings = (bookings[draftSlot.date] || []).filter(
+      (b) => b.room_id === selectedRoom.id && b.id !== highlightBookingId
+    );
+    return dateBookings.some((b) =>
+      overlapsTime(draftSlot.startTime, draftSlot.endTime, b.start_time, b.end_time)
+    );
+  }, [draftSlot, bookings, selectedRoom, highlightBookingId]);
 
   // Calculate visible days
   const visibleDays = useMemo(() => {
@@ -484,12 +517,38 @@ function SingleOccurrenceSelector({
     setCurrentDate(startOfWeek(meetingDate, { weekStartsOn: 1 }));
   };
 
+  // Clear: reset draft to meeting's original schedule
+  const handleClear = () => {
+    if (meeting.start_time && meeting.end_time) {
+      setDraftSlot({
+        date: meeting.date,
+        startTime: meeting.start_time.slice(0, 5),
+        endTime: meeting.end_time.slice(0, 5),
+      });
+    } else {
+      setDraftSlot(null);
+    }
+  };
+
+  // Next: proceed to confirm with the current draft slot
+  const handleNext = () => {
+    if (!draftSlot || !selectedRoom || draftHasConflict) return;
+    onSlotSelected({
+      roomId: selectedRoom.id,
+      roomName: selectedRoom.name,
+      roomCapacity: selectedRoom.capacity,
+      date: draftSlot.date,
+      startTime: draftSlot.startTime,
+      endTime: draftSlot.endTime,
+    });
+  };
+
   return (
     <div className="p-6 space-y-4">
       {/* Instructions */}
       <div className="bg-primary/5 border border-primary/20 rounded-2xl p-4">
         <p className="text-sm text-text-primary">
-          <span className="font-bold">Select a new time slot:</span> Drag on the calendar to select a new date, time, and room for this meeting.
+          <span className="font-bold">Review or adjust the time slot:</span> Your meeting&apos;s schedule is pre-loaded as a draft block. Drag to change the time, then click <span className="font-bold">Next</span> to confirm.
         </p>
       </div>
 
@@ -588,7 +647,7 @@ function SingleOccurrenceSelector({
         </div>
 
         {/* Calendar Body */}
-        <div className="overflow-auto max-h-[400px]">
+        <div ref={calendarBodyRef} className="overflow-auto max-h-[400px]">
           {isLoading ? (
             <div className="flex items-center justify-center py-20">
               <div className="h-8 w-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
@@ -599,16 +658,11 @@ function SingleOccurrenceSelector({
               visibleDays={visibleDays}
               bookings={bookings}
               highlightBookingId={highlightBookingId}
+              draftSlot={draftSlot}
               onTimeSlotSelect={(date, startTime, endTime) => {
-                console.log('[PARENT] onTimeSlotSelect called:', { date, startTime, endTime, selectedRoom: selectedRoom?.id });
-                if (!selectedRoom) {
-                  console.log('[PARENT] No selected room, returning early');
-                  return;
-                }
-                onSlotSelected({
-                  roomId: selectedRoom.id,
-                  roomName: selectedRoom.name,
-                  roomCapacity: selectedRoom.capacity,
+                if (!selectedRoom) return;
+                // Update draft slot — stay on select step until user clicks Next
+                setDraftSlot({
                   date: format(date, 'yyyy-MM-dd'),
                   startTime,
                   endTime,
@@ -623,8 +677,16 @@ function SingleOccurrenceSelector({
         </div>
       </div>
 
+      {/* Conflict warning */}
+      {draftSlot && draftHasConflict && (
+        <div className="flex items-center gap-2 px-4 py-2.5 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">
+          <AlertTriangle className="h-4 w-4 shrink-0" />
+          <span>This room is unavailable at the selected time. Choose a different room or drag to a new time.</span>
+        </div>
+      )}
+
       {/* Legend */}
-      <div className="flex items-center gap-4 text-xs">
+      <div className="flex items-center gap-4 text-xs flex-wrap">
         <div className="flex items-center gap-1.5">
           <div className="h-3 w-3 rounded bg-primary/10 border border-primary/30" />
           <span className="text-text-secondary">Available</span>
@@ -634,9 +696,32 @@ function SingleOccurrenceSelector({
           <span className="text-text-secondary">Current Booking</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <div className="h-3 w-3 rounded bg-amber-100 border border-amber-300" />
-          <span className="text-text-secondary">Meeting Date</span>
+          <div className="h-3 w-3 rounded bg-green-100 border-2 border-green-400" />
+          <span className="text-text-secondary">Draft Slot (available)</span>
         </div>
+        <div className="flex items-center gap-1.5">
+          <div className="h-3 w-3 rounded bg-red-100 border-2 border-red-400" />
+          <span className="text-text-secondary">Draft Slot (conflict)</span>
+        </div>
+      </div>
+
+      {/* Next / Clear action bar */}
+      <div className="flex items-center justify-between pt-2 border-t border-border/20">
+        <button
+          onClick={handleClear}
+          className="px-5 py-2.5 text-sm font-bold text-text-secondary hover:bg-surface rounded-xl transition-colors border border-border/30"
+        >
+          Clear
+        </button>
+        <button
+          onClick={handleNext}
+          disabled={!draftSlot || !selectedRoom || draftHasConflict}
+          title={draftHasConflict ? 'This room is unavailable at the selected time' : undefined}
+          className="px-5 py-2.5 bg-primary text-white rounded-xl text-sm font-bold shadow-md transition-all hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+        >
+          Next
+          <ChevronRight className="h-4 w-4" />
+        </button>
       </div>
     </div>
   );
@@ -648,6 +733,7 @@ interface SimpleCalendarGridProps {
   visibleDays: Date[];
   bookings: Record<string, (RoomBooking & { room: Room; meetings?: { title: string; status: string } | null })[]>;
   highlightBookingId?: string;
+  draftSlot: { date: string; startTime: string; endTime: string } | null;
   onTimeSlotSelect: (date: Date, startTime: string, endTime: string) => void;
   defaultDuration: number;
 }
@@ -660,6 +746,7 @@ function SimpleCalendarGrid({
   visibleDays,
   bookings,
   highlightBookingId,
+  draftSlot,
   onTimeSlotSelect,
   defaultDuration,
 }: SimpleCalendarGridProps) {
@@ -710,13 +797,40 @@ function SimpleCalendarGrid({
   useEffect(() => {
     const handleGlobalMouseUp = () => {
       if (dragStartRef.current) {
-        console.log('[DRAG] Global mouseup triggered');
         handleMouseUp();
       }
     };
-
     window.addEventListener('mouseup', handleGlobalMouseUp);
     return () => window.removeEventListener('mouseup', handleGlobalMouseUp);
+  }, [handleMouseUp]);
+
+  // Global touch handlers for mobile drag support
+  useEffect(() => {
+    const handleGlobalTouchMove = (e: TouchEvent) => {
+      if (!dragStartRef.current) return;
+      e.preventDefault(); // prevent scroll while dragging
+      const touch = e.touches[0];
+      const elements = document.elementsFromPoint(touch.clientX, touch.clientY);
+      const dayColumn = elements.find(el => el.hasAttribute('data-day-index')) as HTMLElement | undefined;
+      if (dayColumn) {
+        const dayIndex = parseInt(dayColumn.getAttribute('data-day-index') || '0', 10);
+        const slot = getSlotFromMouseY(touch.clientY, dayColumn);
+        if (slot) {
+          const pos = { dayIndex, hour: slot.hour, slot: slot.slot };
+          dragEndRef.current = pos;
+          setDragEnd(pos);
+        }
+      }
+    };
+    const handleGlobalTouchEnd = () => {
+      if (dragStartRef.current) handleMouseUp();
+    };
+    window.addEventListener('touchmove', handleGlobalTouchMove, { passive: false });
+    window.addEventListener('touchend', handleGlobalTouchEnd);
+    return () => {
+      window.removeEventListener('touchmove', handleGlobalTouchMove);
+      window.removeEventListener('touchend', handleGlobalTouchEnd);
+    };
   }, [handleMouseUp]);
 
   // Track which day column is being dragged over
@@ -858,11 +972,8 @@ function SimpleCalendarGrid({
                     selectedRoom ? "hover:bg-primary/30 cursor-crosshair" : "cursor-not-allowed bg-gray-50"
                   )}
                   style={{ height: SLOT_HEIGHT / 2, width: '100%', display: 'block' }}
-                  onMouseDown={(e) => {
-                    console.log('[EVENT] slot :00 mousedown', { dayIndex, hour, hasSelectedRoom: !!selectedRoom });
-                    e.stopPropagation();
-                    if (selectedRoom) handleMouseDown(dayIndex, hour, 0);
-                  }}
+                  onMouseDown={(e) => { e.stopPropagation(); if (selectedRoom) handleMouseDown(dayIndex, hour, 0); }}
+                  onTouchStart={(e) => { e.stopPropagation(); if (selectedRoom) handleMouseDown(dayIndex, hour, 0); }}
                 />
                 {/* :30 slot */}
                 <div
@@ -871,11 +982,8 @@ function SimpleCalendarGrid({
                     selectedRoom ? "hover:bg-primary/30 cursor-crosshair" : "cursor-not-allowed bg-gray-50"
                   )}
                   style={{ height: SLOT_HEIGHT / 2, width: '100%', display: 'block' }}
-                  onMouseDown={(e) => {
-                    console.log('[EVENT] slot :30 mousedown', { dayIndex, hour, hasSelectedRoom: !!selectedRoom });
-                    e.stopPropagation();
-                    if (selectedRoom) handleMouseDown(dayIndex, hour, 1);
-                  }}
+                  onMouseDown={(e) => { e.stopPropagation(); if (selectedRoom) handleMouseDown(dayIndex, hour, 1); }}
+                  onTouchStart={(e) => { e.stopPropagation(); if (selectedRoom) handleMouseDown(dayIndex, hour, 1); }}
                 />
               </div>
             ))}
@@ -903,37 +1011,54 @@ function SimpleCalendarGrid({
               );
             })}
 
+            {/* Draft slot overlay — shown when not actively dragging on this day */}
+            {draftSlot && !isDraggingThisDay && isSameDay(day, parseISO(draftSlot.date)) && (() => {
+              const { top, height } = getBookingStyle(draftSlot.startTime, draftSlot.endTime);
+              const hasConflict = dayBookings
+                .filter((b) => b.id !== highlightBookingId)
+                .some((b) => overlapsTime(draftSlot.startTime, draftSlot.endTime, b.start_time, b.end_time));
+              return (
+                <div
+                  className={cn(
+                    'absolute left-0.5 right-0.5 rounded-md p-1.5 pointer-events-none',
+                    hasConflict
+                      ? 'bg-red-100 border-2 border-red-400 text-red-800'
+                      : 'bg-green-100 border-2 border-green-400 text-green-800'
+                  )}
+                  style={{ top, height: Math.max(height - 2, 24), zIndex: 15 }}
+                >
+                  <p className="text-[10px] font-bold truncate">
+                    {hasConflict ? '⚠ Conflict' : '✓ Draft Slot'}
+                  </p>
+                  {height > 32 && (
+                    <p className="text-[10px] opacity-75">
+                      {draftSlot.startTime}–{draftSlot.endTime}
+                    </p>
+                  )}
+                </div>
+              );
+            })()}
+
             {/* Selection overlay */}
             {isDraggingThisDay && (
               <div
                 className="absolute left-0.5 right-0.5 bg-primary/40 border-2 border-primary shadow-lg rounded-md z-20 pointer-events-none"
                 style={{ top: selectionTop, height: Math.max(selectionHeight, 24) }}
               >
-                {/* Time label inside selection */}
                 <div className="absolute top-0 left-1 right-1 flex justify-between items-start pt-0.5">
                   <span className="text-[9px] font-bold text-primary-foreground bg-primary/80 px-1 rounded">
                     {(dragStart && dragEnd) && (() => {
-                      const startSlot = Math.min(
-                        dragStart.hour * 2 + dragStart.slot,
-                        dragEnd.hour * 2 + dragEnd.slot
-                      );
+                      const startSlot = Math.min(dragStart.hour * 2 + dragStart.slot, dragEnd.hour * 2 + dragEnd.slot);
                       const startMinutes = startSlot * 30;
-                      const startH = Math.floor(startMinutes / 60);
-                      const startM = startMinutes % 60;
-                      return `${startH.toString().padStart(2, '0')}:${startM.toString().padStart(2, '0')}`;
+                      return `${Math.floor(startMinutes / 60).toString().padStart(2, '0')}:${(startMinutes % 60).toString().padStart(2, '0')}`;
                     })()}
                   </span>
                   {selectionHeight > 40 && (
                     <span className="text-[9px] font-bold text-primary-foreground bg-primary/80 px-1 rounded">
                       {(dragStart && dragEnd) && (() => {
-                        const endSlot = Math.max(
-                          dragStart.hour * 2 + dragStart.slot,
-                          dragEnd.hour * 2 + dragEnd.slot
-                        ) + 1;
+                        const endSlot = Math.max(dragStart.hour * 2 + dragStart.slot, dragEnd.hour * 2 + dragEnd.slot) + 1;
                         const endMinutes = endSlot * 30;
-                        const endH = Math.floor(endMinutes / 60);
-                        const endM = endMinutes % 60;
-                        return `${endH.toString().padStart(2, '0')}:${endM.toString().padStart(2, '0')}`;
+                        return `${Math.floor(endMinutes / 60).toString().padStart(2, '0')}:${(endMinutes % 60).toString().padStart(2, '0')}`;
                       })()}
                     </span>
                   )}
