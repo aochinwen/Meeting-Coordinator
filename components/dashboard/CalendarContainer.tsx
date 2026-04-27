@@ -11,6 +11,7 @@ import {
   type CalendarMode,
 } from '@/lib/calendar';
 import { buildDashboardHref, type DashboardParams } from './url';
+import { CalendarHoverProvider } from './CalendarHoverContext';
 
 interface CalendarContainerProps {
   children: React.ReactNode;
@@ -103,7 +104,9 @@ export function CalendarContainer({
 
       {/* Calendar content */}
       <div className={cn('transition-opacity', isPending && 'opacity-50')}>
-        {children}
+        <CalendarHoverProvider>
+          {children}
+        </CalendarHoverProvider>
       </div>
 
       {/* Full calendar loading scrim */}
