@@ -64,7 +64,8 @@ export async function proxy(request: NextRequest) {
     pathname.startsWith('/favicon.ico') ||
     pathname.startsWith('/pending-approval') ||
     pathname.startsWith('/forgot-password') ||
-    pathname.startsWith('/reset-password');
+    pathname.startsWith('/reset-password') ||
+    pathname.startsWith('/api/inbound-email');
 
   // If user is authenticated, check their approval status
   let isApproved = false;

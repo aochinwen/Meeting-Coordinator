@@ -13,10 +13,11 @@ import {
   Users, 
   Monitor,
   BarChart2, 
-  Settings, 
   HelpCircle,
   DoorOpen,
-  ShieldCheck
+  ShieldCheck,
+  Inbox,
+  Settings
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { createClient } from '@/utils/supabase/client';
@@ -39,6 +40,7 @@ export function Sidebar() {
 
   const mainRoutes = [
     { label: 'Dashboard', icon: LayoutDashboard, href: '/', active: pathname === '/' },
+    { label: 'Inbox', icon: Inbox, href: '/inbox', active: pathname?.startsWith('/inbox') },
     { label: 'Templates', icon: FileText, href: '/templates', active: pathname?.startsWith('/templates') },
     { label: 'Schedule', icon: CalendarDays, href: '/schedule', active: pathname?.startsWith('/schedule') },
     { label: 'Demo', icon: Monitor, href: '/demo', active: pathname?.startsWith('/demo') },

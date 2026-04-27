@@ -404,11 +404,13 @@ export type Database = {
       }
       meetings: {
         Row: {
+          calendar_uid: string | null
           chairman_id: string | null
           coordinator_id: string | null
           created_at: string
           date: string
           description: string | null
+          draft_data: Json | null
           end_time: string | null
           id: string
           instance_number: number | null
@@ -423,11 +425,13 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          calendar_uid?: string | null
           chairman_id?: string | null
           coordinator_id?: string | null
           created_at?: string
           date: string
           description?: string | null
+          draft_data?: Json | null
           end_time?: string | null
           id?: string
           instance_number?: number | null
@@ -442,11 +446,13 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          calendar_uid?: string | null
           chairman_id?: string | null
           coordinator_id?: string | null
           created_at?: string
           date?: string
           description?: string | null
+          draft_data?: Json | null
           end_time?: string | null
           id?: string
           instance_number?: number | null
