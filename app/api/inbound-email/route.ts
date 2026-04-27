@@ -41,10 +41,10 @@ export async function POST(request: Request) {
     
     // For generic webhook compatibility, we check a few common fields
     const subject = payload.subject || payload.Subject || '';
-    const textBody = payload.text || payload.TextBody || payload.body || '';
+    const textBody = payload.text || payload.TextBody || payload.body || payload.body_plain || '';
     const htmlBody = payload.html || payload.HtmlBody || '';
-    const fromAddress = payload.from || payload.From || '';
-    const toAddress = payload.to || payload.To || '';
+    const fromAddress = payload.from || payload.From || payload.from_email || '';
+    const toAddress = payload.to || payload.To || payload.to_emails || '';
     
     // Extract ICS content if passed in the payload (often as an attachment string or base64)
     let icsContent = payload.ics || '';
