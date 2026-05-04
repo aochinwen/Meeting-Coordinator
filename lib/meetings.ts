@@ -318,6 +318,33 @@ export async function updateMeetingOccurrence(
     throw new Error(`Failed to update meeting: ${error.message || JSON.stringify(error)}`);
   }
 
+  // Also sync the associated room booking if time or date has changed
+  if (changes.date || changes.start_time || changes.end_time) {
+    const { data: bookings } = await supabase
+      .from('room_bookings')
+      .select('id')
+      .eq('meeting_id', meetingId)
+      .eq('status', 'confirmed');
+
+    if (bookings && bookings.length > 0) {
+      for (const booking of bookings) {
+        const bookingUpdate: any = {};
+        if (changes.date) bookingUpdate.date = changes.date;
+        if (changes.start_time !== undefined) bookingUpdate.start_time = changes.start_time;
+        if (changes.end_time !== undefined) bookingUpdate.end_time = changes.end_time;
+
+        const { error: bookingError } = await supabase
+          .from('room_bookings')
+          .update(bookingUpdate)
+          .eq('id', booking.id);
+          
+        if (bookingError) {
+          console.error('Error syncing room booking time:', bookingError);
+        }
+      }
+    }
+  }
+
   console.log('Update successful, returned data:', data);
 }
 
