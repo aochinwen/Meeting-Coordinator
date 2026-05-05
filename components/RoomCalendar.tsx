@@ -9,6 +9,7 @@ import { Room, RoomBooking, getRooms, getRoomBookings } from '@/lib/rooms';
 interface RoomCalendarProps {
   onBookingClick?: (booking: RoomBooking & { room: Room; meetings?: { title: string; status: string; series_id: string | null } | null }) => void;
   onTimeSlotClick?: (room: Room, date: Date, startTime: string, endTime: string) => void;
+  onPendingSlotChange?: (slot: PendingSlot | null) => void;
 }
 
 interface DragState {
@@ -16,6 +17,17 @@ interface DragState {
   dateKey: string;
   startIndex: number; // 0-based 30-min slot index from FIRST_HOUR
   endIndex: number;
+}
+
+export interface PendingSlot {
+  room: Room;
+  day: Date;
+  startTime: string;
+  endTime: string;
+  // slot indices for overlay rendering
+  dateKey: string;
+  loIndex: number;
+  hiIndex: number;
 }
 
 type BookingWithRoom = RoomBooking & { room: Room; meetings?: { title: string; status: string; series_id: string | null } | null };
@@ -42,7 +54,7 @@ function clamp(n: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, n));
 }
 
-export function RoomCalendar({ onBookingClick, onTimeSlotClick }: RoomCalendarProps) {
+export function RoomCalendar({ onBookingClick, onTimeSlotClick, onPendingSlotChange }: RoomCalendarProps) {
   const [rooms, setRooms] = useState<Room[]>([]);
   const [bookings, setBookings] = useState<Record<string, BookingWithRoom[]>>({});
   const [isLoading, setIsLoading] = useState(true);
@@ -50,6 +62,8 @@ export function RoomCalendar({ onBookingClick, onTimeSlotClick }: RoomCalendarPr
   const [error, setError] = useState<string | null>(null);
   const [dragState, setDragState] = useState<DragState | null>(null);
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
+  // Confirmed pending selection — kept visible until user clicks Next or Clear
+  const [pendingSlot, setPendingSlot] = useState<PendingSlot | null>(null);
 
   // Refs to day-column DOM nodes, keyed by `yyyy-MM-dd`. Used during drag to
   // hit-test the mouse against the originating column via getBoundingClientRect,
@@ -194,7 +208,9 @@ export function RoomCalendar({ onBookingClick, onTimeSlotClick }: RoomCalendarPr
       const day = visibleDays.find((d) => format(d, 'yyyy-MM-dd') === dateKey);
       setDragState(null);
       if (room && day) {
-        onTimeSlotClick?.(room, day, startTime, endTime);
+        const slot: PendingSlot = { room, day, startTime, endTime, dateKey, loIndex: lo, hiIndex: hi };
+        setPendingSlot(slot);
+        onPendingSlotChange?.(slot);
       }
     };
 
@@ -263,6 +279,11 @@ export function RoomCalendar({ onBookingClick, onTimeSlotClick }: RoomCalendarPr
       </div>
     );
   }
+
+  const handleClearPending = () => {
+    setPendingSlot(null);
+    onPendingSlotChange?.(null);
+  };
 
   return (
     <div className="flex flex-col gap-4">
@@ -628,7 +649,7 @@ export function RoomCalendar({ onBookingClick, onTimeSlotClick }: RoomCalendarPr
                           });
                         })()}
 
-                        {/* Selection overlay while dragging */}
+                        {/* Live drag selection overlay */}
                         {isActiveDragDay && (
                           <div
                             className="pointer-events-none absolute left-0.5 right-0.5 bg-primary/25 border border-primary/60 rounded-md z-20 flex items-start justify-center text-[10px] font-bold text-primary pt-1"
@@ -641,6 +662,22 @@ export function RoomCalendar({ onBookingClick, onTimeSlotClick }: RoomCalendarPr
                             {formatTime(slotIndexToTime(selHi + 1))}
                           </div>
                         )}
+
+                        {/* Pending slot overlay (confirmed selection awaiting Next/Clear) */}
+                        {pendingSlot &&
+                          pendingSlot.dateKey === dateKey &&
+                          pendingSlot.room.id === selectedRoom?.id && (
+                            <div
+                              className="pointer-events-none absolute left-0.5 right-0.5 bg-emerald-500/20 border-2 border-emerald-500/70 rounded-md z-20 flex items-start justify-center text-[10px] font-bold text-emerald-700 pt-1"
+                              style={{
+                                top: pendingSlot.loIndex * SLOT_HEIGHT,
+                                height: (pendingSlot.hiIndex - pendingSlot.loIndex + 1) * SLOT_HEIGHT,
+                              }}
+                            >
+                              {formatTime(pendingSlot.startTime)} –{' '}
+                              {formatTime(pendingSlot.endTime)}
+                            </div>
+                          )}
                       </div>
                     );
                   })}
@@ -650,6 +687,7 @@ export function RoomCalendar({ onBookingClick, onTimeSlotClick }: RoomCalendarPr
           </div>
         </>
       )}
+      {/* No action bar here — parent (RoomsClient) renders it at body level */}
     </div>
   );
 }
