@@ -29,6 +29,7 @@ interface MeetingWithRelations {
   series_id: string | null;
   meeting_participants: { user_id: string }[];
   meeting_checklist_tasks: { id: string; is_completed: boolean }[];
+  rooms: { name: string } | null;
 }
 
 export const revalidate = 60;
@@ -416,7 +417,8 @@ async function MeetingsListBranch({
       *,
       meeting_participants(user_id),
       meeting_checklist_tasks(id, is_completed),
-      series_id
+      series_id,
+      rooms(name)
     `, { count: 'exact' })
     .gte('date', start)
     .lte('date', end);
@@ -489,6 +491,7 @@ async function MeetingsListBranch({
       description: meeting.description || 'No description provided',
       date: new Date(meeting.date + 'T00:00:00').toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' }),
       timeLabel: `${meeting.start_time?.slice(0, 5) || 'TBD'} — ${meeting.end_time?.slice(0, 5) || 'TBD'}`,
+      roomName: meeting.rooms?.name || 'TBD',
       status: isLive ? 'Live' : 'Upcoming',
       icon: icons[randomIdx],
       iconBg: bgs[randomIdx],
@@ -516,11 +519,12 @@ async function MeetingsListBranch({
     >
       <div className="bg-white rounded-[24px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] border border-[rgba(196,200,188,0.2)] overflow-hidden hidden md:block">
         <div className="grid grid-cols-12 gap-4 px-6 py-4 bg-[rgba(234,230,222,0.5)] border-b border-[rgba(196,200,188,0.2)] text-xs tracking-[1.2px] uppercase text-text-secondary font-light shrink-0">
-          <div className="col-span-4">Meeting Details</div>
+          <div className="col-span-3">Meeting Details</div>
           <div className="col-span-2">Date & Time</div>
+          <div className="col-span-2">Room</div>
           <div className="col-span-2">Attendees</div>
           <div className="col-span-2">Progress</div>
-          <div className="col-span-2 text-right">Status</div>
+          <div className="col-span-1 text-right">Status</div>
         </div>
         <div className="divide-y divide-[rgba(196,200,188,0.1)]">
           {formattedMeetings.length > 0 ? formattedMeetings.map((meeting) => (
@@ -529,7 +533,7 @@ async function MeetingsListBranch({
               href={`/meetings/${meeting.id}`}
               className="grid grid-cols-12 gap-4 px-6 py-6 items-center hover:bg-board/50 transition-colors group cursor-pointer"
             >
-              <div className="col-span-4 flex items-center gap-4">
+              <div className="col-span-3 flex items-center gap-4">
                 <div className={cn('h-12 w-12 rounded-full flex items-center justify-center shrink-0', meeting.iconBg)}>
                   <meeting.icon className={cn('h-5 w-5', meeting.iconColor)} />
                 </div>
@@ -548,6 +552,9 @@ async function MeetingsListBranch({
               <div className="col-span-2 flex flex-col gap-1">
                 <span className="text-sm text-text-primary font-light">{meeting.date}</span>
                 <span className="text-xs text-text-tertiary font-light">{meeting.timeLabel}</span>
+              </div>
+              <div className="col-span-2 flex flex-col gap-1 justify-center">
+                <span className="text-sm text-text-primary font-light">{meeting.roomName !== 'TBD' ? meeting.roomName : <span className="text-text-tertiary italic">No room</span>}</span>
               </div>
               <div className="col-span-2 flex items-center -space-x-2">
                 {meeting.attendees.length > 0 ? (
@@ -593,7 +600,7 @@ async function MeetingsListBranch({
                   <span className="text-xs text-text-tertiary">No tasks</span>
                 )}
               </div>
-              <div className="col-span-2 flex justify-end">
+              <div className="col-span-1 flex justify-end">
                 {meeting.status === 'Live' ? (
                   <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-status-green-bg text-status-green text-xs font-light">
                     <span className="h-1.5 w-1.5 rounded-full bg-primary"></span>
@@ -639,6 +646,7 @@ async function MeetingsListBranch({
               <div className="text-text-secondary">
                 <div>{meeting.date}</div>
                 <div className="text-text-tertiary">{meeting.timeLabel}</div>
+                {meeting.roomName !== 'TBD' && <div className="text-text-tertiary mt-0.5">{meeting.roomName}</div>}
               </div>
               {meeting.status === 'Live' ? (
                 <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-status-green-bg text-status-green text-xs font-light">

@@ -25,10 +25,10 @@ type BookingWithRoom = RoomBooking & { room: Room; meetings?: { title: string; s
 // so TOTAL_SLOTS = HOURS.length * 2 and the end-edge boundary index is
 // TOTAL_SLOTS (= 23:00).
 const FIRST_HOUR = 6;
-const LAST_HOUR = 23; // exclusive end boundary (last slot is 22:30–23:00)
+const LAST_HOUR = 22; // exclusive end boundary (last slot is 21:30–22:00)
 const HOURS = Array.from({ length: LAST_HOUR - FIRST_HOUR }, (_, i) => i + FIRST_HOUR);
 const TOTAL_SLOTS = HOURS.length * 2;
-const SLOT_HEIGHT = 40; // px; height of one 30-min slot
+const SLOT_HEIGHT = 20; // px; height of one 30-min slot
 
 // Convert a 30-min slot boundary index into an "HH:MM" string. The value
 // may range from 0 (= FIRST_HOUR:00) through TOTAL_SLOTS (= LAST_HOUR:00).
@@ -598,7 +598,7 @@ export function RoomCalendar({ onBookingClick, onTimeSlotClick }: RoomCalendarPr
                                 className="absolute bg-primary/10 border border-primary/30 rounded-lg p-1 cursor-pointer hover:bg-primary/20 transition-colors overflow-hidden z-10"
                                 style={{
                                   top: booking.top,
-                                  height: Math.max(booking.height - 2, 28),
+                                  height: Math.max(booking.height - 1, 16),
                                   left: leftPos,
                                   width: widthStyle,
                                 }}
