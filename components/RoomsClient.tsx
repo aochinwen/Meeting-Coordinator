@@ -78,6 +78,7 @@ export function RoomsClient() {
         {/* Room Calendar */}
         <div className="bg-white border border-border/20 rounded-[24px] p-4 sm:p-6 shadow-sm">
           <RoomCalendar
+            pendingSlot={pendingSlot}
             onPendingSlotChange={setPendingSlot}
             onBookingClick={handleBookingClick}
           />

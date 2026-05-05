@@ -10,6 +10,7 @@ interface RoomCalendarProps {
   onBookingClick?: (booking: RoomBooking & { room: Room; meetings?: { title: string; status: string; series_id: string | null } | null }) => void;
   onTimeSlotClick?: (room: Room, date: Date, startTime: string, endTime: string) => void;
   onPendingSlotChange?: (slot: PendingSlot | null) => void;
+  pendingSlot?: PendingSlot | null;
 }
 
 interface DragState {
@@ -54,7 +55,7 @@ function clamp(n: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, n));
 }
 
-export function RoomCalendar({ onBookingClick, onTimeSlotClick, onPendingSlotChange }: RoomCalendarProps) {
+export function RoomCalendar({ onBookingClick, onTimeSlotClick, onPendingSlotChange, pendingSlot }: RoomCalendarProps) {
   const [rooms, setRooms] = useState<Room[]>([]);
   const [bookings, setBookings] = useState<Record<string, BookingWithRoom[]>>({});
   const [isLoading, setIsLoading] = useState(true);
@@ -62,8 +63,6 @@ export function RoomCalendar({ onBookingClick, onTimeSlotClick, onPendingSlotCha
   const [error, setError] = useState<string | null>(null);
   const [dragState, setDragState] = useState<DragState | null>(null);
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
-  // Confirmed pending selection — kept visible until user clicks Next or Clear
-  const [pendingSlot, setPendingSlot] = useState<PendingSlot | null>(null);
 
   // Refs to day-column DOM nodes, keyed by `yyyy-MM-dd`. Used during drag to
   // hit-test the mouse against the originating column via getBoundingClientRect,
@@ -209,7 +208,6 @@ export function RoomCalendar({ onBookingClick, onTimeSlotClick, onPendingSlotCha
       setDragState(null);
       if (room && day) {
         const slot: PendingSlot = { room, day, startTime, endTime, dateKey, loIndex: lo, hiIndex: hi };
-        setPendingSlot(slot);
         onPendingSlotChange?.(slot);
       }
     };
@@ -279,11 +277,6 @@ export function RoomCalendar({ onBookingClick, onTimeSlotClick, onPendingSlotCha
       </div>
     );
   }
-
-  const handleClearPending = () => {
-    setPendingSlot(null);
-    onPendingSlotChange?.(null);
-  };
 
   return (
     <div className="flex flex-col gap-4">
