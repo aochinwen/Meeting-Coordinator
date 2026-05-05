@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { X, CheckCircle, Calendar, Mail, Plus, ArrowRight, Copy, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
+import { useConfetti } from '@/lib/useConfetti';
 
 interface MeetingCreatedModalProps {
   isOpen: boolean;
@@ -28,6 +29,14 @@ export function MeetingCreatedModal({
 }: MeetingCreatedModalProps) {
   const [copied, setCopied] = useState(false);
   const [sendingInvites, setSendingInvites] = useState(false);
+  const fireConfetti = useConfetti();
+
+  // Fire confetti as soon as the modal becomes visible
+  useEffect(() => {
+    if (isOpen && meeting) {
+      fireConfetti();
+    }
+  }, [isOpen, meeting]);
 
   if (!isOpen || !meeting) return null;
 

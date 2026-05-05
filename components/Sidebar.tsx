@@ -13,10 +13,11 @@ import {
   Users, 
   Monitor,
   BarChart2, 
-  Settings, 
   HelpCircle,
   DoorOpen,
-  ShieldCheck
+  ShieldCheck,
+  Inbox,
+  Settings
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { createClient } from '@/utils/supabase/client';
@@ -26,19 +27,28 @@ export function Sidebar() {
   const [user, setUser] = useState<User | null>(null);
   const [authLoaded, setAuthLoaded] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  
+  const [inboxCount, setInboxCount] = useState(0);
+
   useEffect(() => {
     const supabase = createClient();
     supabase.auth.getUser().then(({ data }) => {
       setUser(data.user);
       setAuthLoaded(true);
     });
+
+    // Fetch pending inbox count (same filter as InboxPage)
+    supabase
+      .from('meetings')
+      .select('id', { count: 'exact', head: true })
+      .or('status.eq.draft,draft_data->>is_update.eq.true,draft_data->>is_cancellation.eq.true')
+      .then(({ count }) => setInboxCount(count ?? 0));
   }, []);
 
   const isAdmin = user?.email === 'chinwen.ao@gmail.com';
 
   const mainRoutes = [
     { label: 'Dashboard', icon: LayoutDashboard, href: '/', active: pathname === '/' },
+    { label: 'Inbox', icon: Inbox, href: '/inbox', active: pathname?.startsWith('/inbox') },
     { label: 'Templates', icon: FileText, href: '/templates', active: pathname?.startsWith('/templates') },
     { label: 'Schedule', icon: CalendarDays, href: '/schedule', active: pathname?.startsWith('/schedule') },
     { label: 'Demo', icon: Monitor, href: '/demo', active: pathname?.startsWith('/demo') },
@@ -99,7 +109,7 @@ export function Sidebar() {
                 href={route.href}
                 onClick={() => setMobileOpen(false)}
                 className={cn(
-                  'flex items-center gap-3 px-4 py-3 rounded-full text-sm font-light transition-all w-full',
+                  'relative flex items-center gap-3 px-4 py-3 rounded-full text-sm font-light transition-all w-full',
                   route.active 
                     ? 'bg-primary text-white shadow-sm' 
                     : 'text-text-secondary hover:bg-surface'
@@ -107,6 +117,14 @@ export function Sidebar() {
               >
                 <route.icon className={cn("w-4 h-4 shrink-0", route.active ? "text-white" : "text-text-secondary")} />
                 {route.label}
+                {route.label === 'Inbox' && inboxCount > 0 && (
+                  <span className={cn(
+                    'ml-auto flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold leading-none transition-colors',
+                    route.active ? 'bg-white text-primary' : 'bg-coral-text text-white'
+                  )}>
+                    {inboxCount > 99 ? '99+' : inboxCount}
+                  </span>
+                )}
               </Link>
             ))}
           </nav>

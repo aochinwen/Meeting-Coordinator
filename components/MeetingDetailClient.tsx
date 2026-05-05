@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect, useRef, useMemo, memo } from 'react';
-import { 
-  ChevronRight, Calendar, Clock, Users, MapPin, FileText, 
+import {
+  ChevronRight, Calendar, Clock, Users, MapPin, FileText,
   CheckCircle2, MessageSquare, Plus, Check, Edit, Trash2,
   Mail, Copy, ExternalLink, MoreHorizontal, ArrowLeft
 } from 'lucide-react';
@@ -14,9 +14,10 @@ import { useRouter } from 'next/navigation';
 import { DeleteMeetingModal } from './DeleteMeetingModal';
 import { AddParticipantsModal } from './AddParticipantsModal';
 import { EditMeetingVenueModal } from './EditMeetingVenueModal';
-import { EditMeetingModal } from './EditMeetingModal';
+import { EditMeetingModal } from '@/components/EditMeetingModal';
 import { addMeetingParticipants, removeMeetingParticipant } from '@/lib/meetings';
 import { getConfirmedBookingForMeeting } from '@/lib/rooms';
+import { PeoplePicker, type PersonOption } from '@/components/ui/PeoplePicker';
 
 interface RoomBooking {
   id: string;
@@ -56,6 +57,8 @@ interface Meeting {
   status: string;
   series_id: string | null;
   template_id: string | null;
+  chairman_id: string | null;
+  coordinator_id: string | null;
   created_at: string;
 }
 
@@ -71,16 +74,20 @@ interface Participant {
   } | null;
 }
 
+interface TaskAssigneeInfo {
+  id: string;
+  name: string;
+}
+
 interface Task {
   id: string;
   description: string;
   assigned_user_id: string | null;
   is_completed: boolean;
   due_days_before?: number | null;
+  sort_order: number | null;
   created_at: string;
-  assignee: {
-    name: string;
-  } | null;
+  assignees: TaskAssigneeInfo[];
 }
 
 interface Activity {
@@ -113,6 +120,41 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
   const [isAddingParticipants, setIsAddingParticipants] = useState(false);
   const [isEditVenueOpen, setIsEditVenueOpen] = useState(false);
   const [isEditMeetingOpen, setIsEditMeetingOpen] = useState(false);
+  const [highlightedTaskId, setHighlightedTaskId] = useState<string | null>(null);
+  const [people, setPeople] = useState<PersonOption[]>(() => {
+    // Hydrate from initialData.profileMap so the assignee picker works
+    // immediately, before any client-side fetch runs.
+    if (!initialData?.profileMap) return [];
+    return Object.entries(initialData.profileMap).map(([id, p]) => ({
+      id,
+      name: p.name,
+      division: p.division ?? null,
+      rank: p.rank ?? null,
+    }));
+  });
+  const [editingAssigneesTaskId, setEditingAssigneesTaskId] = useState<string | null>(null);
+  const [pendingAssignees, setPendingAssignees] = useState<Record<string, string[]>>({});
+
+  // Deep-link: ?task=<id> from the dashboard calendar / tasks list scrolls to that task.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const taskId = params.get('task');
+    if (!taskId) return;
+    setHighlightedTaskId(taskId);
+    // Wait for tasks to be in the DOM before scrolling.
+    const tryScroll = (attempt = 0) => {
+      const el = document.getElementById(`task-${taskId}`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      } else if (attempt < 10) {
+        setTimeout(() => tryScroll(attempt + 1), 100);
+      }
+    };
+    tryScroll();
+    const t = setTimeout(() => setHighlightedTaskId(null), 2400);
+    return () => clearTimeout(t);
+  }, []);
 
   type ProfileInfo = { name: string; division?: string | null; rank?: string | null };
   const profileMapRef = useRef<Map<string, ProfileInfo>>(
@@ -175,10 +217,11 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
     const { data: allProfiles } = await supabase
       .from('people')
       .select('id, name, division, rank');
-    
+
     const profileMap = new Map<string, ProfileInfo>();
     (allProfiles || []).forEach((p: any) => profileMap.set(p.id, { name: p.name, division: p.division, rank: p.rank }));
     profileMapRef.current = profileMap;
+    setPeople((allProfiles || []) as PersonOption[]);
 
     await Promise.all([
       fetchMeeting(),
@@ -229,6 +272,8 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
   }
 
   async function fetchTasksWithMap(profileMap: Map<string, ProfileInfo>) {
+    // Order only by created_at on the server. sort_order is applied client-side
+    // below so this works even before migration 008 is applied.
     const { data, error } = await supabase
       .from('meeting_checklist_tasks')
       .select('*')
@@ -240,11 +285,81 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
       return;
     }
 
-    const mappedTasks = (data || []).map((t: any) => ({
+    // Sort client-side: sort_order asc (nulls last), tie-break by created_at.
+    const ordered = [...(data || [])].sort((a: any, b: any) => {
+      const ao = a.sort_order ?? Number.MAX_SAFE_INTEGER;
+      const bo = b.sort_order ?? Number.MAX_SAFE_INTEGER;
+      if (ao !== bo) return ao - bo;
+      return String(a.created_at).localeCompare(String(b.created_at));
+    });
+
+    // Junction-based assignees. If the junction table doesn't exist yet
+    // (pre-migration), this yields no assignees but tasks still render.
+    const taskIds = ordered.map((t: any) => t.id);
+    const assigneeMap = new Map<string, TaskAssigneeInfo[]>();
+    if (taskIds.length > 0) {
+      const { data: assigneeRows } = await supabase
+        .from('meeting_task_assignees')
+        .select('task_id, person_id')
+        .in('task_id', taskIds);
+      for (const row of (assigneeRows || []) as Array<{ task_id: string; person_id: string }>) {
+        const profile = profileMap.get(row.person_id);
+        if (!profile) continue;
+        const list = assigneeMap.get(row.task_id) ?? [];
+        list.push({ id: row.person_id, name: profile.name });
+        assigneeMap.set(row.task_id, list);
+      }
+    }
+
+    const mappedTasks: Task[] = ordered.map((t: any) => ({
       ...t,
-      assignee: t.assigned_user_id ? profileMap.get(t.assigned_user_id) || null : null
+      assignees: assigneeMap.get(t.id) ?? [],
     }));
-    setTasks(mappedTasks as any);
+    setTasks(mappedTasks);
+  }
+
+  // Stable timestamp formatter (avoids SSR/CSR locale hydration mismatch).
+  function formatActivityTime(iso: string): string {
+    const d = new Date(iso);
+    const pad = (n: number) => n.toString().padStart(2, '0');
+    return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+
+  async function setTaskAssignees(taskId: string, personIds: string[]) {
+    // Replace junction rows for this task; mirror first to legacy column.
+    const { error: delErr } = await supabase
+      .from('meeting_task_assignees')
+      .delete()
+      .eq('task_id', taskId);
+    if (delErr) {
+      console.error('Error clearing task assignees:', delErr);
+      return;
+    }
+    if (personIds.length > 0) {
+      const { error: insErr } = await supabase
+        .from('meeting_task_assignees')
+        .insert(personIds.map((person_id) => ({ task_id: taskId, person_id })));
+      if (insErr) {
+        console.error('Error inserting task assignees:', insErr);
+        return;
+      }
+    }
+    await supabase
+      .from('meeting_checklist_tasks')
+      .update({
+        assigned_user_id: personIds[0] ?? null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', taskId);
+    await supabase.from('meeting_activities').insert({
+      meeting_id: meetingId,
+      user_id: currentUser?.id || null,
+      activity_type: 'task_assigned',
+      content: 'updated task assignees',
+      metadata: { task_id: taskId },
+    });
+    fetchTasks();
+    fetchActivities();
   }
 
   async function fetchActivitiesWithMap(profileMap: Map<string, ProfileInfo>) {
@@ -393,7 +508,7 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
 
   if (loading) {
     return (
-      <div className="max-w-[1280px] mx-auto pb-24 flex flex-col pt-8 space-y-8 px-8">
+      <div className="max-w-[1280px] mx-auto pb-24 flex flex-col pt-6 sm:pt-8 space-y-6 sm:space-y-8 px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-center h-64">
           <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full"></div>
         </div>
@@ -403,7 +518,7 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
 
   if (!meeting) {
     return (
-      <div className="max-w-[1280px] mx-auto pb-24 flex flex-col pt-8 space-y-8 px-8">
+      <div className="max-w-[1280px] mx-auto pb-24 flex flex-col pt-6 sm:pt-8 space-y-6 sm:space-y-8 px-4 sm:px-6 lg:px-8">
         <div className="text-center text-text-tertiary">Meeting not found</div>
       </div>
     );
@@ -451,65 +566,84 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
   }, []);
 
   return (
-    <div className="max-w-[1280px] mx-auto pb-24 flex flex-col pt-8 space-y-8 px-8">
+    <div className="max-w-[1280px] mx-auto pb-24 flex flex-col pt-6 sm:pt-8 space-y-6 sm:space-y-8 px-4 sm:px-6 lg:px-8">
       {/* Header */}
-      <div className="flex items-start justify-between shrink-0">
-        <div className="flex flex-col gap-3">
-          <Link href="/" className="flex items-center gap-2 text-sm text-text-secondary hover:text-text-primary transition-colors">
+      <div className="flex flex-col gap-4 shrink-0">
+        {/* Back + Actions row */}
+        <div className="flex items-center justify-between gap-3">
+          <Link href="/" className="flex items-center gap-2 text-sm text-text-secondary hover:text-text-primary transition-colors shrink-0">
             <ArrowLeft className="h-4 w-4" />
-            Back to Dashboard
+            <span className="hidden sm:inline">Back to Dashboard</span>
           </Link>
-          
-          <h1 className="text-4xl font-bold tracking-tight text-text-primary font-literata">
+
+          {/* Action buttons — icon-only on mobile, labeled on sm+ */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleCopyLink}
+              title={copied ? 'Copied!' : 'Copy Link'}
+              className={cn(
+                "h-9 w-9 sm:h-auto sm:w-auto sm:px-4 sm:py-2 border rounded-full text-sm font-medium transition-all flex items-center justify-center sm:gap-2",
+                copied
+                  ? "bg-mint border-status-green text-status-green"
+                  : "bg-board border-border text-text-primary hover:bg-surface"
+              )}
+            >
+              {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+              <span className="hidden sm:inline">{copied ? 'Copied!' : 'Copy Link'}</span>
+            </button>
+
+
+            <button
+              onClick={() => setIsEditMeetingOpen(true)}
+              title="Edit Meeting"
+              className="h-9 w-9 sm:h-auto sm:w-auto sm:px-4 sm:py-2 bg-board border border-border text-text-primary rounded-full text-sm font-medium transition-all active:scale-95 hover:bg-surface flex items-center justify-center sm:gap-2"
+            >
+              <Edit className="h-4 w-4" />
+              <span className="hidden sm:inline">Edit</span>
+            </button>
+
+            <button
+              onClick={() => setIsDeleteModalOpen(true)}
+              title="Delete Meeting"
+              className="h-9 w-9 sm:h-auto sm:w-auto sm:px-4 sm:py-2 bg-coral-bg text-coral-text border border-coral-text/30 rounded-full text-sm font-medium transition-all active:scale-95 hover:bg-coral-text/10 flex items-center justify-center sm:gap-2"
+            >
+              <Trash2 className="h-4 w-4" />
+              <span className="hidden sm:inline">Delete</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Title & description */}
+        <div className="flex flex-col gap-2">
+          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight text-text-primary font-literata leading-tight">
             {meeting.title}
           </h1>
-          
           {meeting.description && (
-            <p className="text-base text-text-secondary max-w-2xl">
+            <p className="text-sm sm:text-base text-text-secondary max-w-2xl">
               {meeting.description}
             </p>
           )}
         </div>
-
-        <div className="flex gap-3">
-          <button
-            onClick={handleCopyLink}
-            className={cn(
-              "px-5 py-2.5 border rounded-full text-sm font-medium transition-all flex items-center gap-2",
-              copied
-                ? "bg-mint border-status-green text-status-green"
-                : "bg-board border-border text-text-primary hover:bg-surface"
-            )}
-          >
-            {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-            {copied ? 'Copied!' : 'Copy Link'}
-          </button>
-          
-          <button className="px-5 py-2.5 bg-primary text-white rounded-full text-sm font-medium shadow-md transition-all active:scale-95 hover:bg-primary/90 flex items-center gap-2">
-            <Mail className="h-4 w-4" />
-            Send Invites
-          </button>
-          
-          <button
-            onClick={() => setIsEditMeetingOpen(true)}
-            className="px-5 py-2.5 bg-board border border-border text-text-primary rounded-full text-sm font-medium transition-all active:scale-95 hover:bg-surface flex items-center gap-2"
-          >
-            <Edit className="h-4 w-4" />
-            Edit
-          </button>
-
-          <button 
-            onClick={() => setIsDeleteModalOpen(true)}
-            className="px-5 py-2.5 bg-coral-bg text-coral-text border border-coral-text/30 rounded-full text-sm font-medium transition-all active:scale-95 hover:bg-coral-text/10 flex items-center gap-2"
-          >
-            <Trash2 className="h-4 w-4" />
-            Delete
-          </button>
-        </div>
       </div>
 
+      {/* Chairman & Coordinator */}
+      {(meeting.chairman_id || meeting.coordinator_id) && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 shrink-0">
+          <RoleCard
+            label="Chairman"
+            person={meeting.chairman_id ? profileMapRef.current.get(meeting.chairman_id) : null}
+            getInitials={getInitials}
+          />
+          <RoleCard
+            label="Coordinator"
+            person={meeting.coordinator_id ? profileMapRef.current.get(meeting.coordinator_id) : null}
+            getInitials={getInitials}
+          />
+        </div>
+      )}
+
       {/* Meeting Info Cards */}
-      <div className="grid grid-cols-4 gap-6 shrink-0">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-6 shrink-0">
         <div className="bg-white border border-border/30 rounded-3xl p-6 flex flex-col gap-3">
           <div className="h-11 w-11 rounded-full bg-status-green-bg/30 flex items-center justify-center">
             <Calendar className="h-5 w-5 text-primary" />
@@ -554,10 +688,10 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
       </div>
 
       {/* Main Content Grid */}
-      <div className="grid grid-cols-12 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
         {/* Left Column - Tasks & Participants */}
-        <div className="col-span-8 flex flex-col gap-6">
-          
+        <div className="col-span-1 lg:col-span-8 flex flex-col gap-6">
+
           {/* Progress Bar */}
           <div className="bg-surface rounded-3xl p-6 flex flex-col gap-4">
             <div className="flex justify-between items-center">
@@ -569,7 +703,7 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
               </span>
             </div>
             <div className="h-3 w-full bg-cream rounded-full overflow-hidden">
-              <div 
+              <div
                 className="h-full bg-primary rounded-full transition-all duration-300"
                 style={{ width: `${progress}%` }}
               ></div>
@@ -592,14 +726,16 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
                 </div>
               ) : (
                 tasks.map((task) => (
-                  <div 
-                    key={task.id} 
+                  <div
+                    key={task.id}
+                    id={`task-${task.id}`}
                     className={cn(
                       "p-6 flex gap-4 transition-colors border-b last:border-b-0 border-border/10",
-                      task.is_completed ? "bg-white/30" : "bg-transparent"
+                      task.is_completed ? "bg-white/30" : "bg-transparent",
+                      highlightedTaskId === task.id && "ring-2 ring-primary/40 ring-offset-2 ring-offset-white bg-status-green-bg/40"
                     )}
                   >
-                    <div 
+                    <div
                       className="pt-0.5 shrink-0 cursor-pointer"
                       onClick={() => toggleTask(task.id, task.is_completed)}
                     >
@@ -661,14 +797,101 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
                         );
                       })()}
 
-                      {task.assignee && (
-                        <div className="flex items-center gap-2 mt-2">
-                          <span className="inline-flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-bold shadow-sm bg-mint text-status-green">
-                            {getInitials(task.assignee.name)}
-                          </span>
-                          <span className="text-xs text-text-secondary">{task.assignee.name}</span>
-                        </div>
-                      )}
+                      {/* Assignees: avatar stack + inline picker */}
+                      <div className="mt-2">
+                        {editingAssigneesTaskId === task.id ? (
+                          <div className="flex items-start gap-2">
+                            <div className="flex-1">
+                              <PeoplePicker
+                                people={people}
+                                value={pendingAssignees[task.id] ?? (task.assignees ?? []).map((a) => a.id)}
+                                onChange={(ids) => setPendingAssignees((prev) => ({ ...prev, [task.id]: ids }))}
+                                multiple
+                                placeholder="Add assignees..."
+                                compact
+                              />
+                            </div>
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                const ids = pendingAssignees[task.id] ?? (task.assignees ?? []).map((a) => a.id);
+                                await setTaskAssignees(task.id, ids);
+                                setPendingAssignees((prev) => {
+                                  const next = { ...prev };
+                                  delete next[task.id];
+                                  return next;
+                                });
+                                setEditingAssigneesTaskId(null);
+                              }}
+                              className="text-[11px] font-bold text-primary hover:text-primary/80 px-2 py-1"
+                            >
+                              Done
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setPendingAssignees((prev) => {
+                                  const next = { ...prev };
+                                  delete next[task.id];
+                                  return next;
+                                });
+                                setEditingAssigneesTaskId(null);
+                              }}
+                              className="text-[11px] font-bold text-text-tertiary hover:text-text-secondary px-2 py-1"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        ) : (task.assignees?.length ?? 0) > 0 ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPendingAssignees((prev) => ({
+                                ...prev,
+                                [task.id]: (task.assignees ?? []).map((a) => a.id),
+                              }));
+                              setEditingAssigneesTaskId(task.id);
+                            }}
+                            className="flex items-center gap-2 hover:bg-board/40 rounded-lg px-1 -ml-1 py-0.5 transition-colors"
+                            title="Click to edit assignees"
+                          >
+                            <div className="flex -space-x-1">
+                              {(task.assignees ?? []).slice(0, 4).map((a) => (
+                                <span
+                                  key={a.id}
+                                  className="inline-flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-bold shadow-sm bg-mint text-status-green border border-white"
+                                  title={a.name}
+                                >
+                                  {getInitials(a.name)}
+                                </span>
+                              ))}
+                              {(task.assignees?.length ?? 0) > 4 && (
+                                <span className="inline-flex items-center justify-center w-5 h-5 rounded-full text-[9px] font-bold bg-cream text-text-primary border border-white">
+                                  +{(task.assignees?.length ?? 0) - 4}
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-xs text-text-secondary">
+                              {(task.assignees ?? []).map((a) => a.name).join(', ')}
+                            </span>
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPendingAssignees((prev) => ({
+                                ...prev,
+                                [task.id]: (task.assignees ?? []).map((a) => a.id),
+                              }));
+                              setEditingAssigneesTaskId(task.id);
+                            }}
+                            className="text-xs text-text-tertiary hover:text-primary inline-flex items-center gap-1 transition-colors"
+                          >
+                            <Plus className="h-3 w-3" />
+                            Assign
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 ))
@@ -736,9 +959,9 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
                   No participants added yet.
                 </div>
               ) : (
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {participants.map((participant) => (
-                    <div 
+                    <div
                       key={participant.id}
                       className="flex items-center gap-3 p-3 bg-surface rounded-2xl group"
                     >
@@ -777,12 +1000,12 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
         </div>
 
         {/* Right Column - Activity Feed */}
-        <div className="col-span-4 flex flex-col gap-6">
+        <div className="col-span-1 lg:col-span-4 flex flex-col gap-6">
           <div className="bg-white border border-border/20 rounded-3xl shadow-sm p-6 flex flex-col gap-6">
-            
+
             <div className="flex flex-col gap-2">
               <div className="bg-status-grey-bg border border-border/20 rounded-2xl p-[5px]">
-                <textarea 
+                <textarea
                   value={commentInput}
                   onChange={(e) => setCommentInput(e.target.value)}
                   placeholder="Post to the activity stream"
@@ -790,13 +1013,13 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
                 />
               </div>
               <div className="flex justify-between items-center px-1 mt-1 gap-2">
-                <button 
+                <button
                   onClick={() => setCommentInput('')}
                   className="flex-1 py-2 text-sm font-bold text-coral-text border border-primary/20 rounded-2xl hover:bg-coral-text/5 transition-colors"
                 >
                   Cancel
                 </button>
-                <button 
+                <button
                   onClick={postActivity}
                   disabled={!commentInput.trim()}
                   className="flex-1 py-2 text-sm font-bold text-primary border border-primary/20 rounded-2xl hover:bg-primary/5 transition-colors disabled:opacity-50"
@@ -807,12 +1030,12 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
             </div>
 
             <div className="flex items-center gap-2 mt-2">
-              <MessageSquare className="h-4 w-4 text-text-primary" strokeWidth={2.5}/>
+              <MessageSquare className="h-4 w-4 text-text-primary" strokeWidth={2.5} />
               <h3 className="text-lg font-bold text-text-primary font-literata">
                 Activity Stream
               </h3>
             </div>
-            
+
             <div className="flex flex-col gap-8 relative pb-2 pt-1 pl-1">
               <div className="absolute left-[17px] top-6 bottom-4 w-0.5 bg-border/20"></div>
 
@@ -832,7 +1055,7 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
                         </div>
                       )}
                     </div>
-                    
+
                     <div className="flex flex-col w-full -mt-0.5 text-sm">
                       <p className="text-text-primary leading-snug">
                         {activity.user ? (
@@ -842,8 +1065,11 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
                         )}{' '}
                         <span className="font-normal">{activity.content}</span>
                       </p>
-                      <span className="text-[10px] font-bold uppercase text-text-tertiary mt-1">
-                        {new Date(activity.created_at).toLocaleString()}
+                      <span
+                        className="text-[10px] font-bold uppercase text-text-tertiary mt-1"
+                        suppressHydrationWarning
+                      >
+                        {formatActivityTime(activity.created_at)}
                       </span>
                     </div>
                   </div>
@@ -859,7 +1085,7 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
           <div className="bg-white border border-border/20 rounded-3xl overflow-hidden shadow-sm flex flex-col relative h-[220px]">
             <div className="h-[128px] w-full bg-taupe relative overflow-hidden">
               <div className="absolute inset-0 bg-[url('data:image/svg+xml;utf8,<svg width=\'400\' height=\'200\' viewBox=\'0 0 400 200\' fill=\'none\' xmlns=\'http://www.w3.org/2000/svg\'><rect width=\'400\' height=\'200\' fill=\'%23E5E7EB\'/><path d=\'M0 50L400 150M0 100L400 200M0 150L400 250\' stroke=\'%23D1D5DB\' stroke-width=\'4\'/><path d=\'M100 0L200 200M200 0L300 200M300 0L400 200\' stroke=\'%23D1D5DB\' stroke-width=\'4\'/></svg>')] bg-cover bg-center mix-blend-multiply opacity-50"></div>
-              
+
               <div className="absolute inset-x-0 bottom-4 flex justify-center">
                 <div className="w-10 h-14 bg-white/30 backdrop-blur-sm shadow flex items-center justify-center rounded-t-full rounded-b-[4px] relative -bottom-2 z-10 border border-white/50">
                   <div className="w-6 h-6 rounded-full bg-white/80 shadow-inner flex items-center justify-center">
@@ -868,7 +1094,7 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
                 </div>
               </div>
             </div>
-            
+
             <div className="p-6 flex flex-col gap-1 z-20 bg-white relative">
               <div className="flex items-center justify-between">
                 <h4 className="text-sm font-bold text-text-primary font-literata">
@@ -992,7 +1218,7 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
 
   async function handleAddParticipants(userIds: string[]) {
     if (!meetingId || userIds.length === 0) return;
-    
+
     setIsAddingParticipants(true);
     try {
       await addMeetingParticipants(meetingId, userIds, true);
@@ -1017,7 +1243,7 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
 
   async function handleRemoveParticipant(userId: string) {
     if (!meetingId) return;
-    
+
     const participant = participants.find(p => p.user_id === userId);
     if (!participant) return;
 
@@ -1038,6 +1264,37 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
       console.error('Error removing participant:', error);
     }
   }
+}
+
+function RoleCard({
+  label,
+  person,
+  getInitials,
+}: {
+  label: string;
+  person: { name: string; division?: string | null; rank?: string | null } | null | undefined;
+  getInitials: (name: string) => string;
+}) {
+  return (
+    <div className="bg-white border border-border/30 rounded-3xl p-5 flex items-center gap-4">
+      <div className="h-12 w-12 rounded-full bg-mint flex items-center justify-center text-status-green text-sm font-bold shrink-0">
+        {person ? getInitials(person.name) : '—'}
+      </div>
+      <div className="min-w-0">
+        <h3 className="text-xs tracking-wide text-text-tertiary uppercase font-light mb-1">
+          {label}
+        </h3>
+        <p className="text-base font-bold text-text-primary truncate">
+          {person?.name || 'Not assigned'}
+        </p>
+        {person && (person.rank || person.division) && (
+          <p className="text-xs text-text-tertiary truncate">
+            {[person.rank, person.division].filter(Boolean).join(' · ')}
+          </p>
+        )}
+      </div>
+    </div>
+  );
 }
 
 // Export memoized version to prevent unnecessary re-renders

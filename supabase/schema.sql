@@ -76,10 +76,12 @@ create table public.meetings (
   date date not null,
   start_time time,
   end_time time,
-  status text check (status in ('scheduled', 'completed', 'cancelled')) default 'scheduled' not null,
+  status text check (status in ('scheduled', 'completed', 'cancelled', 'draft')) default 'scheduled' not null,
   is_override boolean default false,
   override_fields jsonb default '{}',
   instance_number integer,
+  calendar_uid text,
+  draft_data jsonb default '{}',
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
   updated_at timestamp with time zone default timezone('utc'::text, now()) not null
 );

@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useMemo, memo } from 'react';
 import { 
   ChevronRight, ArrowUpRight, CheckCircle2, Calendar, Users,
   MessageSquare, MoreHorizontal, FileText, Check, Plus,
-  Send, CornerDownRight, AlertTriangle, Eye 
+  Send, CornerDownRight, AlertTriangle, Eye, Pencil, Trash2, X
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { User } from '@supabase/supabase-js';
@@ -15,17 +15,21 @@ interface ChecklistClientProps {
   currentUser?: User;
 }
 
+interface TaskAssignee {
+  id: string;
+  name: string;
+  initials: string;
+}
+
 interface Task {
   id: string;
   description: string;
   assigned_user_id: string | null;
   is_completed: boolean;
   due_days_before: number | null;
+  sort_order: number | null;
   created_at: string;
-  assignee?: {
-    name: string;
-    initials: string;
-  };
+  assignees: TaskAssignee[];
 }
 
 interface Activity {
@@ -51,6 +55,8 @@ function ChecklistClientComponent({ meetingId, currentUser }: ChecklistClientPro
   const [newTaskInput, setNewTaskInput] = useState('');
   const [newTaskDueDate, setNewTaskDueDate] = useState<string>('');
   const [meetingDate, setMeetingDate] = useState<string | null>(null);
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+  const [editingDescription, setEditingDescription] = useState('');
 
   const profileMapRef = useRef<Map<string, { name: string }>>(new Map());
 
@@ -124,6 +130,8 @@ function ChecklistClientComponent({ meetingId, currentUser }: ChecklistClientPro
   }, [meetingId]);
 
   async function fetchTasksWithMap(profileMap: Map<string, { name: string }>) {
+    // Server-side order by created_at only; client-side sort below applies
+    // sort_order so this works even before migration 008 is applied.
     const { data, error } = await supabase
       .from('meeting_checklist_tasks')
       .select('*')
@@ -135,16 +143,35 @@ function ChecklistClientComponent({ meetingId, currentUser }: ChecklistClientPro
       return;
     }
 
-    const tasksWithAssignees = (data || []).map((task: any) => {
-      const profile = task.assigned_user_id ? profileMap.get(task.assigned_user_id) : null;
-      return {
-        ...task,
-        assignee: profile ? {
-          name: profile.name,
-          initials: profile.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase(),
-        } : null,
-      };
+    const ordered = [...(data || [])].sort((a: any, b: any) => {
+      const ao = a.sort_order ?? Number.MAX_SAFE_INTEGER;
+      const bo = b.sort_order ?? Number.MAX_SAFE_INTEGER;
+      if (ao !== bo) return ao - bo;
+      return String(a.created_at).localeCompare(String(b.created_at));
     });
+
+    // Fetch multi-assignees from junction table.
+    const taskIds = (data || []).map((t: any) => t.id);
+    const assigneeMap = new Map<string, TaskAssignee[]>();
+    if (taskIds.length > 0) {
+      const { data: assigneeRows } = await supabase
+        .from('meeting_task_assignees')
+        .select('task_id, person_id')
+        .in('task_id', taskIds);
+      for (const row of (assigneeRows || []) as Array<{ task_id: string; person_id: string }>) {
+        const profile = profileMap.get(row.person_id);
+        if (!profile) continue;
+        const initials = profile.name.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase();
+        const list = assigneeMap.get(row.task_id) ?? [];
+        list.push({ id: row.person_id, name: profile.name, initials });
+        assigneeMap.set(row.task_id, list);
+      }
+    }
+
+    const tasksWithAssignees: Task[] = ordered.map((task: any) => ({
+      ...task,
+      assignees: assigneeMap.get(task.id) ?? [],
+    }));
 
     setTasks(tasksWithAssignees);
     setLoading(false);
@@ -251,6 +278,45 @@ function ChecklistClientComponent({ meetingId, currentUser }: ChecklistClientPro
     setNewTaskDueDate('');
     fetchTasks();
     fetchActivities();
+  }
+
+  async function deleteTask(taskId: string) {
+    const { error } = await supabase
+      .from('meeting_checklist_tasks')
+      .delete()
+      .eq('id', taskId);
+    if (error) {
+      console.error('Error deleting task:', error);
+      return;
+    }
+    await supabase.from('meeting_activities').insert({
+      meeting_id: meetingId,
+      user_id: currentUser?.id || null,
+      activity_type: 'task_created',
+      content: 'deleted a task',
+      metadata: { task_id: taskId },
+    });
+    fetchTasks();
+    fetchActivities();
+  }
+
+  async function saveTaskDescription(taskId: string, description: string) {
+    const trimmed = description.trim();
+    if (!trimmed) {
+      setEditingTaskId(null);
+      return;
+    }
+    const { error } = await supabase
+      .from('meeting_checklist_tasks')
+      .update({ description: trimmed, updated_at: new Date().toISOString() })
+      .eq('id', taskId);
+    if (error) {
+      console.error('Error updating task description:', error);
+      return;
+    }
+    setEditingTaskId(null);
+    setEditingDescription('');
+    fetchTasks();
   }
 
   async function updateTaskDueDate(taskId: string, absoluteDateStr: string) {
@@ -461,19 +527,66 @@ function ChecklistClientComponent({ meetingId, currentUser }: ChecklistClientPro
 
                     {/* Task Content */}
                     <div className="flex flex-col gap-1 w-full">
-                      <div className="flex justify-between items-start w-full">
-                        <h4 className={cn(
-                          "text-base font-bold text-text-primary font-literata",
-                          task.is_completed && "line-through text-text-primary/60"
-                        )}>
-                          {task.description}
-                        </h4>
-                        <span className={cn(
-                          "px-2 py-0.5 rounded-lg text-[10px] font-bold uppercase tracking-wide",
-                          task.is_completed ? "bg-warm text-text-primary" : "bg-coral-bg text-coral-text"
-                        )}>
-                          {task.is_completed ? 'Done' : 'Pending'}
-                        </span>
+                      <div className="flex justify-between items-start w-full gap-2">
+                        {editingTaskId === task.id ? (
+                          <input
+                            type="text"
+                            value={editingDescription}
+                            autoFocus
+                            onChange={(e) => setEditingDescription(e.target.value)}
+                            onBlur={() => saveTaskDescription(task.id, editingDescription)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') saveTaskDescription(task.id, editingDescription);
+                              if (e.key === 'Escape') {
+                                setEditingTaskId(null);
+                                setEditingDescription('');
+                              }
+                            }}
+                            className="flex-1 text-base font-bold text-text-primary font-literata bg-white border border-primary/30 rounded-xl px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                          />
+                        ) : (
+                          <h4
+                            className={cn(
+                              "flex-1 text-base font-bold text-text-primary font-literata cursor-text",
+                              task.is_completed && "line-through text-text-primary/60"
+                            )}
+                            onClick={() => {
+                              setEditingTaskId(task.id);
+                              setEditingDescription(task.description);
+                            }}
+                          >
+                            {task.description}
+                          </h4>
+                        )}
+                        <div className="flex items-center gap-1 shrink-0">
+                          <span className={cn(
+                            "px-2 py-0.5 rounded-lg text-[10px] font-bold uppercase tracking-wide",
+                            task.is_completed ? "bg-warm text-text-primary" : "bg-coral-bg text-coral-text"
+                          )}>
+                            {task.is_completed ? 'Done' : 'Pending'}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingTaskId(task.id);
+                              setEditingDescription(task.description);
+                            }}
+                            className="p-1 rounded hover:bg-board text-text-tertiary hover:text-text-secondary transition-colors"
+                            aria-label="Edit task"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (confirm('Delete this task?')) deleteTask(task.id);
+                            }}
+                            className="p-1 rounded hover:bg-coral-bg text-text-tertiary hover:text-coral-text transition-colors"
+                            aria-label="Delete task"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
                       </div>
 
                       {meetingDate && (() => {
@@ -515,15 +628,27 @@ function ChecklistClientComponent({ meetingId, currentUser }: ChecklistClientPro
                         );
                       })()}
 
-                      {task.assignee && (
-                        <div className="flex items-center gap-2 mt-2">
-                          <span className={cn(
-                            "inline-flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-bold shadow-sm",
-                            "bg-mint text-status-green"
-                          )}>
-                            {task.assignee.initials}
+                      {task.assignees.length > 0 && (
+                        <div className="flex items-center gap-2 mt-2 flex-wrap">
+                          <div className="flex -space-x-1">
+                            {task.assignees.slice(0, 4).map((a) => (
+                              <span
+                                key={a.id}
+                                title={a.name}
+                                className="inline-flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-bold shadow-sm bg-mint text-status-green border border-white"
+                              >
+                                {a.initials}
+                              </span>
+                            ))}
+                            {task.assignees.length > 4 && (
+                              <span className="inline-flex items-center justify-center w-5 h-5 rounded-full text-[9px] font-bold bg-cream text-text-primary border border-white">
+                                +{task.assignees.length - 4}
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-xs text-text-secondary truncate">
+                            {task.assignees.map((a) => a.name).join(', ')}
                           </span>
-                          <span className="text-xs text-text-secondary">{task.assignee.name}</span>
                         </div>
                       )}
                     </div>

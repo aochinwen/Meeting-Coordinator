@@ -12,7 +12,7 @@ export const revalidate = 30; // Revalidate every 30 seconds for real-time data
 // Loading fallback for suspense
 function MeetingDetailSkeleton() {
   return (
-    <div className="max-w-[1280px] mx-auto pb-24 flex flex-col pt-8 space-y-8 px-8">
+    <div className="max-w-[1280px] mx-auto pb-24 flex flex-col pt-6 sm:pt-8 space-y-6 sm:space-y-8 px-4 sm:px-6 lg:px-8">
       <div className="flex items-center justify-center h-64">
         <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full"></div>
       </div>
@@ -37,7 +37,13 @@ export default async function MeetingDetailPage({ params }: { params: Promise<{ 
   ] = await Promise.all([
     supabase.from('meetings').select('*').eq('id', meetingId).single(),
     supabase.from('meeting_participants').select('*').eq('meeting_id', meetingId),
-    supabase.from('meeting_checklist_tasks').select('*').eq('meeting_id', meetingId).order('created_at', { ascending: true }),
+    // Order only by created_at on the server; sort_order is applied
+    // client-side so this still works before migration 008 is applied.
+    supabase
+      .from('meeting_checklist_tasks')
+      .select('*')
+      .eq('meeting_id', meetingId)
+      .order('created_at', { ascending: true }),
     supabase.from('meeting_activities').select('*').eq('meeting_id', meetingId).order('created_at', { ascending: false }).limit(20),
     supabase.from('people').select('id, name, division, rank'),
     supabase.auth.getUser(),
@@ -48,6 +54,23 @@ export default async function MeetingDetailPage({ params }: { params: Promise<{ 
   const profileMap = new Map<string, { name: string; division?: string | null; rank?: string | null }>();
   allProfiles?.forEach((p) => profileMap.set(p.id, { name: p.name, division: p.division, rank: p.rank }));
 
+  // Fetch junction-based task assignees in a single round-trip.
+  const taskIds = (tasks || []).map((t) => t.id);
+  const taskAssigneeMap = new Map<string, Array<{ id: string; name: string }>>();
+  if (taskIds.length > 0) {
+    const { data: assigneeRows } = await supabase
+      .from('meeting_task_assignees')
+      .select('task_id, person_id')
+      .in('task_id', taskIds);
+    for (const row of assigneeRows || []) {
+      const profile = profileMap.get(row.person_id);
+      if (!profile) continue;
+      const list = taskAssigneeMap.get(row.task_id) ?? [];
+      list.push({ id: row.person_id, name: profile.name });
+      taskAssigneeMap.set(row.task_id, list);
+    }
+  }
+
   // Pre-process data to reduce client-side computation
   const initialData = {
     meeting: meeting || null,
@@ -57,7 +80,7 @@ export default async function MeetingDetailPage({ params }: { params: Promise<{ 
     })) || [],
     tasks: tasks?.map((t) => ({
       ...t,
-      assignee: t.assigned_user_id ? profileMap.get(t.assigned_user_id) || null : null
+      assignees: taskAssigneeMap.get(t.id) ?? [],
     })) || [],
     activities: activities?.map((a) => ({
       ...a,
