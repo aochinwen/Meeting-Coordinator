@@ -51,7 +51,13 @@ async function fetchStats(supabase: Awaited<ReturnType<typeof createClient>>): P
   const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
   const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
 
-  const toIso = (d: Date) => d.toISOString().split('T')[0];
+  // Use local date components (not UTC) to avoid off-by-one in timezones ahead of UTC.
+  const toIso = (d: Date) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
 
   const [{ count: usersCount }, { count: weekCount }, { count: monthCount }] =
     await Promise.all([
@@ -82,7 +88,13 @@ async function fetchStats(supabase: Awaited<ReturnType<typeof createClient>>): P
 function rangeFromFilter(filter: string): { start: string; end: string } {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const toIso = (d: Date) => d.toISOString().split('T')[0];
+  // Use local date components (not UTC) to avoid off-by-one in timezones ahead of UTC.
+  const toIso = (d: Date) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
   const start = toIso(today);
 
   if (filter === 'all') return { start: '1900-01-01', end: '2099-12-31' };
@@ -468,7 +480,9 @@ async function MeetingsListBranch({
   const rangeEnd = from + meetings.length;
 
   const formattedMeetings = meetings.map((meeting) => {
-    const isLive = meeting.status === 'scheduled' && meeting.date === new Date().toISOString().split('T')[0];
+    const now = new Date();
+    const localToday = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const isLive = meeting.status === 'scheduled' && meeting.date === localToday;
     const totalTasks = meeting.meeting_checklist_tasks?.length || 0;
     const completedTasks = meeting.meeting_checklist_tasks?.filter((t) => t.is_completed).length || 0;
     const progress = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
