@@ -9,6 +9,7 @@ import { parseTypes, type SelectedTypes } from '@/components/dashboard/types';
 import { CalendarContainer } from '@/components/dashboard/CalendarContainer';
 import { CalendarGrid } from '@/components/dashboard/CalendarView';
 import { TasksList, type TaskListItem } from '@/components/dashboard/TasksList';
+import { MeetingRowDesktop, MeetingRowMobile } from '@/components/dashboard/MeetingRow';
 import { buildDashboardHref, type DashboardParams } from '@/components/dashboard/url';
 import {
   clampAnchor,
@@ -494,7 +495,7 @@ async function MeetingsListBranch({
     });
     const remainingCount = Math.max(0, participantIds.length - 3);
 
-    const icons = [Video, Target, User];
+    const iconNames = ['video', 'target', 'user'] as const;
     const bgs = ['bg-status-green-bg/30', 'bg-amber/30', 'bg-status-grey-bg/50'];
     const colors = ['text-primary', 'text-status-amber', 'text-text-secondary'];
     const randomIdx = Math.abs(meeting.id.charCodeAt(0) % 3);
@@ -507,7 +508,7 @@ async function MeetingsListBranch({
       timeLabel: `${meeting.start_time?.slice(0, 5) || 'TBD'} — ${meeting.end_time?.slice(0, 5) || 'TBD'}`,
       roomName: meeting.rooms?.name || 'TBD',
       status: isLive ? 'Live' : 'Upcoming',
-      icon: icons[randomIdx],
+      iconName: iconNames[randomIdx],
       iconBg: bgs[randomIdx],
       iconColor: colors[randomIdx],
       attendees,
@@ -542,91 +543,7 @@ async function MeetingsListBranch({
         </div>
         <div className="divide-y divide-[rgba(196,200,188,0.1)]">
           {formattedMeetings.length > 0 ? formattedMeetings.map((meeting) => (
-            <Link
-              key={meeting.id}
-              href={`/meetings/${meeting.id}`}
-              className="grid grid-cols-12 gap-4 px-6 py-6 items-center hover:bg-board/50 transition-colors group cursor-pointer"
-            >
-              <div className="col-span-3 flex items-center gap-4">
-                <div className={cn('h-12 w-12 rounded-full flex items-center justify-center shrink-0', meeting.iconBg)}>
-                  <meeting.icon className={cn('h-5 w-5', meeting.iconColor)} />
-                </div>
-                <div className="flex flex-col pr-4 min-w-0 flex-1">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <h4 className="text-lg font-bold text-text-primary leading-tight font-literata truncate">{meeting.title}</h4>
-                    {meeting.isRecurring && (
-                      <span className="inline-flex items-center text-text-secondary shrink-0" title="Recurring meeting">
-                        <Repeat className="h-3.5 w-3.5" />
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-sm font-light text-text-tertiary truncate leading-relaxed">{meeting.description}</p>
-                </div>
-              </div>
-              <div className="col-span-2 flex flex-col gap-1">
-                <span className="text-sm text-text-primary font-light">{meeting.date}</span>
-                <span className="text-xs text-text-tertiary font-light">{meeting.timeLabel}</span>
-              </div>
-              <div className="col-span-2 flex flex-col gap-1 justify-center">
-                <span className="text-sm text-text-primary font-light">{meeting.roomName !== 'TBD' ? meeting.roomName : <span className="text-text-tertiary italic">No room</span>}</span>
-              </div>
-              <div className="col-span-2 flex items-center -space-x-2">
-                {meeting.attendees.length > 0 ? (
-                  <>
-                    {meeting.attendees.map((attendee, i) => (
-                      <div key={i} className="h-8 w-8 rounded-full border-2 border-white bg-sage flex items-center justify-center text-[10px] text-white">
-                        {attendee.initials}
-                      </div>
-                    ))}
-                    {meeting.remainingCount > 0 && (
-                      <div className="h-8 w-8 rounded-full border-2 border-white bg-cream flex items-center justify-center text-[10px] text-text-primary">
-                        +{meeting.remainingCount}
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <span className="text-xs text-text-tertiary">No attendees</span>
-                )}
-              </div>
-              <div className="col-span-2 flex flex-col gap-1">
-                {meeting.totalTasks > 0 ? (
-                  <>
-                    <div className="flex items-center gap-2">
-                      <div className="flex-1 h-2 bg-status-grey-bg rounded-full overflow-hidden">
-                        <div
-                          className={cn(
-                            'h-full rounded-full transition-all',
-                            meeting.progress === 100 ? 'bg-primary' :
-                            meeting.progress >= 75 ? 'bg-status-green' :
-                            meeting.progress >= 50 ? 'bg-blue-500' :
-                            meeting.progress >= 25 ? 'bg-status-amber' : 'bg-coral-text'
-                          )}
-                          style={{ width: `${meeting.progress}%` }}
-                        />
-                      </div>
-                      <span className="text-xs text-text-secondary font-medium w-8 text-right">{meeting.progress}%</span>
-                    </div>
-                    <span className="text-xs text-text-tertiary">
-                      {meeting.completedTasks}/{meeting.totalTasks} tasks
-                    </span>
-                  </>
-                ) : (
-                  <span className="text-xs text-text-tertiary">No tasks</span>
-                )}
-              </div>
-              <div className="col-span-1 flex justify-end">
-                {meeting.status === 'Live' ? (
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-status-green-bg text-status-green text-xs font-light">
-                    <span className="h-1.5 w-1.5 rounded-full bg-primary"></span>
-                    Live
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center px-3 py-1.5 rounded-full bg-status-grey-bg border border-border/30 text-text-secondary text-xs font-light">
-                    Upcoming
-                  </span>
-                )}
-              </div>
-            </Link>
+            <MeetingRowDesktop key={meeting.id} meeting={meeting} />
           )) : (
             <div className="p-8 text-center text-text-tertiary">No meetings scheduled for now.</div>
           )}
@@ -635,73 +552,7 @@ async function MeetingsListBranch({
 
       <div className="md:hidden flex flex-col gap-3">
         {formattedMeetings.length > 0 ? formattedMeetings.map((meeting) => (
-          <Link
-            key={meeting.id}
-            href={`/meetings/${meeting.id}`}
-            className="bg-white border border-border/30 rounded-2xl p-4 space-y-3 hover:bg-board/30 transition-colors"
-          >
-            <div className="flex items-start gap-3">
-              <div className={cn('h-10 w-10 rounded-full flex items-center justify-center shrink-0', meeting.iconBg)}>
-                <meeting.icon className={cn('h-4 w-4', meeting.iconColor)} />
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <h4 className="text-base font-bold text-text-primary leading-tight font-literata truncate">{meeting.title}</h4>
-                  {meeting.isRecurring && (
-                    <span className="inline-flex items-center text-text-secondary" title="Recurring meeting">
-                      <Repeat className="h-3.5 w-3.5" />
-                    </span>
-                  )}
-                </div>
-                <p className="text-xs text-text-tertiary mt-1 line-clamp-2">{meeting.description}</p>
-              </div>
-            </div>
-            <div className="flex items-center justify-between text-xs">
-              <div className="text-text-secondary">
-                <div>{meeting.date}</div>
-                <div className="text-text-tertiary">{meeting.timeLabel}</div>
-                {meeting.roomName !== 'TBD' && <div className="text-text-tertiary mt-0.5">{meeting.roomName}</div>}
-              </div>
-              {meeting.status === 'Live' ? (
-                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-status-green-bg text-status-green text-xs font-light">
-                  <span className="h-1.5 w-1.5 rounded-full bg-primary"></span>
-                  Live
-                </span>
-              ) : (
-                <span className="inline-flex items-center px-3 py-1.5 rounded-full bg-status-grey-bg border border-border/30 text-text-secondary text-xs font-light">
-                  Upcoming
-                </span>
-              )}
-            </div>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center -space-x-2">
-                {meeting.attendees.length > 0 ? (
-                  <>
-                    {meeting.attendees.map((attendee, i) => (
-                      <div key={i} className="h-7 w-7 rounded-full border-2 border-white bg-sage flex items-center justify-center text-[10px] text-white">
-                        {attendee.initials}
-                      </div>
-                    ))}
-                    {meeting.remainingCount > 0 && (
-                      <div className="h-7 w-7 rounded-full border-2 border-white bg-cream flex items-center justify-center text-[10px] text-text-primary">
-                        +{meeting.remainingCount}
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <span className="text-xs text-text-tertiary">No attendees</span>
-                )}
-              </div>
-              {meeting.totalTasks > 0 ? (
-                <div className="text-right min-w-[92px]">
-                  <div className="text-xs text-text-secondary font-medium">{meeting.progress}%</div>
-                  <div className="text-[11px] text-text-tertiary">{meeting.completedTasks}/{meeting.totalTasks} tasks</div>
-                </div>
-              ) : (
-                <span className="text-xs text-text-tertiary">No tasks</span>
-              )}
-            </div>
-          </Link>
+          <MeetingRowMobile key={meeting.id} meeting={meeting} />
         )) : (
           <div className="p-8 text-center text-text-tertiary bg-white border border-border/30 rounded-2xl">No meetings scheduled for now.</div>
         )}
