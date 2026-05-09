@@ -84,28 +84,32 @@ export function MeetingRowDesktop({ meeting }: { meeting: FormattedMeeting }) {
             <p className={cn("text-sm font-light text-text-tertiary leading-relaxed mt-0.5", isExpanded ? "whitespace-normal break-words" : "truncate")}>
               {meeting.description}
             </p>
-            {isExpanded && meeting.taskDetails && meeting.taskDetails.length > 0 && (
+            {isExpanded && (
               <div className="mt-4 flex flex-col gap-2 border-t border-border/10 pt-3">
                 <span className="text-[10px] uppercase tracking-wider text-text-tertiary font-medium">Related Tasks</span>
-                <div className="flex flex-col gap-1.5">
-                  {meeting.taskDetails.map((task) => (
-                    <div key={task.id} className="flex items-start gap-2 text-xs text-text-secondary">
-                      {task.isCompleted ? (
-                        <CheckSquare className="h-3.5 w-3.5 mt-0.5 shrink-0 text-primary" />
-                      ) : (
-                        <Square className="h-3.5 w-3.5 mt-0.5 shrink-0 text-status-amber" />
-                      )}
-                      <div className="flex flex-col">
-                        <span className={cn('break-words', task.isCompleted && 'line-through opacity-60')}>
-                          {task.title}
-                        </span>
-                        <span className="text-[10px] text-text-tertiary">
-                          Due: {task.dueDate}
-                        </span>
+                {meeting.taskDetails && meeting.taskDetails.length > 0 ? (
+                  <div className="flex flex-col gap-1.5">
+                    {meeting.taskDetails.map((task) => (
+                      <div key={task.id} className="flex items-start gap-2 text-xs text-text-secondary">
+                        {task.isCompleted ? (
+                          <CheckSquare className="h-3.5 w-3.5 mt-0.5 shrink-0 text-primary" />
+                        ) : (
+                          <Square className="h-3.5 w-3.5 mt-0.5 shrink-0 text-status-amber" />
+                        )}
+                        <div className="flex flex-col">
+                          <span className={cn('break-words', task.isCompleted && 'line-through opacity-60')}>
+                            {task.title}
+                          </span>
+                          <span className="text-[10px] text-text-tertiary">
+                            Due: {task.dueDate}
+                          </span>
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-text-tertiary italic">There's currently no task for this meeting</p>
+                )}
               </div>
             )}
           </div>
@@ -227,25 +231,29 @@ export function MeetingRowMobile({ meeting }: { meeting: FormattedMeeting }) {
           <p className={cn("text-xs text-text-tertiary mt-1", isExpanded ? "whitespace-normal break-words" : "line-clamp-2")}>
             {meeting.description}
           </p>
-          {isExpanded && meeting.taskDetails && meeting.taskDetails.length > 0 && (
+          {isExpanded && (
             <div className="mt-3 flex flex-col gap-2 border-t border-border/10 pt-2">
               <span className="text-[9px] uppercase tracking-wider text-text-tertiary font-medium">Related Tasks</span>
-              <div className="flex flex-col gap-1.5">
-                {meeting.taskDetails.map((task) => (
-                  <div key={task.id} className="flex items-start gap-2 text-xs text-text-secondary">
-                    {task.isCompleted ? (
-                      <CheckSquare className="h-3 w-3 mt-0.5 shrink-0 text-primary" />
-                    ) : (
-                      <Square className="h-3 w-3 mt-0.5 shrink-0 text-status-amber" />
-                    )}
-                    <div className="flex flex-col">
-                      <span className={cn('break-words text-[11px]', task.isCompleted && 'line-through opacity-60')}>
-                        {task.title}
-                      </span>
+              {meeting.taskDetails && meeting.taskDetails.length > 0 ? (
+                <div className="flex flex-col gap-1.5">
+                  {meeting.taskDetails.map((task) => (
+                    <div key={task.id} className="flex items-start gap-2 text-xs text-text-secondary">
+                      {task.isCompleted ? (
+                        <CheckSquare className="h-3 w-3 mt-0.5 shrink-0 text-primary" />
+                      ) : (
+                        <Square className="h-3 w-3 mt-0.5 shrink-0 text-status-amber" />
+                      )}
+                      <div className="flex flex-col">
+                        <span className={cn('break-words text-[11px]', task.isCompleted && 'line-through opacity-60')}>
+                          {task.title}
+                        </span>
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-[11px] text-text-tertiary italic">There's currently no task for this meeting</p>
+              )}
             </div>
           )}
         </div>
