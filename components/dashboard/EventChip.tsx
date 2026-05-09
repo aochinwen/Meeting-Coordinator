@@ -112,7 +112,7 @@ export function EventChip({
   const renderLink = (isExpandedState: boolean, isAbsolute: boolean, isPlaceholder: boolean) => {
     const classes = cn(
       'flex items-start rounded-md transition-all duration-[250ms] ease-in-out overflow-hidden',
-      isExpandedState ? 'flex-col gap-0.5 xl:flex-row xl:gap-1.5' : 'flex-row gap-1.5',
+      isExpandedState ? 'flex-col gap-0.5' : 'flex-row gap-1.5',
       compact ? 'px-1.5 py-0.5 text-[11px]' : 'px-2 py-1 text-xs',
       isExpandedState
         ? 'w-max min-w-[100%] max-w-[200px] sm:max-w-[250px] max-h-[200px] ring-1 ring-black/5 shadow-xl z-[100] scale-[1.02] opacity-100'
