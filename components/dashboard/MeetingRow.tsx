@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { Repeat, Video, Target, User } from 'lucide-react';
+import { Repeat, Video, Target, User, Square, CheckSquare } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const iconMap = {
@@ -28,6 +28,12 @@ export interface FormattedMeeting {
   totalTasks: number;
   completedTasks: number;
   isRecurring: boolean;
+  taskDetails?: Array<{
+    id: string;
+    title: string;
+    isCompleted: boolean;
+    dueDate: string;
+  }>;
 }
 
 export function MeetingRowDesktop({ meeting }: { meeting: FormattedMeeting }) {
@@ -78,6 +84,30 @@ export function MeetingRowDesktop({ meeting }: { meeting: FormattedMeeting }) {
             <p className={cn("text-sm font-light text-text-tertiary leading-relaxed mt-0.5", isExpanded ? "whitespace-normal break-words" : "truncate")}>
               {meeting.description}
             </p>
+            {isExpanded && meeting.taskDetails && meeting.taskDetails.length > 0 && (
+              <div className="mt-4 flex flex-col gap-2 border-t border-border/10 pt-3">
+                <span className="text-[10px] uppercase tracking-wider text-text-tertiary font-medium">Related Tasks</span>
+                <div className="flex flex-col gap-1.5">
+                  {meeting.taskDetails.map((task) => (
+                    <div key={task.id} className="flex items-start gap-2 text-xs text-text-secondary">
+                      {task.isCompleted ? (
+                        <CheckSquare className="h-3.5 w-3.5 mt-0.5 shrink-0 text-primary" />
+                      ) : (
+                        <Square className="h-3.5 w-3.5 mt-0.5 shrink-0 text-status-amber" />
+                      )}
+                      <div className="flex flex-col">
+                        <span className={cn('break-words', task.isCompleted && 'line-through opacity-60')}>
+                          {task.title}
+                        </span>
+                        <span className="text-[10px] text-text-tertiary">
+                          Due: {task.dueDate}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -137,12 +167,16 @@ export function MeetingRowDesktop({ meeting }: { meeting: FormattedMeeting }) {
       <div className="col-span-1 flex justify-end">
         {meeting.status === 'Live' ? (
           <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-status-green-bg text-status-green text-xs font-light">
-            <span className="h-1.5 w-1.5 rounded-full bg-primary"></span>
+            <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse"></span>
             Live
+          </span>
+        ) : meeting.status === 'Completed' ? (
+          <span className="inline-flex items-center px-3 py-1.5 rounded-full bg-status-grey-bg/40 border border-border/20 text-text-tertiary text-xs font-light">
+            Completed
           </span>
         ) : (
           <span className="inline-flex items-center px-3 py-1.5 rounded-full bg-status-grey-bg border border-border/30 text-text-secondary text-xs font-light">
-            Upcoming
+            {meeting.status}
           </span>
         )}
       </div>
@@ -193,6 +227,27 @@ export function MeetingRowMobile({ meeting }: { meeting: FormattedMeeting }) {
           <p className={cn("text-xs text-text-tertiary mt-1", isExpanded ? "whitespace-normal break-words" : "line-clamp-2")}>
             {meeting.description}
           </p>
+          {isExpanded && meeting.taskDetails && meeting.taskDetails.length > 0 && (
+            <div className="mt-3 flex flex-col gap-2 border-t border-border/10 pt-2">
+              <span className="text-[9px] uppercase tracking-wider text-text-tertiary font-medium">Related Tasks</span>
+              <div className="flex flex-col gap-1.5">
+                {meeting.taskDetails.map((task) => (
+                  <div key={task.id} className="flex items-start gap-2 text-xs text-text-secondary">
+                    {task.isCompleted ? (
+                      <CheckSquare className="h-3 w-3 mt-0.5 shrink-0 text-primary" />
+                    ) : (
+                      <Square className="h-3 w-3 mt-0.5 shrink-0 text-status-amber" />
+                    )}
+                    <div className="flex flex-col">
+                      <span className={cn('break-words text-[11px]', task.isCompleted && 'line-through opacity-60')}>
+                        {task.title}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
       <div className="flex items-center justify-between text-xs mt-3">
@@ -204,12 +259,16 @@ export function MeetingRowMobile({ meeting }: { meeting: FormattedMeeting }) {
         <div className="flex flex-col items-end gap-2">
           {meeting.status === 'Live' ? (
             <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-status-green-bg text-status-green text-xs font-light">
-              <span className="h-1.5 w-1.5 rounded-full bg-primary"></span>
+              <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse"></span>
               Live
+            </span>
+          ) : meeting.status === 'Completed' ? (
+            <span className="inline-flex items-center px-3 py-1.5 rounded-full bg-status-grey-bg/40 border border-border/20 text-text-tertiary text-xs font-light">
+              Completed
             </span>
           ) : (
             <span className="inline-flex items-center px-3 py-1.5 rounded-full bg-status-grey-bg border border-border/30 text-text-secondary text-xs font-light">
-              Upcoming
+              {meeting.status}
             </span>
           )}
         </div>

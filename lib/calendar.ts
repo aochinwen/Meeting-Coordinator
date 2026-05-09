@@ -116,6 +116,12 @@ export type MeetingEvent = CalendarEventBase & {
   startTime: string | null;
   endTime: string | null;
   status: string | null;
+  tasks?: Array<{
+    id: string;
+    title: string;
+    isCompleted: boolean;
+    dueDate: string;
+  }>;
 };
 
 export type TaskEvent = CalendarEventBase & {

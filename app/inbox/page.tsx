@@ -13,7 +13,12 @@ export default async function InboxPage() {
     .from('meetings')
     .select(`
       *,
-      meeting_checklist_tasks (*)
+      meeting_checklist_tasks (
+        *,
+        meeting_task_assignees (
+          person_id
+        )
+      )
     `)
     .or("status.eq.draft,draft_data->>is_update.eq.true,draft_data->>is_cancellation.eq.true")
     .order('created_at', { ascending: false });

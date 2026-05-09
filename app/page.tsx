@@ -1,7 +1,7 @@
 import { createClient } from '@/utils/supabase/server';
 import { Suspense } from 'react';
 import { ChevronRight, Video, Target, User, Repeat } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn, generatePagination } from '@/lib/utils';
 import Link from 'next/link';
 import { DashboardSkeleton } from '@/components/ui/loading-skeleton';
 import { DashboardChrome, type ChromeStats } from '@/components/dashboard/DashboardChrome';
@@ -29,7 +29,7 @@ interface MeetingWithRelations {
   status: string;
   series_id: string | null;
   meeting_participants: { user_id: string }[];
-  meeting_checklist_tasks: { id: string; is_completed: boolean }[];
+  meeting_checklist_tasks: { id: string; description: string; is_completed: boolean; due_days_before: number | null }[];
   rooms: { name: string } | null;
 }
 
@@ -193,6 +193,12 @@ async function CalendarBranch({
         startTime: m.start_time,
         endTime: m.end_time,
         status: m.status,
+        tasks: (m.meeting_checklist_tasks ?? []).map(t => ({
+          id: t.id,
+          title: t.description,
+          isCompleted: t.is_completed,
+          dueDate: computeTaskDueDate(m.date, t.due_days_before),
+        })),
       });
     }
     if (selectedTypes.tasks) {
@@ -429,7 +435,7 @@ async function MeetingsListBranch({
     .select(`
       *,
       meeting_participants(user_id),
-      meeting_checklist_tasks(id, is_completed),
+      meeting_checklist_tasks(id, description, is_completed, due_days_before),
       series_id,
       rooms(name)
     `, { count: 'exact' })
@@ -480,10 +486,35 @@ async function MeetingsListBranch({
   const rangeStart = totalMeetings === 0 ? 0 : from + 1;
   const rangeEnd = from + meetings.length;
 
+  const now = new Date();
+  const localToday = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  const localTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+
   const formattedMeetings = meetings.map((meeting) => {
-    const now = new Date();
-    const localToday = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-    const isLive = meeting.status === 'scheduled' && meeting.date === localToday;
+    // Determine display status
+    let displayStatus = 'Upcoming';
+    if (meeting.status === 'cancelled') {
+      displayStatus = 'Cancelled';
+    } else if (meeting.status === 'completed') {
+      displayStatus = 'Completed';
+    } else if (meeting.date < localToday) {
+      displayStatus = 'Completed';
+    } else if (meeting.date === localToday) {
+      // For today's meetings, check time if available
+      const start = meeting.start_time || '00:00:00';
+      const end = meeting.end_time || '23:59:59';
+      
+      if (localTime > end) {
+        displayStatus = 'Completed';
+      } else if (localTime >= start && localTime <= end) {
+        displayStatus = 'Live';
+      } else {
+        displayStatus = 'Upcoming';
+      }
+    } else {
+      displayStatus = 'Upcoming';
+    }
+
     const totalTasks = meeting.meeting_checklist_tasks?.length || 0;
     const completedTasks = meeting.meeting_checklist_tasks?.filter((t) => t.is_completed).length || 0;
     const progress = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
@@ -507,7 +538,7 @@ async function MeetingsListBranch({
       date: new Date(meeting.date + 'T00:00:00').toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' }),
       timeLabel: `${meeting.start_time?.slice(0, 5) || 'TBD'} — ${meeting.end_time?.slice(0, 5) || 'TBD'}`,
       roomName: meeting.rooms?.name || 'TBD',
-      status: isLive ? 'Live' : 'Upcoming',
+      status: displayStatus,
       iconName: iconNames[randomIdx],
       iconBg: bgs[randomIdx],
       iconColor: colors[randomIdx],
@@ -517,6 +548,12 @@ async function MeetingsListBranch({
       totalTasks,
       completedTasks,
       isRecurring: !!meeting.series_id,
+      taskDetails: (meeting.meeting_checklist_tasks ?? []).map(t => ({
+        id: t.id,
+        title: t.description || 'Untitled Task',
+        isCompleted: t.is_completed,
+        dueDate: computeTaskDueDate(meeting.date, t.due_days_before),
+      })),
     };
   });
 
@@ -584,20 +621,24 @@ async function MeetingsListBranch({
             Page {currentPage} / {totalPages}
           </span>
           <div className="hidden md:flex items-center gap-2">
-            {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
-              <Link
-                key={p}
-                href={pageHref(p)}
-                aria-current={p === currentPage ? 'page' : undefined}
-                className={cn(
-                  'h-10 w-10 flex items-center justify-center rounded-2xl text-sm font-light transition-colors',
-                  p === currentPage
-                    ? 'bg-primary text-white shadow-sm'
-                    : 'bg-white border border-border/30 text-text-secondary hover:bg-board',
-                )}
-              >
-                {p}
-              </Link>
+            {generatePagination(currentPage, totalPages).map((p, i) => (
+              p === '...' ? (
+                <span key={`ellipsis-${i}`} className="text-text-tertiary px-2">...</span>
+              ) : (
+                <Link
+                  key={p}
+                  href={pageHref(p as number)}
+                  aria-current={p === currentPage ? 'page' : undefined}
+                  className={cn(
+                    'h-10 w-10 flex items-center justify-center rounded-2xl text-sm font-light transition-colors',
+                    p === currentPage
+                      ? 'bg-primary text-white shadow-sm'
+                      : 'bg-white border border-border/30 text-text-secondary hover:bg-board',
+                  )}
+                >
+                  {p}
+                </Link>
+              )
             ))}
           </div>
           {currentPage < totalPages ? (

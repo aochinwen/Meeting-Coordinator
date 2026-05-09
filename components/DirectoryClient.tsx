@@ -2,7 +2,7 @@
 
 import { useState, useMemo, memo } from 'react';
 import { Plus, Search, MoreHorizontal, ChevronDown, ChevronRight, Edit2, Trash2 } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn, generatePagination } from '@/lib/utils';
 import { Database } from '@/types/supabase';
 import { createClient } from '@/utils/supabase/client';
 import { AddUserModal } from './AddUserModal';
@@ -283,18 +283,22 @@ function DirectoryClientComponent({ initialUsers, activeTeamsCount }: DirectoryC
             </button>
             
             <div className="hidden sm:flex items-center gap-2">
-              {Array.from({ length: totalPages }).map((_, i) => (
-                <button 
-                  key={i}
-                  onClick={() => setCurrentPage(i + 1)}
-                  className={cn("h-9 w-9 flex items-center justify-center rounded-2xl text-sm font-bold transition-colors",
-                    currentPage === i + 1 
-                      ? "bg-primary text-white shadow-sm" 
-                      : "bg-transparent text-text-primary hover:bg-white"
-                  )}
-                >
-                  {i + 1}
-                </button>
+              {generatePagination(currentPage, totalPages).map((p, i) => (
+                p === '...' ? (
+                  <span key={`ellipsis-${i}`} className="text-text-tertiary px-2">...</span>
+                ) : (
+                  <button 
+                    key={p}
+                    onClick={() => setCurrentPage(p as number)}
+                    className={cn("h-9 w-9 flex items-center justify-center rounded-2xl text-sm font-bold transition-colors",
+                      currentPage === p 
+                        ? "bg-primary text-white shadow-sm" 
+                        : "bg-transparent text-text-primary hover:bg-white"
+                    )}
+                  >
+                    {p}
+                  </button>
+                )
               ))}
             </div>
 
