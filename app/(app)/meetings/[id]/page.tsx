@@ -25,64 +25,70 @@ export default async function MeetingDetailPage({ params }: { params: Promise<{ 
   const resolvedParams = await params;
   const meetingId = resolvedParams.id;
 
-  // Prefetch all data server-side for instant client-side rendering
+  // Prefetch all data server-side in parallel.
+  // We avoid relational joins for profiles here because the generated types 
+  // are missing some foreign key relationships, causing build errors.
   const [
     { data: meeting },
     { data: participants },
     { data: tasks },
     { data: activities },
-    { data: allProfiles },
     { data: { user } },
     { data: roomBooking }
   ] = await Promise.all([
     supabase.from('meetings').select('*').eq('id', meetingId).single(),
     supabase.from('meeting_participants').select('*').eq('meeting_id', meetingId),
-    // Order only by created_at on the server; sort_order is applied
-    // client-side so this still works before migration 008 is applied.
-    supabase
-      .from('meeting_checklist_tasks')
-      .select('*')
-      .eq('meeting_id', meetingId)
-      .order('created_at', { ascending: true }),
+    supabase.from('meeting_checklist_tasks').select('*').eq('meeting_id', meetingId).order('created_at', { ascending: true }),
     supabase.from('meeting_activities').select('*').eq('meeting_id', meetingId).order('created_at', { ascending: false }).limit(20),
-    supabase.from('people').select('id, name, division, rank'),
     supabase.auth.getUser(),
     supabase.from('room_bookings').select('*, room:room_id(*)').eq('meeting_id', meetingId).eq('status', 'confirmed').order('created_at', { ascending: false }).limit(1)
   ]);
 
-  // Build profile map for client-side use
-  const profileMap = new Map<string, { name: string; division?: string | null; rank?: string | null }>();
-  allProfiles?.forEach((p) => profileMap.set(p.id, { name: p.name, division: p.division, rank: p.rank }));
+  // Collect all unique person IDs that need profiles
+  const personIds = new Set<string>();
+  if (meeting?.chairman_id) personIds.add(meeting.chairman_id);
+  if (meeting?.coordinator_id) personIds.add(meeting.coordinator_id);
+  participants?.forEach(p => personIds.add(p.user_id));
+  activities?.forEach(a => { if (a.user_id) personIds.add(a.user_id); });
 
-  // Fetch junction-based task assignees in a single round-trip.
-  const taskIds = (tasks || []).map((t) => t.id);
-  const taskAssigneeMap = new Map<string, Array<{ id: string; name: string }>>();
+  // Fetch task assignees and their profiles
+  const taskIds = (tasks || []).map(t => t.id);
+  let taskAssigneeRows: any[] = [];
   if (taskIds.length > 0) {
-    const { data: assigneeRows } = await supabase
+    const { data } = await supabase
       .from('meeting_task_assignees')
       .select('task_id, person_id')
       .in('task_id', taskIds);
-    for (const row of assigneeRows || []) {
-      const profile = profileMap.get(row.person_id);
-      if (!profile) continue;
-      const list = taskAssigneeMap.get(row.task_id) ?? [];
-      list.push({ id: row.person_id, name: profile.name });
-      taskAssigneeMap.set(row.task_id, list);
-    }
+    taskAssigneeRows = data || [];
+    taskAssigneeRows.forEach(row => personIds.add(row.person_id));
   }
 
-  // Pre-process data to reduce client-side computation
+  // Fetch all required profiles in a single batch
+  const profileMap = new Map<string, { name: string; division?: string | null; rank?: string | null }>();
+  if (personIds.size > 0) {
+    const { data: profiles } = await supabase
+      .from('people')
+      .select('id, name, division, rank')
+      .in('id', Array.from(personIds));
+    profiles?.forEach(p => profileMap.set(p.id, { name: p.name, division: p.division, rank: p.rank }));
+  }
+
   const initialData = {
     meeting: meeting || null,
-    participants: participants?.map((p) => ({
+    participants: participants?.map(p => ({
       ...p,
       user: profileMap.get(p.user_id) || null
     })) || [],
-    tasks: tasks?.map((t) => ({
-      ...t,
-      assignees: taskAssigneeMap.get(t.id) ?? [],
-    })) || [],
-    activities: activities?.map((a) => ({
+    tasks: tasks?.map(t => {
+      const assignees = taskAssigneeRows
+        .filter(row => row.task_id === t.id)
+        .map(row => ({
+          id: row.person_id,
+          name: profileMap.get(row.person_id)?.name || 'Unknown'
+        }));
+      return { ...t, assignees };
+    }) || [],
+    activities: activities?.map(a => ({
       ...a,
       user: a.user_id ? profileMap.get(a.user_id) || null : null
     })) || [],

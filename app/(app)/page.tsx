@@ -123,6 +123,7 @@ async function CalendarBranch({
   people,
   mode,
   anchor,
+  allowedIds,
 }: {
   current: DashboardParams;
   params: ChromeParams;
@@ -131,6 +132,7 @@ async function CalendarBranch({
   people: { id: string; name: string }[];
   mode: CalendarMode;
   anchor: string;
+  allowedIds: Set<string> | null;
 }) {
   const supabase = await createClient();
   const range = visibleRange(mode, anchor);
@@ -145,8 +147,8 @@ async function CalendarBranch({
     q = q.or(`title.ilike.%${params.search}%,description.ilike.%${params.search}%`);
   }
 
-  if (params.person) {
-    const allowed = await resolveMeetingsForPerson(params.person, supabase);
+  if (params.person && allowedIds) {
+    const allowed = allowedIds;
     if (allowed.size === 0) {
       // Short-circuit: no meetings match this person.
       return (
@@ -255,12 +257,14 @@ async function TasksListBranch({
   selectedTypes,
   stats,
   people,
+  allowedIds,
 }: {
   current: DashboardParams;
   params: ChromeParams;
   selectedTypes: SelectedTypes;
   stats: ChromeStats;
   people: { id: string; name: string }[];
+  allowedIds: Set<string> | null;
 }) {
   const supabase = await createClient();
   const { start, end } = rangeFromFilter(params.filter);
@@ -273,8 +277,8 @@ async function TasksListBranch({
   if (params.search) {
     q = q.or(`title.ilike.%${params.search}%,description.ilike.%${params.search}%`);
   }
-  if (params.person) {
-    const allowed = await resolveMeetingsForPerson(params.person, supabase);
+  if (params.person && allowedIds) {
+    const allowed = allowedIds;
     if (allowed.size === 0) {
       return (
         <DashboardChrome
@@ -417,6 +421,7 @@ async function MeetingsListBranch({
   stats,
   people,
   page,
+  allowedIds,
 }: {
   current: DashboardParams;
   params: ChromeParams;
@@ -424,6 +429,7 @@ async function MeetingsListBranch({
   stats: ChromeStats;
   people: { id: string; name: string }[];
   page: number;
+  allowedIds: Set<string> | null;
 }) {
   const supabase = await createClient();
   const { start, end } = rangeFromFilter(params.filter);
@@ -444,8 +450,8 @@ async function MeetingsListBranch({
   if (params.search) {
     q = q.or(`title.ilike.%${params.search}%,description.ilike.%${params.search}%`);
   }
-  if (params.person) {
-    const allowed = await resolveMeetingsForPerson(params.person, supabase);
+  if (params.person && allowedIds) {
+    const allowed = allowedIds;
     if (allowed.size === 0) {
       // No meetings match — render empty list with chrome.
       return (
@@ -470,9 +476,8 @@ async function MeetingsListBranch({
   const sortColumn = validSortColumns.includes(params.sortBy) ? params.sortBy : 'date';
   q = q.order(sortColumn, { ascending: params.sortOrder === 'asc' });
 
-  const [{ data: meetingsData, count: meetingsCount }, { data: profiles }] = await Promise.all([
+  const [{ data: meetingsData, count: meetingsCount }] = await Promise.all([
     q.range(from, to),
-    supabase.from('people').select('id, name').order('name', { ascending: true }),
   ]);
 
   const totalMeetings = meetingsCount || 0;
@@ -480,7 +485,7 @@ async function MeetingsListBranch({
   const currentPage = Math.min(Math.max(1, page), totalPages);
 
   const profileMap = new Map<string, string>();
-  profiles?.forEach((p) => profileMap.set(p.id, p.name));
+  people?.forEach((p) => profileMap.set(p.id, p.name));
 
   const meetings = (meetingsData as unknown as MeetingWithRelations[]) || [];
   const rangeStart = totalMeetings === 0 ? 0 : from + 1;
@@ -692,9 +697,10 @@ async function DashboardContent({
   person: string;
 }) {
   const supabase = await createClient();
-  const [stats, { data: peopleRows }] = await Promise.all([
+  const [stats, { data: peopleRows }, allowedIds] = await Promise.all([
     fetchStats(supabase),
     supabase.from('people').select('id, name').order('name', { ascending: true }),
+    person ? resolveMeetingsForPerson(person, supabase) : Promise.resolve(null),
   ]);
   const people = peopleRows || [];
   const selectedTypes = parseTypes(types);
@@ -735,6 +741,7 @@ async function DashboardContent({
         people={people}
         mode={calView}
         anchor={anchor}
+        allowedIds={allowedIds}
       />
     );
   }
@@ -747,6 +754,7 @@ async function DashboardContent({
         selectedTypes={selectedTypes}
         stats={stats}
         people={people}
+        allowedIds={allowedIds}
       />
     );
   }
@@ -759,6 +767,7 @@ async function DashboardContent({
       stats={stats}
       people={people}
       page={page}
+      allowedIds={allowedIds}
     />
   );
 }

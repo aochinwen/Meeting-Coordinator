@@ -55,7 +55,9 @@ function PasswordInput({
   );
 }
 
-export default function ResetPasswordPage() {
+import { Suspense } from 'react';
+
+function ResetPasswordContent() {
   const searchParams = useSearchParams();
   const [state, action, pending] = useActionState(resetPassword, undefined);
   
@@ -200,5 +202,17 @@ export default function ResetPasswordPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function ResetPasswordPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-[#faf6f0]">
+        <Loader2 className="w-8 h-8 animate-spin text-[#4a7c59]" />
+      </div>
+    }>
+      <ResetPasswordContent />
+    </Suspense>
   );
 }
