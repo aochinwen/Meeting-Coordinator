@@ -5,7 +5,7 @@ import { createClient } from '@/utils/supabase/client';
 import { format, parseISO } from 'date-fns';
 import { Calendar, Clock, Mail, CheckCircle2, XCircle, AlertCircle, RefreshCw, UserPlus, Pencil, Trash2, Check, X, Plus } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { PeoplePicker } from '@/components/ui/PeoplePicker';
+import { PeoplePicker, type PersonOption } from '@/components/ui/PeoplePicker';
 
 type DraftInboxClientProps = {
   initialMeetings: Record<string, any>[];
@@ -396,7 +396,7 @@ export default function DraftInboxClient({ initialMeetings, people }: DraftInbox
                                 </div>
                                 <div className="flex-1">
                                   <PeoplePicker
-                                    people={people}
+                                    people={people as PersonOption[]}
                                     value={editingAssignees}
                                     onChange={setEditingAssignees}
                                     multiple
@@ -515,7 +515,7 @@ export default function DraftInboxClient({ initialMeetings, people }: DraftInbox
                               </div>
                               <div className="flex-1">
                                 <PeoplePicker
-                                  people={people}
+                                  people={people as PersonOption[]}
                                   value={newTaskAssignees}
                                   onChange={setNewTaskAssignees}
                                   multiple
