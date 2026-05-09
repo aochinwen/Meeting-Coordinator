@@ -183,20 +183,19 @@ export function RoomCalendar({ onBookingClick, onTimeSlotClick, onPendingSlotCha
       const ds = dragStateRef.current;
       if (!ds) return;
 
-      // If we are actively dragging, block the browser's scroll
-      if ('touches' in e) {
-        e.preventDefault();
-        const touch = e.touches[0];
-        const col = columnRefs.current[ds.dateKey];
-        if (col) {
-          const rect = col.getBoundingClientRect();
-          const slotIdx = clamp(
-            Math.floor((touch.clientY - rect.top) / SLOT_HEIGHT),
-            0,
-            TOTAL_SLOTS - 1,
-          );
-          setDragState(prev => prev ? { ...prev, endIndex: slotIdx } : null);
-        }
+      e.preventDefault(); // Stop scrolling and text selection during drag
+
+      const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+      const col = columnRefs.current[ds.dateKey];
+      
+      if (col) {
+        const rect = col.getBoundingClientRect();
+        const slotIdx = clamp(
+          Math.floor((clientY - rect.top) / SLOT_HEIGHT),
+          0,
+          TOTAL_SLOTS - 1,
+        );
+        setDragState(prev => prev ? { ...prev, endIndex: slotIdx } : null);
       }
     };
 
