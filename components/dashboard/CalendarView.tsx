@@ -96,7 +96,7 @@ function MonthGrid({
             </div>
           ))}
         </div>
-        <div className="grid grid-cols-7 grid-flow-row auto-rows-fr">
+        <div className="grid grid-cols-7 grid-flow-row auto-rows-auto">
           {days.map((d) => {
             const dayEvents = grouped.get(d) ?? [];
             const date = fromDateStr(d);
