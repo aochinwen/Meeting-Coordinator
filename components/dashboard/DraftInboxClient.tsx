@@ -321,7 +321,7 @@ export default function DraftInboxClient({ initialMeetings, people }: DraftInbox
               </div>
             </div>
 
-            <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div className="p-4 md:p-6 grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
               <div className="space-y-6">
                 <div>
                   <h3 className="text-xl font-semibold text-text-primary mb-1">{displayTitle}</h3>
@@ -356,7 +356,7 @@ export default function DraftInboxClient({ initialMeetings, people }: DraftInbox
                 </div>
 
                 <div>
-                  <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center justify-between mb-4 md:mb-5">
                     <h4 className="text-sm font-medium text-text-primary">Action Items {tasks.length > 0 && `(${tasks.length})`}</h4>
                     <button 
                       onClick={() => {
@@ -372,7 +372,7 @@ export default function DraftInboxClient({ initialMeetings, people }: DraftInbox
                   {tasks.length > 0 || newTaskMeetingId === meeting.id ? (
                     <ul className="space-y-4">
                       {tasks.map((task: Record<string, any>) => (
-                        <li key={task.id} className="group flex items-start gap-3 text-sm text-text-secondary bg-surface p-3.5 rounded-2xl border border-transparent hover:border-border hover:bg-white hover:shadow-sm transition-all">
+                        <li key={task.id} className="group flex items-start gap-3 text-sm text-text-secondary bg-surface p-3 md:p-3.5 rounded-2xl border border-transparent hover:border-border hover:bg-white hover:shadow-sm transition-all">
                           <CheckCircle2 className="w-4 h-4 mt-1 text-primary shrink-0" />
                           {editingTaskId === task.id ? (
                             <div className="flex-1 space-y-3">
@@ -464,7 +464,7 @@ export default function DraftInboxClient({ initialMeetings, people }: DraftInbox
                                   );
                                 })()}
                               </div>
-                              <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all transform translate-x-1 group-hover:translate-x-0 mt-0.5">
+                              <div className="flex gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-all transform md:translate-x-1 md:group-hover:translate-x-0 mt-0.5">
                                 <button 
                                   onClick={() => { 
                                     setEditingTaskId(task.id); 
@@ -492,14 +492,14 @@ export default function DraftInboxClient({ initialMeetings, people }: DraftInbox
                       ))}
                       
                       {newTaskMeetingId === meeting.id && (
-                        <li className="flex items-start gap-3 text-sm text-text-secondary bg-white p-3.5 rounded-2xl border-2 border-primary/20 shadow-md animate-in fade-in slide-in-from-top-1 duration-200">
-                          <Plus className="w-4 h-4 mt-1 text-primary shrink-0" />
-                          <div className="flex-1 space-y-3">
+                        <li className="flex items-start gap-4 text-sm text-text-secondary bg-white p-5 rounded-2xl border-2 border-primary/20 shadow-lg animate-in fade-in slide-in-from-top-1 duration-200">
+                          <Plus className="w-5 h-5 mt-0.5 text-primary shrink-0" />
+                          <div className="flex-1 space-y-4">
                             <textarea
                               autoFocus
                               value={newTaskDescription}
                               onChange={(e) => setNewTaskDescription(e.target.value)}
-                              className="w-full bg-transparent border-none p-0 text-sm focus:outline-none min-h-[80px] leading-relaxed"
+                              className="w-full bg-transparent border-none p-0 pt-0.5 text-sm focus:outline-none min-h-[100px] leading-relaxed placeholder:text-text-tertiary/50"
                               placeholder="Type new task description..."
                             />
                             

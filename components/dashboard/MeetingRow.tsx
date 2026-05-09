@@ -62,7 +62,7 @@ export function MeetingRowDesktop({ meeting }: { meeting: FormattedMeeting }) {
       title={isExpanded ? '' : 'Click to expand details'}
       className={cn(
         "grid grid-cols-12 gap-4 px-6 py-6 items-center transition-colors group cursor-pointer",
-        isExpanded ? "bg-board/50" : "hover:bg-board/50"
+        isExpanded ? "bg-white" : "hover:bg-board/50"
       )}
     >
       <div className="col-span-3 flex flex-col justify-center">
@@ -206,7 +206,7 @@ export function MeetingRowMobile({ meeting }: { meeting: FormattedMeeting }) {
       title={isExpanded ? '' : 'Click to expand details'}
       className={cn(
         "bg-white border border-border/30 rounded-2xl p-4 space-y-3 transition-colors",
-        isExpanded ? "bg-board/30" : "hover:bg-board/30"
+        isExpanded ? "" : "hover:bg-board/30"
       )}
     >
       <div className="flex items-start gap-3">

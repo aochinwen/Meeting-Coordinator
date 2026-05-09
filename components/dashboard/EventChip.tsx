@@ -83,7 +83,7 @@ export function EventChip({
             <Video className={cn(compact ? 'h-3 w-3' : 'h-3.5 w-3.5', 'shrink-0')} />
             {time && <span className="font-medium tabular-nums shrink-0">{time}</span>}
           </div>
-          <span className={cn('font-light text-left flex-1 min-w-0', isExpandedState ? 'whitespace-normal break-words' : 'truncate')}>
+          <span className={cn('font-light text-left flex-1 min-w-0', isExpandedState ? 'whitespace-normal break-words' : (compact ? 'line-clamp-2' : 'line-clamp-3'))}>
             {event.title}
           </span>
         </>
@@ -95,7 +95,7 @@ export function EventChip({
           <div className="flex items-center gap-1.5 shrink-0">
             <Icon className={cn(compact ? 'h-3 w-3' : 'h-3.5 w-3.5', 'shrink-0')} />
           </div>
-          <span className={cn('font-light text-left flex-1 min-w-0', isExpandedState ? 'whitespace-normal break-words' : 'truncate', event.isCompleted && 'line-through opacity-70')}>
+          <span className={cn('font-light text-left flex-1 min-w-0', isExpandedState ? 'whitespace-normal break-words' : (compact ? 'line-clamp-2' : 'line-clamp-3'), event.isCompleted && 'line-through opacity-70')}>
             {event.title}
           </span>
         </>
@@ -112,11 +112,11 @@ export function EventChip({
   const renderLink = (isExpandedState: boolean, isAbsolute: boolean, isPlaceholder: boolean) => {
     const classes = cn(
       'flex items-start rounded-md transition-all duration-[250ms] ease-in-out overflow-hidden',
-      isExpandedState ? 'flex-col gap-0.5' : 'flex-row gap-1.5',
-      compact ? 'px-1.5 py-0.5 text-[11px]' : 'px-2 py-1 text-xs',
+      'flex-col gap-0.5',
+      'px-2 py-1 text-xs',
       isExpandedState
         ? 'w-max min-w-[100%] max-w-[200px] sm:max-w-[250px] max-h-[200px] ring-1 ring-black/5 shadow-xl z-[100] scale-[1.02] opacity-100'
-        : cn('w-full', compact ? 'max-h-[20px]' : 'max-h-[24px]'),
+        : cn('w-full', compact ? 'max-h-[48px]' : 'max-h-[80px]'),
       isGroupExpanded && isExpandedState && 'mb-1',
       isAbsolute ? 'absolute top-0 left-0' : 'relative',
       !isPlaceholder && !isExpandedState && isDarkened && 'opacity-30',
