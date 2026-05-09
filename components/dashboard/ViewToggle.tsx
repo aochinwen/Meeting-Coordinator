@@ -13,14 +13,14 @@ export function ViewToggle({
   const baseBtn =
     'flex items-center justify-center gap-2 px-4 py-2.5 rounded-2xl text-sm font-light transition-colors';
   return (
-    <div className="bg-board border border-border rounded-2xl p-1 flex items-center gap-1 w-full sm:w-auto">
+    <div className="bg-board border border-border rounded-2xl p-1 flex items-center gap-1 w-fit sm:w-auto">
       <Link
         href={buildDashboardHref(current, { view: 'list', page: 1 })}
         className={cn(
           baseBtn,
-          'flex-1',
+          'flex-1 whitespace-nowrap',
           view === 'list'
-            ? 'bg-white text-text-primary shadow-sm'
+            ? 'bg-white text-text-primary shadow-sm ring-1 ring-blue-600/50'
             : 'text-text-secondary hover:bg-white/60',
         )}
         aria-pressed={view === 'list'}
@@ -32,9 +32,9 @@ export function ViewToggle({
         href={buildDashboardHref(current, { view: 'calendar' })}
         className={cn(
           baseBtn,
-          'flex-1',
+          'flex-1 whitespace-nowrap',
           view === 'calendar'
-            ? 'bg-white text-text-primary shadow-sm'
+            ? 'bg-white text-text-primary shadow-sm ring-1 ring-blue-600/50'
             : 'text-text-secondary hover:bg-white/60',
         )}
         aria-pressed={view === 'calendar'}

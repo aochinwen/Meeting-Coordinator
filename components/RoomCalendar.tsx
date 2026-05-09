@@ -72,6 +72,11 @@ export function RoomCalendar({ onBookingClick, onTimeSlotClick, onPendingSlotCha
   // Mutable ref mirroring dragState so global handlers always see fresh values
   // without needing to rebind listeners on every endIndex change.
   const dragStateRef = useRef<DragState | null>(null);
+
+  // Refs for mobile long-press gesture handling
+  const touchTimeout = useRef<NodeJS.Timeout | null>(null);
+  const touchStartPos = useRef<{ x: number; y: number } | null>(null);
+
   useEffect(() => {
     dragStateRef.current = dragState;
   }, [dragState]);
@@ -168,65 +173,70 @@ export function RoomCalendar({ onBookingClick, onTimeSlotClick, onPendingSlotCha
     };
   }, [currentDate]);
 
-  // While a drag is in progress, track the pointer globally:
-  //   - mousemove/touchmove → recompute the hovered slot from the originating column's
-  //     bounding rect so that fast movement or crossing sibling elements
-  //     never loses a frame. This mirrors Google/Apple Calendar behaviour.
-  //   - mouseup/touchend  → commit the selection and fire onTimeSlotClick.
+  // Global pointer handlers to stop scrolling during an active drag.
+  // We use a non-passive listener here because element-level onTouchMove 
+  // is passive by default in React and cannot call e.preventDefault().
   useEffect(() => {
-    // Only bind listeners when a drag is actually in progress.
     if (!dragState) return;
 
-    const handlePointerMove = (e: MouseEvent | TouchEvent) => {
-      if ('touches' in e) e.preventDefault();
+    const handleGlobalMove = (e: TouchEvent | MouseEvent) => {
       const ds = dragStateRef.current;
       if (!ds) return;
-      const col = columnRefs.current[ds.dateKey];
-      if (!col) return;
-      const rect = col.getBoundingClientRect();
-      const clientY = 'touches' in e ? e.touches[0]?.clientY ?? e.changedTouches[0]?.clientY : e.clientY;
-      const slotIdx = clamp(
-        Math.floor((clientY - rect.top) / SLOT_HEIGHT),
-        0,
-        TOTAL_SLOTS - 1,
-      );
-      setDragState((prev) =>
-        prev && prev.endIndex !== slotIdx ? { ...prev, endIndex: slotIdx } : prev,
-      );
-    };
 
-    const handlePointerEnd = () => {
-      const ds = dragStateRef.current;
-      if (!ds) return;
-      const { roomId, dateKey, startIndex, endIndex } = ds;
-      const lo = Math.min(startIndex, endIndex);
-      const hi = Math.max(startIndex, endIndex);
-      const startTime = slotIndexToTime(lo);
-      const endTime = slotIndexToTime(hi + 1);
-      const room = rooms.find((r) => r.id === roomId);
-      const day = visibleDays.find((d) => format(d, 'yyyy-MM-dd') === dateKey);
-      setDragState(null);
-      if (room && day) {
-        const slot: PendingSlot = { room, day, startTime, endTime, dateKey, loIndex: lo, hiIndex: hi };
-        onPendingSlotChange?.(slot);
+      // If we are actively dragging, block the browser's scroll
+      if ('touches' in e) {
+        e.preventDefault();
+        const touch = e.touches[0];
+        const col = columnRefs.current[ds.dateKey];
+        if (col) {
+          const rect = col.getBoundingClientRect();
+          const slotIdx = clamp(
+            Math.floor((touch.clientY - rect.top) / SLOT_HEIGHT),
+            0,
+            TOTAL_SLOTS - 1,
+          );
+          setDragState(prev => prev ? { ...prev, endIndex: slotIdx } : null);
+        }
       }
     };
 
-    window.addEventListener('mousemove', handlePointerMove);
-    window.addEventListener('mouseup', handlePointerEnd);
-    window.addEventListener('touchmove', handlePointerMove, { passive: false });
-    window.addEventListener('touchend', handlePointerEnd);
-    window.addEventListener('touchcancel', handlePointerEnd);
-    return () => {
-      window.removeEventListener('mousemove', handlePointerMove);
-      window.removeEventListener('mouseup', handlePointerEnd);
-      window.removeEventListener('touchmove', handlePointerMove);
-      window.removeEventListener('touchend', handlePointerEnd);
-      window.removeEventListener('touchcancel', handlePointerEnd);
+    const handleGlobalEnd = () => {
+      if (touchTimeout.current) {
+        clearTimeout(touchTimeout.current);
+        touchTimeout.current = null;
+      }
+      
+      const ds = dragStateRef.current;
+      if (ds) {
+        const { roomId, dateKey, startIndex, endIndex } = ds;
+        const lo = Math.min(startIndex, endIndex);
+        const hi = Math.max(startIndex, endIndex);
+        const startTime = slotIndexToTime(lo);
+        const endTime = slotIndexToTime(hi + 1);
+        const room = rooms.find((r) => r.id === roomId);
+        const day = visibleDays.find((d) => format(d, 'yyyy-MM-dd') === dateKey);
+        if (room && day) {
+          const slot: PendingSlot = { room, day, startTime, endTime, dateKey, loIndex: lo, hiIndex: hi };
+          onPendingSlotChange?.(slot);
+        }
+      }
+      setDragState(null);
     };
-    // Bind only when dragState toggles (null ↔ non-null), not on every index change.
-    // Handlers read from the mutable ref to always see fresh endIndex.
-  }, [!!dragState, rooms, visibleDays, onTimeSlotClick]);
+
+    window.addEventListener('touchmove', handleGlobalMove, { passive: false });
+    window.addEventListener('mousemove', handleGlobalMove as any);
+    window.addEventListener('touchend', handleGlobalEnd);
+    window.addEventListener('mouseup', handleGlobalEnd);
+    window.addEventListener('touchcancel', handleGlobalEnd);
+    
+    return () => {
+      window.removeEventListener('touchmove', handleGlobalMove);
+      window.removeEventListener('mousemove', handleGlobalMove as any);
+      window.removeEventListener('touchend', handleGlobalEnd);
+      window.removeEventListener('mouseup', handleGlobalEnd);
+      window.removeEventListener('touchcancel', handleGlobalEnd);
+    };
+  }, [!!dragState, rooms, visibleDays, onPendingSlotChange]);
 
   const goToPreviousWeek = () => {
     setCurrentDate(addDays(currentDate, -7));
@@ -450,10 +460,9 @@ export function RoomCalendar({ onBookingClick, onTimeSlotClick, onPendingSlotCha
                           isToday && 'bg-primary/[0.03] hover:bg-primary/[0.05]',
                           'border-r border-border/40 last:border-r-0'
                         )}
-                        style={{ height: TOTAL_SLOTS * SLOT_HEIGHT, touchAction: 'none' }}
+                        style={{ height: TOTAL_SLOTS * SLOT_HEIGHT }}
                         onMouseDown={(e) => {
-                          // Ignore drags that originate on an existing booking
-                          // (those should fall through to the booking's onClick).
+                          // Desktop dragging starts instantly on mousedown
                           const target = e.target as HTMLElement;
                           if (target.closest('[data-booking="true"]')) return;
                           e.preventDefault();
@@ -471,10 +480,10 @@ export function RoomCalendar({ onBookingClick, onTimeSlotClick, onPendingSlotCha
                           });
                         }}
                         onTouchStart={(e) => {
-                          // Ignore drags that originate on an existing booking
+                          // Mobile dragging starts after a 300ms long-press
                           const target = e.target as HTMLElement;
                           if (target.closest('[data-booking="true"]')) return;
-                          e.preventDefault();
+                          
                           const touch = e.touches[0];
                           const rect = e.currentTarget.getBoundingClientRect();
                           const slotIdx = clamp(
@@ -482,12 +491,36 @@ export function RoomCalendar({ onBookingClick, onTimeSlotClick, onPendingSlotCha
                             0,
                             TOTAL_SLOTS - 1,
                           );
-                          setDragState({
-                            roomId: selectedRoom.id,
-                            dateKey,
-                            startIndex: slotIdx,
-                            endIndex: slotIdx,
-                          });
+
+                          touchStartPos.current = { x: touch.clientX, y: touch.clientY };
+                          if (touchTimeout.current) clearTimeout(touchTimeout.current);
+
+                          touchTimeout.current = setTimeout(() => {
+                            if (window.navigator && window.navigator.vibrate) {
+                              window.navigator.vibrate(10);
+                            }
+
+                            setDragState({
+                              roomId: selectedRoom.id,
+                              dateKey,
+                              startIndex: slotIdx,
+                              endIndex: slotIdx,
+                            });
+                            touchTimeout.current = null;
+                          }, 300);
+                        }}
+                        onTouchMove={(e) => {
+                          // Handle long-press cancellation if moving too early.
+                          // The actual selection update is handled by the global non-passive listener.
+                          if (touchTimeout.current && touchStartPos.current) {
+                            const touch = e.touches[0];
+                            const dx = Math.abs(touch.clientX - touchStartPos.current.x);
+                            const dy = Math.abs(touch.clientY - touchStartPos.current.y);
+                            if (dx > 10 || dy > 10) {
+                              clearTimeout(touchTimeout.current);
+                              touchTimeout.current = null;
+                            }
+                          }
                         }}
                       >
                         {/* Hour grid lines (full line at :00, subtle at :30) */}
@@ -645,7 +678,7 @@ export function RoomCalendar({ onBookingClick, onTimeSlotClick, onPendingSlotCha
                         {/* Live drag selection overlay */}
                         {isActiveDragDay && (
                           <div
-                            className="pointer-events-none absolute left-0.5 right-0.5 bg-primary/25 border border-primary/60 rounded-md z-20 flex items-start justify-center text-[10px] font-bold text-primary pt-1"
+                            className="pointer-events-none absolute left-0.5 right-0.5 bg-primary/25 border border-primary/60 rounded-md z-20 flex items-start justify-center text-[10px] font-bold text-primary pt-1 shadow-lg scale-[1.02] transition-transform"
                             style={{
                               top: selLo * SLOT_HEIGHT,
                               height: (selHi - selLo + 1) * SLOT_HEIGHT,

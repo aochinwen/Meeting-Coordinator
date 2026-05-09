@@ -119,7 +119,7 @@ export function DashboardChrome({
             {params.types && <input type="hidden" name="types" value={params.types} />}
             {params.person && <input type="hidden" name="person" value={params.person} />}
           </form>
-          <div className="grid grid-cols-2 sm:flex gap-2 shrink-0 w-full sm:w-auto">
+          <div className="flex gap-2 shrink-0 w-full sm:w-auto">
             <ViewToggle current={current} view={view} />
           </div>
         </div>
