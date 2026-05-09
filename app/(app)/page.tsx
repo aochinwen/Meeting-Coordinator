@@ -123,7 +123,7 @@ async function CalendarBranch({
   people,
   mode,
   anchor,
-  allowedIds,
+  resolvedFilters,
 }: {
   current: DashboardParams;
   params: ChromeParams;
@@ -132,7 +132,7 @@ async function CalendarBranch({
   people: { id: string; name: string }[];
   mode: CalendarMode;
   anchor: string;
-  allowedIds: Set<string> | null;
+  resolvedFilters: ResolvedFilters | null;
 }) {
   const supabase = await createClient();
   const range = visibleRange(mode, anchor);
@@ -143,33 +143,8 @@ async function CalendarBranch({
     .gte('date', range.start)
     .lte('date', range.end);
 
-  if (params.search) {
-    q = q.or(`title.ilike.%${params.search}%,description.ilike.%${params.search}%`);
-  }
-
-  if (params.person && allowedIds) {
-    const allowed = allowedIds;
-    if (allowed.size === 0) {
-      // Short-circuit: no meetings match this person.
-      return (
-        <DashboardChrome
-          current={current}
-          params={params}
-          selectedTypes={selectedTypes}
-          view="calendar"
-          stats={stats}
-          people={people}
-          selectedPersonId={params.person || null}
-          showDateFilter={false}
-          showSort={false}
-        >
-          <CalendarContainer current={current} mode={mode} anchor={anchor}>
-            <CalendarGrid current={current} mode={mode} anchor={anchor} events={[]} />
-          </CalendarContainer>
-        </DashboardChrome>
-      );
-    }
-    q = q.in('id', Array.from(allowed));
+  if (resolvedFilters?.meetingIds) {
+    q = q.in('id', Array.from(resolvedFilters.meetingIds));
   }
 
   q = q.order('date', { ascending: true });
@@ -207,12 +182,15 @@ async function CalendarBranch({
       for (const t of m.meeting_checklist_tasks ?? []) {
         const due = computeTaskDueDate(m.date, t.due_days_before);
         if (due >= range.start && due <= range.end) {
-          // Search applies to task description and meeting title
-          if (params.search) {
-            const s = params.search.toLowerCase();
-            if (!t.description.toLowerCase().includes(s) && !m.title.toLowerCase().includes(s)) {
-              continue;
-            }
+          // Search applies to task description, meeting title, or specific matches
+          if (params.search && resolvedFilters) {
+            const isMatched = 
+              resolvedFilters.taskIds?.has(t.id) || 
+              resolvedFilters.criteriaIds?.has(m.id) ||
+              t.description.toLowerCase().includes(params.search.toLowerCase()) ||
+              m.title.toLowerCase().includes(params.search.toLowerCase());
+            
+            if (!isMatched) continue;
           }
           events.push({
             kind: 'task',
@@ -257,14 +235,14 @@ async function TasksListBranch({
   selectedTypes,
   stats,
   people,
-  allowedIds,
+  resolvedFilters,
 }: {
   current: DashboardParams;
   params: ChromeParams;
   selectedTypes: SelectedTypes;
   stats: ChromeStats;
   people: { id: string; name: string }[];
-  allowedIds: Set<string> | null;
+  resolvedFilters: ResolvedFilters | null;
 }) {
   const supabase = await createClient();
   const { start, end } = rangeFromFilter(params.filter);
@@ -274,28 +252,11 @@ async function TasksListBranch({
     .select('id, title, date, meeting_checklist_tasks(id, description, is_completed, due_days_before)')
     .gte('date', start)
     .lte('date', end);
-  if (params.search) {
-    q = q.or(`title.ilike.%${params.search}%,description.ilike.%${params.search}%`);
+
+  if (resolvedFilters?.meetingIds) {
+    q = q.in('id', Array.from(resolvedFilters.meetingIds));
   }
-  if (params.person && allowedIds) {
-    const allowed = allowedIds;
-    if (allowed.size === 0) {
-      return (
-        <DashboardChrome
-          current={current}
-          params={params}
-          selectedTypes={selectedTypes}
-          view="list"
-          stats={stats}
-          people={people}
-          selectedPersonId={params.person || null}
-        >
-          <TasksList tasks={[]} />
-        </DashboardChrome>
-      );
-    }
-    q = q.in('id', Array.from(allowed));
-  }
+
   q = q.order('date', { ascending: true });
 
   const { data: meetings } = await q;
@@ -309,8 +270,14 @@ async function TasksListBranch({
     meeting_checklist_tasks: Array<{ id: string; description: string; is_completed: boolean; due_days_before: number | null }>;
   }>) {
     for (const t of m.meeting_checklist_tasks ?? []) {
-      if (search && !t.description.toLowerCase().includes(search) && !m.title.toLowerCase().includes(search)) {
-        continue;
+      if (search && resolvedFilters) {
+        const isMatched = 
+          resolvedFilters.taskIds?.has(t.id) || 
+          resolvedFilters.criteriaIds?.has(m.id) ||
+          t.description.toLowerCase().includes(search) ||
+          m.title.toLowerCase().includes(search);
+        
+        if (!isMatched) continue;
       }
       items.push({
         id: t.id,
@@ -363,55 +330,96 @@ type ChromeParams = {
   person: string;
 };
 
-/* -------------------------------------------------------------------------- */
-/*               Resolve meeting ids matching a person filter                 */
-/* -------------------------------------------------------------------------- */
+type ResolvedFilters = {
+  meetingIds: Set<string> | null;
+  taskIds: Set<string> | null;
+  criteriaIds: Set<string> | null;
+};
 
 /**
- * Returns the set of meeting ids where the given person appears in any role:
- * chairman, coordinator, participant, or task assignee.
- * Returns null if no person filter is active (caller should skip filtering).
+ * Resolves both person filter and search query into sets of matching meeting and task IDs.
  */
-async function resolveMeetingsForPerson(
-  personId: string,
+async function resolveDashboardFilters(
   supabase: Awaited<ReturnType<typeof createClient>>,
-): Promise<Set<string>> {
-  const ids = new Set<string>();
+  personId?: string,
+  search?: string,
+): Promise<ResolvedFilters | null> {
+  if (!personId && !search) return null;
 
-  // Fetch all meeting associations in parallel for better performance
-  const [
-    { data: own },
-    { data: parts },
-    { data: assignedTasks }
-  ] = await Promise.all([
-    // Chairman / coordinator on the meeting row
-    supabase
-      .from('meetings')
-      .select('id')
-      .or(`chairman_id.eq.${personId},coordinator_id.eq.${personId}`),
-    // Participants
-    supabase
-      .from('meeting_participants')
-      .select('meeting_id')
-      .eq('user_id', personId),
-    // Task assignees -> meetings via meeting_checklist_tasks
-    supabase
-      .from('meeting_task_assignees')
-      .select('meeting_checklist_tasks!inner(meeting_id)')
-      .eq('person_id', personId)
-  ]);
+  let searchMeetingIds: Set<string> | null = null;
+  let searchTaskIds: Set<string> | null = null;
+  let searchCriteriaIds: Set<string> | null = null;
+  let personMeetingIds: Set<string> | null = null;
 
-  for (const r of own ?? []) ids.add(r.id);
-  for (const r of parts ?? []) ids.add(r.meeting_id);
-  for (const r of (assignedTasks ?? []) as Array<{
-    meeting_checklist_tasks: { meeting_id: string } | { meeting_id: string }[];
-  }>) {
-    const mt = r.meeting_checklist_tasks;
-    if (Array.isArray(mt)) mt.forEach((m) => ids.add(m.meeting_id));
-    else if (mt) ids.add(mt.meeting_id);
+  if (search) {
+    const pattern = `%${search}%`;
+    const [
+      { data: matchedPeople },
+      { data: directMeetings },
+      { data: directTasks }
+    ] = await Promise.all([
+      supabase.from('people').select('id').ilike('name', pattern),
+      supabase.from('meetings').select('id').or(`title.ilike.${pattern},description.ilike.${pattern}`),
+      supabase.from('meeting_checklist_tasks').select('id, meeting_id').ilike('description', pattern)
+    ]);
+
+    const pIds = (matchedPeople || []).map(p => p.id);
+    const [
+      { data: roleMeetings },
+      { data: participantMeetings },
+      { data: assigneeTasks }
+    ] = await Promise.all([
+      pIds.length > 0 ? supabase.from('meetings').select('id').or(`chairman_id.in.(${pIds.join(',')}),coordinator_id.in.(${pIds.join(',')})`) : Promise.resolve({ data: [] }),
+      pIds.length > 0 ? supabase.from('meeting_participants').select('meeting_id').in('user_id', pIds) : Promise.resolve({ data: [] }),
+      pIds.length > 0 ? supabase.from('meeting_task_assignees').select('task_id, meeting_checklist_tasks!inner(meeting_id)').in('person_id', pIds) : Promise.resolve({ data: [] })
+    ]);
+
+    searchMeetingIds = new Set();
+    searchTaskIds = new Set();
+    searchCriteriaIds = new Set();
+
+    for (const m of directMeetings ?? []) { searchMeetingIds.add(m.id); searchCriteriaIds.add(m.id); }
+    for (const m of roleMeetings ?? []) { searchMeetingIds.add(m.id); searchCriteriaIds.add(m.id); }
+    for (const m of participantMeetings ?? []) { searchMeetingIds.add(m.meeting_id); searchCriteriaIds.add(m.meeting_id); }
+    for (const t of directTasks ?? []) { searchTaskIds.add(t.id); searchMeetingIds.add(t.meeting_id); }
+    for (const at of (assigneeTasks as any[] ?? [])) {
+      searchTaskIds.add(at.task_id);
+      const mId = at.meeting_checklist_tasks?.meeting_id;
+      if (mId) searchMeetingIds.add(mId);
+    }
   }
 
-  return ids;
+  if (personId) {
+    const [
+      { data: own },
+      { data: parts },
+      { data: assignedTasks }
+    ] = await Promise.all([
+      supabase.from('meetings').select('id').or(`chairman_id.eq.${personId},coordinator_id.eq.${personId}`),
+      supabase.from('meeting_participants').select('meeting_id').eq('user_id', personId),
+      supabase.from('meeting_task_assignees').select('meeting_checklist_tasks!inner(meeting_id)').eq('person_id', personId)
+    ]);
+
+    personMeetingIds = new Set();
+    for (const r of own ?? []) personMeetingIds.add(r.id);
+    for (const r of parts ?? []) personMeetingIds.add(r.meeting_id);
+    for (const r of (assignedTasks ?? []) as any[]) {
+      const mt = r.meeting_checklist_tasks;
+      if (Array.isArray(mt)) mt.forEach((m: any) => personMeetingIds!.add(m.meeting_id));
+      else if (mt) personMeetingIds.add(mt.meeting_id);
+    }
+  }
+
+  let finalMeetingIds = null;
+  if (searchMeetingIds && personMeetingIds) {
+    finalMeetingIds = new Set([...searchMeetingIds].filter(id => personMeetingIds!.has(id)));
+  } else if (searchMeetingIds) {
+    finalMeetingIds = searchMeetingIds;
+  } else if (personMeetingIds) {
+    finalMeetingIds = personMeetingIds;
+  }
+
+  return { meetingIds: finalMeetingIds, taskIds: searchTaskIds, criteriaIds: searchCriteriaIds };
 }
 
 async function MeetingsListBranch({
@@ -421,7 +429,7 @@ async function MeetingsListBranch({
   stats,
   people,
   page,
-  allowedIds,
+  resolvedFilters,
 }: {
   current: DashboardParams;
   params: ChromeParams;
@@ -429,7 +437,7 @@ async function MeetingsListBranch({
   stats: ChromeStats;
   people: { id: string; name: string }[];
   page: number;
-  allowedIds: Set<string> | null;
+  resolvedFilters: ResolvedFilters | null;
 }) {
   const supabase = await createClient();
   const { start, end } = rangeFromFilter(params.filter);
@@ -447,30 +455,9 @@ async function MeetingsListBranch({
     `, { count: 'exact' })
     .gte('date', start)
     .lte('date', end);
-  if (params.search) {
-    q = q.or(`title.ilike.%${params.search}%,description.ilike.%${params.search}%`);
-  }
-  if (params.person && allowedIds) {
-    const allowed = allowedIds;
-    if (allowed.size === 0) {
-      // No meetings match — render empty list with chrome.
-      return (
-        <DashboardChrome
-          current={current}
-          params={params}
-          selectedTypes={selectedTypes}
-          view="list"
-          stats={stats}
-          people={people}
-          selectedPersonId={params.person || null}
-        >
-          <div className="bg-white rounded-[24px] p-12 text-center text-text-tertiary">
-            No meetings found for the selected person.
-          </div>
-        </DashboardChrome>
-      );
-    }
-    q = q.in('id', Array.from(allowed));
+
+  if (resolvedFilters?.meetingIds) {
+    q = q.in('id', Array.from(resolvedFilters.meetingIds));
   }
   const validSortColumns = ['date', 'title', 'status'];
   const sortColumn = validSortColumns.includes(params.sortBy) ? params.sortBy : 'date';
@@ -697,10 +684,10 @@ async function DashboardContent({
   person: string;
 }) {
   const supabase = await createClient();
-  const [stats, { data: peopleRows }, allowedIds] = await Promise.all([
+  const [stats, { data: peopleRows }, resolvedFilters] = await Promise.all([
     fetchStats(supabase),
     supabase.from('people').select('id, name').order('name', { ascending: true }),
-    person ? resolveMeetingsForPerson(person, supabase) : Promise.resolve(null),
+    resolveDashboardFilters(supabase, person, search),
   ]);
   const people = peopleRows || [];
   const selectedTypes = parseTypes(types);
@@ -741,7 +728,7 @@ async function DashboardContent({
         people={people}
         mode={calView}
         anchor={anchor}
-        allowedIds={allowedIds}
+        resolvedFilters={resolvedFilters}
       />
     );
   }
@@ -754,7 +741,7 @@ async function DashboardContent({
         selectedTypes={selectedTypes}
         stats={stats}
         people={people}
-        allowedIds={allowedIds}
+        resolvedFilters={resolvedFilters}
       />
     );
   }
@@ -767,7 +754,7 @@ async function DashboardContent({
       stats={stats}
       people={people}
       page={page}
-      allowedIds={allowedIds}
+      resolvedFilters={resolvedFilters}
     />
   );
 }

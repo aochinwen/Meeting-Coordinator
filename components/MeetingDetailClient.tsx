@@ -212,16 +212,35 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
     };
   }, [meetingId, initialData]);
 
-  async function fetchMeetingData() {
-    // Fetch profiles once for all lookups (no FK constraints exist in the DB)
+  // Refetch data when profiles are loaded to resolve names for newly added people
+  useEffect(() => {
+    fetchAllProfiles().then((profileMap) => {
+      // If we have initial data, we refresh the UI lists using the full profile map
+      // to ensure any "Unknown" entries are resolved.
+      if (initialData) {
+        fetchParticipantsWithMap(profileMap);
+        fetchTasksWithMap(profileMap);
+        fetchActivitiesWithMap(profileMap);
+      }
+    });
+  }, [initialData]);
+
+  async function fetchAllProfiles() {
     const { data: allProfiles } = await supabase
       .from('people')
       .select('id, name, division, rank');
 
     const profileMap = new Map<string, ProfileInfo>();
-    (allProfiles || []).forEach((p: any) => profileMap.set(p.id, { name: p.name, division: p.division, rank: p.rank }));
+    (allProfiles || []).forEach((p: any) =>
+      profileMap.set(p.id, { name: p.name, division: p.division, rank: p.rank })
+    );
     profileMapRef.current = profileMap;
     setPeople((allProfiles || []) as PersonOption[]);
+    return profileMap;
+  }
+
+  async function fetchMeetingData() {
+    const profileMap = await fetchAllProfiles();
 
     await Promise.all([
       fetchMeeting(),
@@ -687,10 +706,10 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
         </div>
       </div>
 
-      {/* Main Content Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
+      {/* Main Content Layout - Side-by-side on desktop */}
+      <div className="w-full grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-8 items-start">
         {/* Left Column - Tasks & Participants */}
-        <div className="col-span-1 lg:col-span-8 flex flex-col gap-6">
+        <div className="col-span-1 md:col-span-2 flex flex-col gap-6">
 
           {/* Progress Bar */}
           <div className="bg-surface rounded-3xl p-6 flex flex-col gap-4">
@@ -1000,7 +1019,7 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
         </div>
 
         {/* Right Column - Activity Feed */}
-        <div className="col-span-1 lg:col-span-4 flex flex-col gap-6">
+        <div className="col-span-1 md:col-span-1 flex flex-col gap-6">
           <div className="bg-white border border-border/20 rounded-3xl shadow-sm p-6 flex flex-col gap-6">
 
             <div className="flex flex-col gap-2">

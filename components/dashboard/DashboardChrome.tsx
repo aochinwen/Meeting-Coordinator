@@ -1,9 +1,14 @@
+'use client';
+
+import { useState } from 'react';
 import Link from 'next/link';
-import { Plus, Search, CalendarCheck2, Clock, Users } from 'lucide-react';
+import { Plus, CalendarCheck2, Clock, Users } from 'lucide-react';
 import { FilterDropdown, SortDropdown } from '@/components/DropdownFilter';
 import { ViewToggle } from './ViewToggle';
 import { TypeFilter, type SelectedTypes } from './TypeFilter';
 import { PersonFilter, type PersonFilterOption } from './PersonFilter';
+import { SearchForm } from './SearchForm';
+import { LoadingScrim } from './LoadingScrim';
 import type { DashboardParams } from './url';
 
 export type ChromeStats = {
@@ -45,8 +50,12 @@ export function DashboardChrome({
   showSort?: boolean;
   children: React.ReactNode;
 }) {
+  const [isLoading, setIsLoading] = useState(false);
+
   return (
     <div className="max-w-[1280px] mx-auto space-y-8 pb-12 pt-8 px-4 sm:px-6 lg:px-8">
+      <LoadingScrim isLoading={isLoading} />
+      
       <div className="flex flex-col gap-4 sm:gap-6 sm:flex-row sm:items-end sm:justify-between">
         <div className="flex flex-col gap-2">
           <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-text-primary font-literata">
@@ -96,29 +105,11 @@ export function DashboardChrome({
 
       <div className="bg-status-grey-bg rounded-3xl p-4 flex flex-col gap-3 shrink-0">
         <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 sm:items-center">
-          <form
-            className="flex-1 bg-board rounded-2xl flex items-center px-4 py-3 relative overflow-hidden focus-within:ring-2 focus-within:ring-primary/20 transition-all"
-            action="/"
-            method="GET"
-          >
-            <Search className="h-5 w-5 text-gray-500 shrink-0" />
-            <input
-              type="text"
-              name="search"
-              defaultValue={params.search}
-              placeholder="Search meetings, attendees, or topics..."
-              className="w-full bg-transparent border-none outline-none pl-3 text-text-secondary placeholder-gray-500 font-light text-base"
-            />
-            {/* Preserve other params on search submit */}
-            <input type="hidden" name="filter" value={params.filter} />
-            <input type="hidden" name="sortBy" value={params.sortBy} />
-            <input type="hidden" name="sortOrder" value={params.sortOrder} />
-            <input type="hidden" name="view" value={params.view} />
-            {params.calView && <input type="hidden" name="calView" value={params.calView} />}
-            {params.anchor && <input type="hidden" name="anchor" value={params.anchor} />}
-            {params.types && <input type="hidden" name="types" value={params.types} />}
-            {params.person && <input type="hidden" name="person" value={params.person} />}
-          </form>
+          <SearchForm 
+            initialValue={params.search} 
+            currentParams={current} 
+            onLoadingChange={setIsLoading} 
+          />
           <div className="flex gap-2 shrink-0 w-full sm:w-auto">
             <ViewToggle current={current} view={view} />
           </div>
