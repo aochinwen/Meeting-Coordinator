@@ -1,5 +1,5 @@
 import { createClient } from '@/utils/supabase/client';
-import { format, addDays, startOfDay, endOfDay } from 'date-fns';
+import { format, addDays, subDays, startOfDay, endOfDay } from 'date-fns';
 import { Database } from '@/types/supabase';
 
 export interface ReportSummary {
@@ -217,26 +217,37 @@ export async function getReportData(days: number = 7) {
     recurring: counts.recurring 
   })).sort((a, b) => a.date.localeCompare(b.date));
 
-  // 5. Tasks due soon
+  // 5. Tasks due soon (only for meetings today or in the future)
   const { data: allTasks } = await supabase
     .from('meeting_checklist_tasks')
     .select(`
       id,
       description,
       is_completed,
+      due_days_before,
       meeting_id,
-      meetings(title, date)
+      meetings!inner(title, date)
     `)
     .eq('is_completed', false)
-    .limit(10);
+    .gte('meetings.date', startDate)
+    .order('meetings(date)', { ascending: true })
+    .limit(100);
 
-  const tasksDueSoon = (allTasks || []).map((t: any) => ({
-    id: t.id,
-    description: t.description,
-    meetingId: t.meeting_id,
-    meetingTitle: t.meetings?.title,
-    date: t.meetings?.date
-  })).sort((a, b) => {
+  const tasksDueSoon = (allTasks || []).map((t: any) => {
+    const meetingDate = t.meetings?.date;
+    let dueDate = meetingDate;
+    if (meetingDate && t.due_days_before !== null) {
+      dueDate = format(subDays(new Date(meetingDate), t.due_days_before), 'yyyy-MM-dd');
+    }
+    return {
+      id: t.id,
+      description: t.description,
+      meetingId: t.meeting_id,
+      meetingTitle: t.meetings?.title,
+      meetingDate: meetingDate,
+      date: dueDate // Use dueDate as the primary display/sort date
+    };
+  }).sort((a, b) => {
     if (!a.date) return 1;
     if (!b.date) return -1;
     return new Date(a.date).getTime() - new Date(b.date).getTime();

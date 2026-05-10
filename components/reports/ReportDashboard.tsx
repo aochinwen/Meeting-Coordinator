@@ -124,25 +124,33 @@ export function ReportDashboard({ initialData }: ReportDashboardProps) {
             subtitle="Tasks needing immediate attention" 
             icon={<Clock className="w-5 h-5 text-primary" />}
           />
-          <div className="bg-white/30 backdrop-blur-2xl rounded-[40px] border border-white/40 shadow-[0_8px_32px_0_rgba(31,38,135,0.05)] p-8 flex flex-col gap-5 transition-all hover:bg-white/40">
-            {tasksDueSoon.length > 0 ? tasksDueSoon.slice(0, 8).map((task) => (
-              <Link 
-                href={`/meetings/${task.meetingId}`}
-                key={task.id} 
-                className="flex items-start gap-4 group cursor-pointer hover:bg-white/50 p-3 -m-3 rounded-2xl transition-all duration-300"
-              >
-                <div className="mt-2 w-2 h-2 rounded-full bg-primary/20 group-hover:bg-primary group-hover:scale-125 transition-all shrink-0" />
-                <div className="flex flex-col gap-1 min-w-0">
-                  <span className="text-sm font-semibold text-text-primary truncate group-hover:text-primary transition-colors">{task.description}</span>
-                  <span className="text-[10px] text-text-tertiary truncate uppercase tracking-wider font-bold">{task.meetingTitle} • {task.date}</span>
-                </div>
-                <div className="ml-auto flex items-center justify-center w-8 h-8 rounded-full bg-white/0 group-hover:bg-white/80 transition-all">
-                  <ArrowUpRight className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-all text-primary" />
-                </div>
-              </Link>
-            )) : (
-              <div className="py-12 text-center text-text-tertiary text-sm italic font-medium">No urgent tasks found</div>
-            )}
+          <div className="bg-white/30 backdrop-blur-2xl rounded-[40px] border border-white/40 shadow-[0_8px_32px_0_rgba(31,38,135,0.05)] p-8 transition-all hover:bg-white/40">
+            <div className="max-h-[750px] overflow-y-auto pr-3 -mr-3 flex flex-col gap-5 custom-scrollbar">
+              {tasksDueSoon.length > 0 ? tasksDueSoon.slice(0, 50).map((task) => (
+                <Link 
+                  href={`/meetings/${task.meetingId}`}
+                  key={task.id} 
+                  className="flex items-start gap-4 group cursor-pointer hover:bg-white/50 p-3 -m-3 rounded-2xl transition-all duration-300"
+                >
+                  <div className="mt-2 w-2 h-2 rounded-full bg-primary/20 group-hover:bg-primary group-hover:scale-125 transition-all shrink-0" />
+                  <div className="flex flex-col gap-1.5 min-w-0">
+                    <span className="text-sm font-semibold text-text-primary truncate group-hover:text-primary transition-colors">{task.description}</span>
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-[9px] text-text-tertiary truncate uppercase tracking-widest font-bold opacity-70">{task.meetingTitle}</span>
+                      <span className="text-[10px] text-primary font-black uppercase tracking-[1px] flex items-center gap-1.5">
+                        <Clock className="w-2.5 h-2.5" />
+                        Due: {task.date}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="ml-auto flex items-center justify-center w-8 h-8 rounded-full bg-white/0 group-hover:bg-white/80 transition-all">
+                    <ArrowUpRight className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-all text-primary" />
+                  </div>
+                </Link>
+              )) : (
+                <div className="py-12 text-center text-text-tertiary text-sm italic font-medium">No urgent tasks found</div>
+              )}
+            </div>
           </div>
         </div>
       </div>
