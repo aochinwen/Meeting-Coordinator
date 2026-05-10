@@ -62,13 +62,13 @@ export function EventChip({
     if (event.kind === 'meeting') {
       return cn(
         'text-primary',
-        isExpandedState ? 'bg-white border border-status-green/30' : 'bg-status-green-bg/50 border border-transparent',
+        isExpandedState ? 'bg-status-green-bg border border-status-green/30' : 'bg-status-green-bg/50 border border-transparent',
         !isExpandedState && isHighlighted && 'bg-status-green-bg/80'
       );
     } else {
       return cn(
         'text-status-amber',
-        isExpandedState ? 'bg-white border border-status-amber/30' : 'bg-amber/40 border border-transparent',
+        isExpandedState ? 'bg-amber border border-status-amber/30' : 'bg-amber/40 border border-transparent',
         !isExpandedState && isHighlighted && 'bg-amber/60'
       );
     }
@@ -115,7 +115,7 @@ export function EventChip({
       'flex-col gap-0.5',
       'px-2 py-1 text-xs',
       isExpandedState
-        ? 'w-max min-w-[100%] max-w-[200px] sm:max-w-[250px] max-h-[200px] ring-1 ring-black/5 shadow-xl z-[100] scale-[1.02] opacity-100'
+        ? 'w-full max-h-[200px] ring-1 ring-black/5 shadow-xl z-[100] scale-[1.02] opacity-100'
         : cn('w-full', compact ? 'max-h-[48px]' : 'max-h-[80px]'),
       isGroupExpanded && isExpandedState && 'mb-1',
       isAbsolute ? 'absolute top-0 left-0' : 'relative',

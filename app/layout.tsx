@@ -6,7 +6,7 @@ import "./globals.css";
 
 const literata = Literata({ 
   subsets: ["latin"],
-  variable: '--font-literata',
+  variable: '--font-literata-next',
   display: 'swap',
   preload: true,
 });

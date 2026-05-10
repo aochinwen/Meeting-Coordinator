@@ -30,6 +30,7 @@ export interface CreateSeriesInput {
   participants?: string[]; // user IDs
   chairman_id?: string;
   coordinator_id?: string;
+  created_by_name?: string;
 }
 
 export interface CreateMeetingInput {
@@ -45,6 +46,8 @@ export interface CreateMeetingInput {
   participants?: string[];
   chairman_id?: string | null;
   coordinator_id?: string | null;
+  created_by?: string | null;
+  created_by_name?: string | null;
 }
 
 /**
@@ -52,7 +55,8 @@ export interface CreateMeetingInput {
  */
 export async function createMeetingSeries(
   data: CreateSeriesInput,
-  createdBy?: string
+  createdBy?: string,
+  createdByName?: string
 ): Promise<string> {
   const supabase = createClient();
   
@@ -73,6 +77,7 @@ export async function createMeetingSeries(
       buffer_minutes: data.buffer_minutes,
       timezone: data.timezone || 'UTC',
       created_by: createdBy || null,
+      created_by_name: createdByName || data.created_by_name || null,
       chairman_id: data.chairman_id || null,
       coordinator_id: data.coordinator_id || null,
     })
@@ -130,7 +135,7 @@ export async function generateSeriesInstances(
   if (!data) {
     const { data: series, error } = await supabase
       .from('meeting_series')
-      .select('*')
+      .select('*, created_by, created_by_name')
       .eq('id', seriesId)
       .single();
     
@@ -154,7 +159,9 @@ export async function generateSeriesInstances(
       timezone: series.timezone ?? undefined,
       chairman_id: series.chairman_id || undefined,
       coordinator_id: series.coordinator_id || undefined,
-    };
+      created_by: series.created_by || undefined,
+      created_by_name: series.created_by_name || undefined,
+    } as CreateSeriesInput & { created_by?: string; created_by_name?: string };
   }
   
   console.log('Series data for generation:', data);
@@ -214,6 +221,8 @@ export async function generateSeriesInstances(
     instance_number: existingMeetings?.length ? existingMeetings.length + index + 1 : index + 1,
     chairman_id: data?.chairman_id || null,
     coordinator_id: data?.coordinator_id || null,
+    created_by: (data as any)?.created_by || null,
+    created_by_name: (data as any)?.created_by_name || null,
   }));
   
   console.log('Meetings to insert:', meetings);

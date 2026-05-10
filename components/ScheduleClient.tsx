@@ -321,6 +321,9 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
     setIsSubmitting(true);
     setError(null);
     
+    // Find current user name from users list
+    const currentUserName = users.find(u => u.id === currentUser?.id)?.name || currentUser?.email || 'Unknown User';
+    
     try {
       console.log('Creating meeting with data:', {
         template_id: selectedTemplate || undefined,
@@ -356,7 +359,7 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
           participants: selectedParticipants,
           chairman_id: chairmanId || undefined,
           coordinator_id: coordinatorId || undefined,
-        }, currentUser?.id);
+        }, currentUser?.id, currentUserName);
         
         // Book room for recurring meetings if selected
         if (selectedRoomId) {
@@ -424,6 +427,8 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
             status: 'scheduled',
             chairman_id: chairmanId || null,
             coordinator_id: coordinatorId || null,
+            created_by: currentUser?.id || null,
+            created_by_name: currentUserName,
           })
           .select('id')
           .single();

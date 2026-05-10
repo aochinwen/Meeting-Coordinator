@@ -20,7 +20,7 @@ const nextConfig: NextConfig = {
   allowedDevOrigins: ['127.0.0.1', 'localhost'],
 
   // Turbopack configuration (replaces webpack)
-  turbopack: {},
+  // turbopack: {},
 
   // Experimental features for performance
   experimental: {

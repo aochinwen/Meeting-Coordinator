@@ -60,6 +60,7 @@ interface Meeting {
   chairman_id: string | null;
   coordinator_id: string | null;
   created_at: string;
+  created_by_name?: string | null;
 }
 
 interface Participant {
@@ -640,6 +641,11 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
           {meeting.description && (
             <p className="text-sm sm:text-base text-text-secondary max-w-2xl">
               {meeting.description}
+            </p>
+          )}
+          {meeting.created_by_name && (
+            <p className="text-xs text-text-tertiary">
+              Created by <span className="font-medium text-text-secondary">{meeting.created_by_name}</span>
             </p>
           )}
         </div>

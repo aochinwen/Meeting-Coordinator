@@ -1,4 +1,7 @@
 @import "tailwindcss";
+@plugin "tailwindcss-animate";
+
+@source "../**/*.{ts,tsx}";
 
 @theme {
   --color-board: #faf6f0; /* Warm default background */
@@ -30,10 +33,17 @@
   --color-coral-text: #690005;
   --color-taupe: #dbd7cf;
   
-  /* Font families */
-  --font-sans: 'Inter', system-ui, sans-serif;
-  --font-literata: 'Literata', serif;
-  --font-nunito: 'Nunito Sans', sans-serif;
+  /* Map Tailwind font utilities to Next.js font variables */
+  --font-sans: var(--font-nunito-sans), system-ui, sans-serif;
+  --font-literata: var(--font-literata-next), serif;
+  --font-nunito: var(--font-nunito-sans), sans-serif;
+
+  /* Custom animations */
+  @keyframes pulse-slow {
+    0%, 100% { opacity: 0.4; transform: scale(1); }
+    50% { opacity: 0.7; transform: scale(1.1); }
+  }
+  --animate-pulse-slow: pulse-slow 8s ease-in-out infinite;
 }
 
 @layer base {

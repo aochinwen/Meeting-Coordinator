@@ -310,6 +310,7 @@ export type Database = {
           coordinator_id: string | null
           created_at: string
           created_by: string | null
+          created_by_name: string | null
           days_of_week: string[] | null
           description: string | null
           duration_minutes: number | null
@@ -330,6 +331,7 @@ export type Database = {
           coordinator_id?: string | null
           created_at?: string
           created_by?: string | null
+          created_by_name?: string | null
           days_of_week?: string[] | null
           description?: string | null
           duration_minutes?: number | null
@@ -350,6 +352,7 @@ export type Database = {
           coordinator_id?: string | null
           created_at?: string
           created_by?: string | null
+          created_by_name?: string | null
           days_of_week?: string[] | null
           description?: string | null
           duration_minutes?: number | null
@@ -408,6 +411,8 @@ export type Database = {
           chairman_id: string | null
           coordinator_id: string | null
           created_at: string
+          created_by: string | null
+          created_by_name: string | null
           date: string
           description: string | null
           draft_data: Json | null
@@ -429,6 +434,8 @@ export type Database = {
           chairman_id?: string | null
           coordinator_id?: string | null
           created_at?: string
+          created_by?: string | null
+          created_by_name?: string | null
           date: string
           description?: string | null
           draft_data?: Json | null
@@ -450,6 +457,8 @@ export type Database = {
           chairman_id?: string | null
           coordinator_id?: string | null
           created_at?: string
+          created_by?: string | null
+          created_by_name?: string | null
           date?: string
           description?: string | null
           draft_data?: Json | null
