@@ -635,7 +635,7 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
             <div className="flex gap-4">
               <button 
                 onClick={handleSubmit}
-                disabled={isSubmitting}
+                disabled={isSubmitting || !title.trim()}
                 className="w-full sm:w-auto px-5 sm:px-6 py-3 bg-primary text-white rounded-2xl text-sm sm:text-base font-bold shadow-md transition-all active:scale-95 hover:bg-primary/90 disabled:opacity-50"
               >
                 {isSubmitting ? 'Creating...' : 'Publish Schedule'}
@@ -1200,6 +1200,16 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
               </div>
 
               <div className="flex items-start gap-4">
+                <CalendarIcon className="h-5 w-5 mt-0.5 text-status-green-bg/80" />
+                <div className="flex flex-col">
+                  <span className="text-[10px] font-medium text-status-green-bg/80 uppercase tracking-wider mb-1">Meeting Date</span>
+                  <span className="text-base font-bold leading-tight">
+                    {startDate ? new Date(startDate).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' }) : 'No date selected'}
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-4">
                 <Clock className="h-5 w-5 mt-0.5 text-status-green-bg/80" />
                 <div className="flex flex-col">
                   <span className="text-[10px] font-medium text-status-green-bg/80 uppercase tracking-wider mb-1">Time & Duration</span>
@@ -1361,6 +1371,17 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
           </div>
 
         </div>
+      </div>
+
+      {/* Mobile Publish Button */}
+      <div className="sm:hidden w-full pb-8">
+        <button
+          onClick={handleSubmit}
+          disabled={isSubmitting || !title.trim()}
+          className="w-full py-3.5 bg-primary text-white rounded-full font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
+        >
+          {isSubmitting ? 'Publishing...' : 'Publish Schedule'}
+        </button>
       </div>
 
       {/* Meeting Template Modal */}

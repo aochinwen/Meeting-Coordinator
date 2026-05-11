@@ -83,9 +83,32 @@ export function EventChip({
             <Video className={cn(compact ? 'h-3 w-3' : 'h-3.5 w-3.5', 'shrink-0')} />
             {time && <span className="font-medium tabular-nums shrink-0">{time}</span>}
           </div>
-          <span className={cn('font-light text-left flex-1 min-w-0', isExpandedState ? 'whitespace-normal break-words' : (compact ? 'line-clamp-2' : 'line-clamp-3'))}>
+          <span className={cn('font-light text-left flex-1 min-w-0', isExpandedState ? 'whitespace-normal break-words mt-1 mb-2' : (compact ? 'line-clamp-2' : 'line-clamp-3'))}>
             {event.title}
           </span>
+          {isExpandedState && (
+            <div className="flex flex-col gap-1.5 mt-2 border-t border-status-green/20 pt-2 text-xs opacity-80">
+              {event.description && (
+                <div className="font-normal italic break-words line-clamp-3 mb-1">
+                  {event.description}
+                </div>
+              )}
+              <div className="grid grid-cols-2 gap-2 mt-1">
+                {event.date && (
+                  <div className="flex flex-col">
+                    <span className="text-[9px] uppercase tracking-wider font-medium opacity-60">Meeting Date</span>
+                    <span className="font-medium">{event.date}</span>
+                  </div>
+                )}
+                {event.createdByName && (
+                  <div className="flex flex-col">
+                    <span className="text-[9px] uppercase tracking-wider font-medium opacity-60">Created By</span>
+                    <span className="font-medium truncate">{event.createdByName}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </>
       );
     } else {

@@ -228,9 +228,10 @@ export async function generateSeriesInstances(
   console.log('Meetings to insert:', meetings);
   
   // Insert meetings
-  const { error: insertError } = await supabase
+  const { data: insertedMeetings, error: insertError } = await supabase
     .from('meetings')
-    .insert(meetings);
+    .insert(meetings)
+    .select('id');
   
   if (insertError) {
     console.error('Error inserting meetings:', insertError);
@@ -238,6 +239,24 @@ export async function generateSeriesInstances(
   }
   
   console.log('Successfully inserted meetings');
+
+  // Insert meeting activities for created event
+  if (insertedMeetings && insertedMeetings.length > 0) {
+    const createdBy = (data as any)?.created_by || null;
+    const activitiesToInsert = insertedMeetings.map(m => ({
+      meeting_id: m.id,
+      user_id: createdBy,
+      activity_type: 'meeting_created',
+      content: 'created the meeting',
+    }));
+    const { error: activityError } = await supabase
+      .from('meeting_activities')
+      .insert(activitiesToInsert);
+      
+    if (activityError) {
+      console.error('Error logging meeting creation activities:', activityError);
+    }
+  }
   
   // Copy template checklist tasks to each meeting instance
   if (copyTemplateTasks && data.template_id) {

@@ -116,6 +116,8 @@ export type MeetingEvent = CalendarEventBase & {
   startTime: string | null;
   endTime: string | null;
   status: string | null;
+  description?: string | null;
+  createdByName?: string | null;
   tasks?: Array<{
     id: string;
     title: string;

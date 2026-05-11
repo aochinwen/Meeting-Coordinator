@@ -139,7 +139,7 @@ async function CalendarBranch({
 
   let q = supabase
     .from('meetings')
-    .select('id, title, description, date, start_time, end_time, status, meeting_checklist_tasks(id, description, is_completed, due_days_before)')
+    .select('id, title, description, date, start_time, end_time, status, created_by_name, meeting_checklist_tasks(id, description, is_completed, due_days_before)')
     .gte('date', range.start)
     .lte('date', range.end);
 
@@ -159,6 +159,8 @@ async function CalendarBranch({
     start_time: string | null;
     end_time: string | null;
     status: string | null;
+    description: string | null;
+    created_by_name: string | null;
     meeting_checklist_tasks: Array<{ id: string; description: string; is_completed: boolean; due_days_before: number | null }>;
   }>) {
     if (selectedTypes.meetings) {
@@ -170,6 +172,8 @@ async function CalendarBranch({
         startTime: m.start_time,
         endTime: m.end_time,
         status: m.status,
+        description: m.description,
+        createdByName: m.created_by_name,
         tasks: (m.meeting_checklist_tasks ?? []).map(t => ({
           id: t.id,
           title: t.description,
