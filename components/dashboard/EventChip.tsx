@@ -93,13 +93,7 @@ export function EventChip({
                   {event.description}
                 </div>
               )}
-              <div className="grid grid-cols-2 gap-2 mt-1">
-                {event.date && (
-                  <div className="flex flex-col">
-                    <span className="text-[9px] uppercase tracking-wider font-medium opacity-60">Meeting Date</span>
-                    <span className="font-medium">{event.date}</span>
-                  </div>
-                )}
+              <div className="mt-1">
                 {event.createdByName && (
                   <div className="flex flex-col">
                     <span className="text-[9px] uppercase tracking-wider font-medium opacity-60">Created By</span>
