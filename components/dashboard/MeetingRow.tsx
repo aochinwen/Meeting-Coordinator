@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Repeat, Video, Target, User, Square, CheckSquare } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -16,9 +16,12 @@ export interface FormattedMeeting {
   title: string;
   description: string;
   date: string;
+  dateISO: string; // YYYY-MM-DD
+  startTime: string; // HH:mm:ss
+  endTime: string; // HH:mm:ss
   timeLabel: string;
   roomName: string;
-  status: string;
+  status: string; // Base status from DB
   iconName: 'video' | 'target' | 'user';
   iconBg: string;
   iconColor: string;
@@ -36,8 +39,49 @@ export interface FormattedMeeting {
   }>;
 }
 
+function useLiveStatus(meeting: FormattedMeeting) {
+  const [status, setStatus] = useState(meeting.status);
+
+  useEffect(() => {
+    const calculateStatus = () => {
+      if (meeting.status === 'cancelled') return 'Cancelled';
+      if (meeting.status === 'completed') return 'Completed';
+
+      const now = new Date();
+      const localToday = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      const localTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+
+      if (meeting.dateISO < localToday) {
+        return 'Completed';
+      } else if (meeting.dateISO === localToday) {
+        const start = meeting.startTime || '00:00:00';
+        const end = meeting.endTime || '23:59:59';
+
+        if (localTime > end) {
+          return 'Completed';
+        } else if (localTime >= start && localTime <= end) {
+          return 'Live';
+        }
+      }
+      return 'Upcoming';
+    };
+
+    setStatus(calculateStatus());
+    
+    // Check every minute to update status if a meeting starts/ends
+    const timer = setInterval(() => {
+      setStatus(calculateStatus());
+    }, 60000);
+
+    return () => clearInterval(timer);
+  }, [meeting.dateISO, meeting.startTime, meeting.endTime, meeting.status]);
+
+  return status;
+}
+
 export function MeetingRowDesktop({ meeting }: { meeting: FormattedMeeting }) {
   const [isExpanded, setIsExpanded] = useState(false);
+  const status = useLiveStatus(meeting);
 
   const handleClick = (e: React.MouseEvent) => {
     if (!isExpanded) {
@@ -169,18 +213,18 @@ export function MeetingRowDesktop({ meeting }: { meeting: FormattedMeeting }) {
         )}
       </div>
       <div className="col-span-1 flex justify-end">
-        {meeting.status === 'Live' ? (
+        {status === 'Live' ? (
           <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-status-green-bg text-status-green text-xs font-light">
             <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse"></span>
             Live
           </span>
-        ) : meeting.status === 'Completed' ? (
+        ) : status === 'Completed' ? (
           <span className="inline-flex items-center px-3 py-1.5 rounded-full bg-status-grey-bg/40 border border-border/20 text-text-tertiary text-xs font-light">
             Completed
           </span>
         ) : (
           <span className="inline-flex items-center px-3 py-1.5 rounded-full bg-status-grey-bg border border-border/30 text-text-secondary text-xs font-light">
-            {meeting.status}
+            {status}
           </span>
         )}
       </div>
@@ -190,6 +234,7 @@ export function MeetingRowDesktop({ meeting }: { meeting: FormattedMeeting }) {
 
 export function MeetingRowMobile({ meeting }: { meeting: FormattedMeeting }) {
   const [isExpanded, setIsExpanded] = useState(false);
+  const status = useLiveStatus(meeting);
 
   const handleClick = (e: React.MouseEvent) => {
     if (!isExpanded) {
@@ -265,18 +310,18 @@ export function MeetingRowMobile({ meeting }: { meeting: FormattedMeeting }) {
           {meeting.roomName !== 'TBD' && <div className="text-text-tertiary mt-0.5">{meeting.roomName}</div>}
         </div>
         <div className="flex flex-col items-end gap-2">
-          {meeting.status === 'Live' ? (
+          {status === 'Live' ? (
             <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-status-green-bg text-status-green text-xs font-light">
               <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse"></span>
               Live
             </span>
-          ) : meeting.status === 'Completed' ? (
+          ) : status === 'Completed' ? (
             <span className="inline-flex items-center px-3 py-1.5 rounded-full bg-status-grey-bg/40 border border-border/20 text-text-tertiary text-xs font-light">
               Completed
             </span>
           ) : (
             <span className="inline-flex items-center px-3 py-1.5 rounded-full bg-status-grey-bg border border-border/30 text-text-secondary text-xs font-light">
-              {meeting.status}
+              {status}
             </span>
           )}
         </div>
