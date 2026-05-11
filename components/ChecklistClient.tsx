@@ -292,7 +292,7 @@ function ChecklistClientComponent({ meetingId, currentUser }: ChecklistClientPro
     await supabase.from('meeting_activities').insert({
       meeting_id: meetingId,
       user_id: currentUser?.id || null,
-      activity_type: 'task_created',
+      activity_type: 'task_deleted',
       content: 'deleted a task',
       metadata: { task_id: taskId },
     });
