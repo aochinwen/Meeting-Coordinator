@@ -321,8 +321,10 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
     setIsSubmitting(true);
     setError(null);
     
-    // Find current user name from users list
-    const currentUserName = users.find(u => u.id === currentUser?.id)?.name || currentUser?.email || 'Unknown User';
+    // Find current user from users list to safely handle the foreign key constraint
+    const matchingPerson = users.find(u => u.id === currentUser?.id);
+    const createdById = matchingPerson ? matchingPerson.id : null;
+    const currentUserName = matchingPerson?.name || currentUser?.email || 'Unknown User';
     
     try {
       console.log('Creating meeting with data:', {
@@ -359,7 +361,7 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
           participants: selectedParticipants,
           chairman_id: chairmanId || undefined,
           coordinator_id: coordinatorId || undefined,
-        }, currentUser?.id, currentUserName);
+        }, createdById || undefined, currentUserName);
         
         // Book room for recurring meetings if selected
         if (selectedRoomId) {
@@ -427,7 +429,7 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
             status: 'scheduled',
             chairman_id: chairmanId || null,
             coordinator_id: coordinatorId || null,
-            created_by: currentUser?.id || null,
+            created_by: createdById,
             created_by_name: currentUserName,
           })
           .select('id')
