@@ -1204,7 +1204,10 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
                 <div className="flex flex-col">
                   <span className="text-[10px] font-medium text-status-green-bg/80 uppercase tracking-wider mb-1">Meeting Date</span>
                   <span className="text-base font-bold leading-tight">
-                    {startDate ? new Date(startDate).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' }) : 'No date selected'}
+                    {startDate ? (() => {
+                      const d = new Date(startDate);
+                      return `${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}, ${d.toLocaleDateString('en-US', { weekday: 'long' })}, ${d.getFullYear()}`;
+                    })() : 'No date selected'}
                   </span>
                 </div>
               </div>
