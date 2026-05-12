@@ -6,6 +6,7 @@ import { format, parseISO } from 'date-fns';
 import { Calendar, Clock, Mail, CheckCircle2, XCircle, AlertCircle, RefreshCw, UserPlus, Pencil, Trash2, Check, X, Plus } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { PeoplePicker, type PersonOption } from '@/components/ui/PeoplePicker';
+import { RoomSelector } from '@/components/RoomSelector';
 
 type DraftInboxClientProps = {
   initialMeetings: Record<string, any>[];
@@ -23,6 +24,7 @@ export default function DraftInboxClient({ initialMeetings, people }: DraftInbox
   const [newTaskDescription, setNewTaskDescription] = useState('');
   const [newTaskDueDate, setNewTaskDueDate] = useState<string>('');
   const [newTaskAssignees, setNewTaskAssignees] = useState<string[]>([]);
+  const [selectedRooms, setSelectedRooms] = useState<Record<string, string | null>>({});
 
   const router = useRouter();
   const supabase = createClient();
@@ -61,7 +63,7 @@ export default function DraftInboxClient({ initialMeetings, people }: DraftInbox
       } else if (draftData.is_update) {
         // Handle Update
         const updates = draftData.proposed_changes || {};
-        await supabase.from('meetings').update({
+        const updatePayload: any = {
           title: updates.title || meeting.title,
           date: updates.date || meeting.date,
           start_time: updates.start_time || meeting.start_time,
@@ -69,13 +71,54 @@ export default function DraftInboxClient({ initialMeetings, people }: DraftInbox
           description: updates.description || meeting.description,
           status: 'scheduled',
           draft_data: {}
-        }).eq('id', meeting.id);
+        };
+        
+        const currentRoomId = selectedRooms[meeting.id as string] !== undefined ? selectedRooms[meeting.id as string] : meeting.room_id;
+        
+        if (currentRoomId !== undefined) {
+          updatePayload.room_id = currentRoomId;
+        }
+        
+        await supabase.from('meetings').update(updatePayload).eq('id', meeting.id);
+        
+        // Sync room_bookings
+        await supabase.from('room_bookings').delete().eq('meeting_id', meeting.id);
+        if (currentRoomId) {
+          await supabase.from('room_bookings').insert({
+            room_id: currentRoomId,
+            meeting_id: meeting.id,
+            date: updatePayload.date,
+            start_time: updatePayload.start_time,
+            end_time: updatePayload.end_time,
+            status: 'confirmed'
+          });
+        }
+        
       } else {
         // Handle New Draft
-        await supabase.from('meetings').update({
+        const updatePayload: any = {
           status: 'scheduled',
           draft_data: {}
-        }).eq('id', meeting.id);
+        };
+        
+        const currentRoomId = selectedRooms[meeting.id as string] !== undefined ? selectedRooms[meeting.id as string] : meeting.room_id;
+        
+        if (currentRoomId) {
+          updatePayload.room_id = currentRoomId;
+        }
+        
+        await supabase.from('meetings').update(updatePayload).eq('id', meeting.id);
+        
+        if (currentRoomId) {
+          await supabase.from('room_bookings').insert({
+            room_id: currentRoomId,
+            meeting_id: meeting.id,
+            date: meeting.date,
+            start_time: meeting.start_time,
+            end_time: meeting.end_time,
+            status: 'confirmed'
+          });
+        }
         
         // Match emails to directory to insert participants
         const toEmails = draftData.to_emails || [];
@@ -597,6 +640,22 @@ export default function DraftInboxClient({ initialMeetings, people }: DraftInbox
                     )}
                   </div>
                 </div>
+
+                {!isCancel && displayDate && displayStart && displayEnd && (
+                  <div>
+                    <h4 className="text-sm font-medium text-text-primary mb-2">Venue</h4>
+                    <div className="bg-surface rounded-xl p-4">
+                      <RoomSelector
+                        date={displayDate}
+                        startTime={displayStart}
+                        endTime={displayEnd}
+                        selectedRoomId={selectedRooms[meeting.id as string] !== undefined ? selectedRooms[meeting.id as string] : (meeting.room_id || null)}
+                        onRoomSelect={(roomId) => setSelectedRooms(prev => ({ ...prev, [meeting.id as string]: roomId }))}
+                        minCapacity={allEmails.length > 0 ? allEmails.length : 2}
+                      />
+                    </div>
+                  </div>
+                )}
 
                 <div>
                   <h4 className="text-sm font-medium text-text-primary mb-2">Raw Email Source</h4>
