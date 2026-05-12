@@ -3,26 +3,17 @@
 import Link from 'next/link';
 import { Video, Square, CheckSquare } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { fromDateStr, todayStr, type CalendarEvent } from '@/lib/calendar';
+import { fromDateStr, type CalendarEvent } from '@/lib/calendar';
 import { useCalendarHover } from './CalendarHoverContext';
 
-function relativeDaysLabel(dateStr: string): string {
-  const MS_PER_DAY = 86_400_000;
-  const today = fromDateStr(todayStr()).getTime();
-  const target = fromDateStr(dateStr).getTime();
-  const diff = Math.round((target - today) / MS_PER_DAY);
-  if (diff === 0) return 'Due today';
-  if (diff === 1) return 'Due tomorrow';
-  if (diff === -1) return 'Overdue by 1 day';
-  if (diff > 0) return `Due in ${diff} days`;
-  return `Overdue by ${Math.abs(diff)} days`;
-}
 
 export function EventChip({
   event,
+  today,
   compact = false,
 }: {
   event: CalendarEvent;
+  today: string;
   compact?: boolean;
 }) {
   const {
@@ -43,10 +34,13 @@ export function EventChip({
   const isDarkened = (hoveredMeetingId !== null || expandedMeetingId !== null) && !isHighlighted;
 
   const handleMouseEnter = () => {
+    // Disable hover expansion on touch devices to prevent tap-to-expand instability
+    if (window.matchMedia('(pointer: coarse)').matches) return;
     setHoveredMeetingId(thisMeetingId);
     setHoveredItemId(thisItemId);
   };
   const handleMouseLeave = () => {
+    if (window.matchMedia('(pointer: coarse)').matches) return;
     setHoveredMeetingId(null);
     setHoveredItemId(null);
   };
@@ -120,15 +114,27 @@ export function EventChip({
     }
   };
 
+  const relativeDaysLabelInternal = (dateStr: string): string => {
+    const MS_PER_DAY = 86_400_000;
+    const t = fromDateStr(today).getTime();
+    const target = fromDateStr(dateStr).getTime();
+    const diff = Math.round((target - t) / MS_PER_DAY);
+    if (diff === 0) return 'Due today';
+    if (diff === 1) return 'Due tomorrow';
+    if (diff === -1) return 'Overdue by 1 day';
+    if (diff > 0) return `Due in ${diff} days`;
+    return `Overdue by ${Math.abs(diff)} days`;
+  };
+
   const baseTitle = event.kind === 'meeting'
     ? `${event.title}${event.startTime ? ` · ${event.startTime.slice(0, 5)}` : ''}`
-    : `Task: ${event.title}\nMeeting: ${event.meetingTitle}\n${event.isCompleted ? 'Completed' : relativeDaysLabel(event.date)}`;
+    : `Task: ${event.title}\nMeeting: ${event.meetingTitle}\n${event.isCompleted ? 'Completed' : relativeDaysLabelInternal(event.date)}`;
 
   const href = event.kind === 'meeting' ? `/meetings/${event.id}` : `/meetings/${event.meetingId}?task=${event.id}`;
 
   const renderLink = (isExpandedState: boolean, isAbsolute: boolean, isPlaceholder: boolean) => {
     const classes = cn(
-      'flex items-start rounded-md transition-all duration-[250ms] ease-in-out overflow-hidden',
+      'flex items-start rounded-md transition-all duration-[250ms] ease-in-out overflow-hidden cursor-pointer',
       'flex-col gap-0.5',
       'px-2 py-1 text-xs',
       isExpandedState
@@ -173,3 +179,4 @@ export function EventChip({
     </div>
   );
 }
+

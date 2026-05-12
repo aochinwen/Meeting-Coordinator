@@ -132,7 +132,7 @@ function MonthGrid({
                 </Link>
                 <div className="flex flex-col gap-1 min-w-0">
                   {visible.map((ev) => (
-                    <EventChip key={`${ev.kind}-${ev.id}`} event={ev} compact />
+                    <EventChip key={`${ev.kind}-${ev.id}`} event={ev} today={today} compact />
                   ))}
                   {overflow > 0 && (
                     <Link
@@ -146,7 +146,7 @@ function MonthGrid({
                 <div className="mt-auto pt-1 h-[24px] flex items-end">
                   <Link
                     href={`/schedule?date=${d}`}
-                    className="opacity-0 group-hover:opacity-100 transition-opacity w-full text-center text-[11px] font-medium bg-primary text-white py-1 rounded-md shadow-sm"
+                    className="opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity w-full text-center text-[11px] font-medium bg-primary text-white py-1 rounded-md shadow-sm"
                   >
                     + meeting
                   </Link>
@@ -213,7 +213,7 @@ function WeekView({
                     All day
                   </span>
                   {tasks.map((ev) => (
-                    <EventChip key={`task-${ev.id}`} event={ev} />
+                    <EventChip key={`task-${ev.id}`} event={ev} today={today} />
                   ))}
                 </div>
               )}
@@ -227,7 +227,7 @@ function WeekView({
                     </span>
                   )}
                   {meetings.map((ev) => (
-                    <EventChip key={`meeting-${ev.id}`} event={ev} />
+                    <EventChip key={`meeting-${ev.id}`} event={ev} today={today} />
                   ))}
                 </div>
               ) : tasks.length === 0 ? (
@@ -239,7 +239,7 @@ function WeekView({
               <div className="mt-auto h-[28px] flex items-end">
                 <Link
                   href={`/schedule?date=${d}`}
-                  className="opacity-0 group-hover:opacity-100 transition-opacity w-full text-center text-xs font-medium bg-primary text-white py-1.5 rounded-md shadow-sm"
+                  className="opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity w-full text-center text-xs font-medium bg-primary text-white py-1.5 rounded-md shadow-sm"
                 >
                   + meeting
                 </Link>

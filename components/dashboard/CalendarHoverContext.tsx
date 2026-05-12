@@ -36,15 +36,15 @@ export function CalendarHoverProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    function handleDocumentClick(e: MouseEvent) {
+    function handleDocumentClick(e: PointerEvent) {
       if (!expandedMeetingId) return;
       const target = e.target as HTMLElement;
       if (!target.closest('[data-event-chip="true"]')) {
         setExpandedMeetingId(null);
       }
     }
-    document.addEventListener('mousedown', handleDocumentClick);
-    return () => document.removeEventListener('mousedown', handleDocumentClick);
+    document.addEventListener('pointerdown', handleDocumentClick);
+    return () => document.removeEventListener('pointerdown', handleDocumentClick);
   }, [expandedMeetingId]);
 
   return (

@@ -734,7 +734,7 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
 
                   <div className="flex flex-col gap-3">
                     <label className="text-xs font-bold text-text-secondary uppercase tracking-widest">Repeat Days</label>
-                    <div className="flex items-center gap-2 mt-1">
+                    <div className="flex flex-wrap items-center gap-2 mt-1">
                       {['M', 'T', 'W', 'Th', 'F'].map((day) => {
                         return (
                           <button
