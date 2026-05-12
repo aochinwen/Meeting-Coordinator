@@ -8,7 +8,7 @@ import { BookingCard, AvailabilityDay } from '@/components/ui/BookingCard';
 type Part = { text: string };
 type Message = {
   role: 'user' | 'model';
-  parts: [Part];
+  parts: Part[];
 };
 
 // A chat entry can be a plain message OR an availability card
