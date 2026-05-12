@@ -17,7 +17,8 @@ import {
   DoorOpen,
   ShieldCheck,
   Inbox,
-  Settings
+  Settings,
+  Sparkles
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { createClient } from '@/utils/supabase/client';
@@ -55,6 +56,7 @@ export function Sidebar() {
     { label: 'Rooms', icon: DoorOpen, href: '/rooms', active: pathname?.startsWith('/rooms') },
     { label: 'Directory', icon: Users, href: '/directory', active: pathname?.startsWith('/directory') },
     { label: 'Reports', icon: BarChart2, href: '/reports', active: pathname?.startsWith('/reports') },
+    { label: 'Assistant', icon: Sparkles, href: '/assistant', active: pathname?.startsWith('/assistant') },
     // Admin-only route
     ...(authLoaded && isAdmin ? [{ label: 'User Approvals', icon: ShieldCheck, href: '/admin/approvals', active: pathname?.startsWith('/admin/approvals') }] : []),
   ];

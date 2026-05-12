@@ -22,6 +22,13 @@ interface RoomSelectorProps {
    * can see per-date conflicts before publishing. Defaults to `[date]`.
    */
   occurrenceDates?: string[];
+  /**
+   * Whether the meeting being scheduled is a recurring series. This is passed
+   * explicitly from the parent so that the UI labels ("Per-date availability"
+   * vs "Slot availability", etc.) are always in sync with the recurrence
+   * toggle — even if `occurrenceDates` hasn't been recomputed yet.
+   */
+  isRecurring?: boolean;
 }
 
 // Small utility: render a single date as a friendly label (e.g. "Mon, Apr 22").
@@ -44,6 +51,7 @@ export function RoomSelector({
   onRoomSelect,
   minCapacity = 2,
   occurrenceDates,
+  isRecurring: isRecurringProp = false,
 }: RoomSelectorProps) {
   const [availability, setAvailability] = useState<RoomAvailabilityForDates[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -119,7 +127,10 @@ export function RoomSelector({
   };
 
   const hasSelection = selectedRoomId !== null;
-  const isRecurring = dates.length > 1;
+  // Use the explicit prop from the parent rather than inferring from dates.length.
+  // This prevents the UI from showing recurring-style labels/availability when
+  // the toggle is off but `occurrenceDates` is still a stale multi-date array.
+  const isRecurring = isRecurringProp;
   const totalDates = dates.length;
   const fullyAvailableCount = availability.filter((a) => a.availableCount === a.totalCount).length;
   const totalRoomCount = availability.length;

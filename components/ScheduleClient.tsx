@@ -937,6 +937,7 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
                   onRoomSelect={setSelectedRoomId}
                   minCapacity={selectedParticipants.length + 1}
                   occurrenceDates={allOccurrenceDates}
+                  isRecurring={isRecurring}
                 />
               </div>
             </div>

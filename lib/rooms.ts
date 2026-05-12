@@ -782,3 +782,155 @@ export async function updateRoomBooking(
     throw error;
   }
 }
+
+/**
+ * Find available time slots for all rooms on a specific date for a given duration.
+ * Checks slots in 30-minute increments between startHour and endHour.
+ * If `roomNameFilter` is provided (e.g. "cave"), only rooms whose name contains
+ * that string (case-insensitive) are evaluated.
+ */
+export async function findAvailableTimeSlots(
+  date: string,
+  startHour: number = 9,
+  endHour: number = 18,
+  durationMinutes: number,
+  roomNameFilter?: string
+): Promise<Array<{ roomId: string; roomName: string; capacity: number; slots: Array<{ startTime: string; endTime: string }> }>> {
+  let rooms = await getRooms();
+
+  // Apply room name filter when the user specifies a particular room.
+  if (roomNameFilter && roomNameFilter.trim().length > 0) {
+    const needle = roomNameFilter.trim().toLowerCase();
+    rooms = rooms.filter((r) => r.name.toLowerCase().includes(needle));
+  }
+
+  const bookings = await getAllRoomBookingsForDate(date);
+  
+  const results = [];
+  
+  for (const room of rooms) {
+    const roomBookings = bookings.filter(b => b.room_id === room.id);
+    // We want to find contiguous blocks of free time between startHour and endHour
+    // First, create a list of all booked intervals
+    const bookedIntervals = roomBookings.map(b => {
+      const [sh, sm] = b.start_time.split(':').map(Number);
+      const [eh, em] = b.end_time.split(':').map(Number);
+      return { start: sh * 60 + sm, end: eh * 60 + em };
+    });
+    
+    // Sort intervals
+    bookedIntervals.sort((a, b) => a.start - b.start);
+    
+    // Merge overlapping/touching intervals
+    const mergedIntervals: Array<{start: number, end: number}> = [];
+    if (bookedIntervals.length > 0) {
+      let current = bookedIntervals[0];
+      for (let i = 1; i < bookedIntervals.length; i++) {
+        if (bookedIntervals[i].start <= current.end) {
+          current.end = Math.max(current.end, bookedIntervals[i].end);
+        } else {
+          mergedIntervals.push(current);
+          current = bookedIntervals[i];
+        }
+      }
+      mergedIntervals.push(current);
+    }
+    
+    // Find gaps between startHour*60 and endHour*60
+    const gaps = [];
+    let currentTime = startHour * 60;
+    const endTimeTotal = endHour * 60;
+    
+    for (const interval of mergedIntervals) {
+      if (interval.start > currentTime) {
+        // Gap found
+        const gapEnd = Math.min(interval.start, endTimeTotal);
+        if (gapEnd - currentTime >= durationMinutes) {
+          gaps.push({ start: currentTime, end: gapEnd });
+        }
+      }
+      currentTime = Math.max(currentTime, interval.end);
+    }
+    
+    // Final gap
+    if (endTimeTotal - currentTime >= durationMinutes) {
+      gaps.push({ start: currentTime, end: endTimeTotal });
+    }
+    
+    // Convert gaps to HH:MM:SS format
+    const slots = gaps.map(gap => {
+      const sh = Math.floor(gap.start / 60).toString().padStart(2, '0');
+      const sm = (gap.start % 60).toString().padStart(2, '0');
+      const eh = Math.floor(gap.end / 60).toString().padStart(2, '0');
+      const em = (gap.end % 60).toString().padStart(2, '0');
+      return { startTime: `${sh}:${sm}:00`, endTime: `${eh}:${em}:00` };
+    });
+    
+    if (slots.length > 0) {
+      results.push({
+        roomId: room.id,
+        roomName: room.name,
+        capacity: room.capacity || 0,
+        slots
+      });
+    }
+  }
+  
+  return results;
+}
+
+/**
+ * Convenience function to create a meeting and book a room via AI Chatbot.
+ */
+export async function bookMeetingViaAI(
+  roomId: string,
+  date: string,
+  startTime: string,
+  endTime: string,
+  title: string
+): Promise<{ success: boolean; meetingId?: string; bookingId?: string; error?: string }> {
+  const supabase = createClient();
+  
+  // 1. Create a meeting record
+  const { data: meeting, error: meetingError } = await supabase
+    .from('meetings')
+    .insert({
+      title: title || 'AI Booked Meeting',
+      date: date,
+      start_time: startTime,
+      end_time: endTime,
+      status: 'scheduled',
+      created_by_name: 'AI Assistant',
+    })
+    .select('id')
+    .single();
+    
+  if (meetingError || !meeting) {
+    console.error('Error creating meeting for AI booking:', meetingError);
+    return { success: false, error: 'Failed to create meeting record' };
+  }
+  
+  // 2. Book the room
+  const bookingResult = await bookRoom({
+    roomId,
+    meetingId: meeting.id,
+    date,
+    startTime,
+    endTime
+  });
+  
+  if (!bookingResult.success) {
+    // Optionally delete the meeting if booking failed
+    await supabase.from('meetings').delete().eq('id', meeting.id);
+    return { success: false, error: bookingResult.error };
+  }
+  
+  // Update meeting with room_id (though bookRoom does this, doing it again to be safe)
+  await supabase.from('meetings').update({ room_id: roomId }).eq('id', meeting.id);
+  
+  return {
+    success: true,
+    meetingId: meeting.id,
+    bookingId: bookingResult.bookingId
+  };
+}
