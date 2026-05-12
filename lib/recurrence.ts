@@ -359,6 +359,16 @@ function getNextMonthlyOccurrence(
   return getNthWeekdayOfMonth(nextMonthDate.getFullYear(), nextMonthDate.getMonth(), weekday, n);
 }
 
+export const FULL_DAY_MAP: Record<string, string> = {
+  'Su': 'Sunday',
+  'M': 'Monday',
+  'T': 'Tuesday',
+  'W': 'Wednesday',
+  'Th': 'Thursday',
+  'F': 'Friday',
+  'Sa': 'Saturday',
+};
+
 /**
  * Format recurrence pattern for display
  */
@@ -375,10 +385,10 @@ export function formatRecurrencePattern(
           daysOfWeek.every(d => ['M', 'T', 'W', 'Th', 'F'].includes(d))) {
         return 'Every weekday';
       }
-      return `Every week on ${daysOfWeek.join(', ')}`;
+      return `Every week on ${daysOfWeek.map(d => FULL_DAY_MAP[d] || d).join(', ')}`;
     case 'bi-weekly':
       if (!daysOfWeek || daysOfWeek.length === 0) return 'Bi-weekly';
-      return `Every 2 weeks on ${daysOfWeek.join(', ')}`;
+      return `Every 2 weeks on ${daysOfWeek.map(d => FULL_DAY_MAP[d] || d).join(', ')}`;
     case 'monthly':
       return 'Every month';
     default:

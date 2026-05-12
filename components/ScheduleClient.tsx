@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils';
 import { User } from '@supabase/supabase-js';
 import { createClient } from '@/utils/supabase/client';
 import { createMeetingSeries, checkConflicts, addMeetingParticipants } from '@/lib/meetings';
-import { formatRecurrencePattern, calculateEndTime, generateOccurrences, getEndDateForCount, RecurrenceConfig } from '@/lib/recurrence';
+import { formatRecurrencePattern, calculateEndTime, generateOccurrences, getEndDateForCount, RecurrenceConfig, FULL_DAY_MAP } from '@/lib/recurrence';
 import { bookRoom, bookRoomForRecurrentMeetings, Room } from '@/lib/rooms';
 import { MeetingTemplateModal } from '@/components/MeetingTemplateModal';
 import { MeetingCreatedModal } from '@/components/MeetingCreatedModal';
@@ -736,19 +736,18 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
                     <label className="text-xs font-bold text-text-secondary uppercase tracking-widest">Repeat Days</label>
                     <div className="flex items-center gap-2 mt-1">
                       {['M', 'T', 'W', 'Th', 'F'].map((day) => {
-                        const mappedDay = day === 'Th' ? 'T' : day;
                         return (
                           <button
                             key={day}
                             onClick={() => toggleDay(day)}
                             className={cn(
-                              "h-10 w-10 rounded-full flex items-center justify-center text-sm font-bold transition-all border",
+                              "px-3 py-2 rounded-xl flex items-center justify-center text-xs font-bold transition-all border",
                               selectedDays.includes(day)
-                                ? "bg-primary text-white border-primary"
+                                ? "bg-primary text-white border-primary shadow-sm"
                                 : "bg-status-grey-bg text-text-primary border-transparent hover:bg-cream"
                             )}
                           >
-                            {mappedDay}
+                            {FULL_DAY_MAP[day]}
                           </button>
                         )
                       })}
@@ -1232,21 +1231,23 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
                 <UserPlus className="h-5 w-5 mt-0.5 text-status-green-bg/80" />
                 <div className="flex flex-col">
                   <span className="text-[10px] font-medium text-status-green-bg/80 uppercase tracking-wider mb-2">Participants</span>
-                  <div className="flex -space-x-2">
-                    {selectedParticipants.slice(0, 3).map((userId, i) => {
-                      const user = users.find(u => u.id === userId);
-                      return (
-                        <div key={userId} className="h-8 w-8 rounded-full border-2 border-primary bg-primary overflow-hidden flex items-center justify-center">
-                          <span className="text-white text-xs font-bold">
-                            {user?.name?.charAt(0) || '?'}
-                          </span>
-                        </div>
-                      );
-                    })}
-                    {selectedParticipants.length > 3 && (
-                      <div className="h-8 w-8 rounded-full border-2 border-primary bg-warm flex items-center justify-center text-text-primary text-[10px] font-bold">
-                        +{selectedParticipants.length - 3}
-                      </div>
+                  <div className="flex flex-wrap gap-2 mt-1">
+                    {selectedParticipants.length === 0 ? (
+                      <span className="text-xs font-light text-status-green-bg/60 italic">No participants selected</span>
+                    ) : (
+                      selectedParticipants.map((userId) => {
+                        const user = users.find(u => u.id === userId);
+                        return (
+                          <div 
+                            key={userId} 
+                            className="px-3 py-1.5 bg-white/20 border border-white/10 rounded-xl flex items-center justify-center"
+                          >
+                            <span className="text-[11px] font-bold text-white whitespace-nowrap">
+                              {user?.name || 'Unknown'}
+                            </span>
+                          </div>
+                        );
+                      })
                     )}
                   </div>
                 </div>
