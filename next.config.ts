@@ -17,7 +17,7 @@ const nextConfig: NextConfig = {
   compress: true,
 
   // Allow browser preview proxy for development testing
-  allowedDevOrigins: ['127.0.0.1', 'localhost'],
+  allowedDevOrigins: ['127.0.0.1', 'localhost', '10.132.3.238', 'https://brown-heads-throw.loca.lt'],
 
   // Turbopack configuration (replaces webpack)
   // turbopack: {},
@@ -32,7 +32,7 @@ const nextConfig: NextConfig = {
     // Allow browser preview proxy for Server Actions
     // Note: Browser preview uses dynamic ports, so we need to allow the exact origin
     serverActions: {
-      allowedOrigins: ['localhost:3000', '127.0.0.1:51841', '127.0.0.1:*', '*'],
+      allowedOrigins: ['localhost:3000', '127.0.0.1:51841', '127.0.0.1:*', '10.132.3.238:*', 'every-carpets-rest.loca.lt', '*'],
     },
   },
 

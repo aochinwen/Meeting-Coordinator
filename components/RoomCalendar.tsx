@@ -173,25 +173,157 @@ export function RoomCalendar({ onBookingClick, onTimeSlotClick, onPendingSlotCha
     };
   }, [currentDate]);
 
-  // Global pointer handlers to stop scrolling during an active drag.
-  // We use a non-passive listener here because element-level onTouchMove 
-  // is passive by default in React and cannot call e.preventDefault().
+  // ---------------------------------------------------------------------------
+  // Touch gesture handling — per-element non-passive listeners.
+  //
+  // WHY NOT window-level listeners:
+  // iOS Safari disables its hardware scroll compositor for the ENTIRE PAGE
+  // whenever ANY non-passive touchmove listener exists on `window`, even if
+  // preventDefault() is never actually called. This broke horizontal and
+  // vertical scrolling of the calendar grid.
+  //
+  // Solution: attach non-passive touchstart/touchmove directly to each column
+  // DOM element. These are scoped — they only intercept touches that originate
+  // on those columns, leaving the rest of the page's scrolling untouched.
+  // ---------------------------------------------------------------------------
+  useEffect(() => {
+    if (!selectedRoom) return;
+
+    const cleanups: (() => void)[] = [];
+
+    for (const [dateKey, col] of Object.entries(columnRefs.current)) {
+      if (!col) continue;
+
+      // Capture slot + start position at touchstart time via closure.
+      let startSlotIdx = 0;
+      let startX = 0;
+      let startY = 0;
+      let isLongPress = false;
+      let localTimeout: NodeJS.Timeout | null = null;
+
+      const onTouchStart = (e: TouchEvent) => {
+        const target = e.target as HTMLElement;
+        if (target.closest('[data-booking="true"]')) return;
+
+        const touch = e.touches[0];
+        const rect = col.getBoundingClientRect();
+        startSlotIdx = clamp(
+          Math.floor((touch.clientY - rect.top) / SLOT_HEIGHT),
+          0,
+          TOTAL_SLOTS - 1,
+        );
+        startX = touch.clientX;
+        startY = touch.clientY;
+        isLongPress = false;
+
+        touchStartPos.current = { x: startX, y: startY };
+        if (touchTimeout.current) clearTimeout(touchTimeout.current);
+
+        localTimeout = setTimeout(() => {
+          isLongPress = true;
+          window.navigator?.vibrate?.(10);
+          setDragState({
+            roomId: selectedRoom.id,
+            dateKey,
+            startIndex: startSlotIdx,
+            endIndex: startSlotIdx,
+          });
+          localTimeout = null;
+          touchTimeout.current = null;
+        }, 300);
+        touchTimeout.current = localTimeout;
+      };
+
+      const onTouchMove = (e: TouchEvent) => {
+        const touch = e.touches[0];
+
+        if (isLongPress) {
+          // Drag is active — prevent scroll and update slot position.
+          e.preventDefault();
+          const ds = dragStateRef.current;
+          if (ds) {
+            const rect = col.getBoundingClientRect();
+            const slotIdx = clamp(
+              Math.floor((touch.clientY - rect.top) / SLOT_HEIGHT),
+              0,
+              TOTAL_SLOTS - 1,
+            );
+            setDragState(prev => prev ? { ...prev, endIndex: slotIdx } : null);
+          }
+          return;
+        }
+
+        // Not yet a long-press — cancel timer if moved too much.
+        const dx = Math.abs(touch.clientX - startX);
+        const dy = Math.abs(touch.clientY - startY);
+        if ((dx > 10 || dy > 10) && localTimeout) {
+          clearTimeout(localTimeout);
+          localTimeout = null;
+          touchTimeout.current = null;
+        }
+        // Do NOT call preventDefault here — let the browser scroll normally.
+      };
+
+      const onTouchEnd = () => {
+        if (localTimeout) {
+          clearTimeout(localTimeout);
+          localTimeout = null;
+          touchTimeout.current = null;
+        }
+
+        if (isLongPress) {
+          isLongPress = false;
+          const ds = dragStateRef.current;
+          if (ds) {
+            const { roomId, startIndex, endIndex } = ds;
+            const lo = Math.min(startIndex, endIndex);
+            const hi = Math.max(startIndex, endIndex);
+            const startTime = slotIndexToTime(lo);
+            const endTime = slotIndexToTime(hi + 1);
+            const room = rooms.find((r) => r.id === roomId);
+            const day = visibleDays.find((d) => format(d, 'yyyy-MM-dd') === dateKey);
+            if (room && day) {
+              onPendingSlotChange?.({ room, day, startTime, endTime, dateKey, loIndex: lo, hiIndex: hi });
+            }
+          }
+          setDragState(null);
+        }
+      };
+
+      // touchstart can be passive (we don't need to preventDefault here)
+      col.addEventListener('touchstart', onTouchStart, { passive: true });
+      // touchmove must be non-passive so we can preventDefault during an active drag
+      col.addEventListener('touchmove', onTouchMove, { passive: false });
+      col.addEventListener('touchend', onTouchEnd);
+      col.addEventListener('touchcancel', onTouchEnd);
+
+      cleanups.push(() => {
+        col.removeEventListener('touchstart', onTouchStart);
+        col.removeEventListener('touchmove', onTouchMove);
+        col.removeEventListener('touchend', onTouchEnd);
+        col.removeEventListener('touchcancel', onTouchEnd);
+        if (localTimeout) clearTimeout(localTimeout);
+      });
+    }
+
+    return () => cleanups.forEach(fn => fn());
+  // Re-register when visible days, selected room, or bookings data change
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedRoom, visibleDays, rooms, onPendingSlotChange]);
+
+  // Desktop-only: global mouse move/up for drag tracking.
+  // Mice cannot scroll so standard passive listeners are fine here.
   useEffect(() => {
     if (!dragState) return;
 
-    const handleGlobalMove = (e: TouchEvent | MouseEvent) => {
+    const handleMouseMove = (e: MouseEvent) => {
       const ds = dragStateRef.current;
       if (!ds) return;
-
-      e.preventDefault(); // Stop scrolling and text selection during drag
-
-      const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
       const col = columnRefs.current[ds.dateKey];
-      
       if (col) {
         const rect = col.getBoundingClientRect();
         const slotIdx = clamp(
-          Math.floor((clientY - rect.top) / SLOT_HEIGHT),
+          Math.floor((e.clientY - rect.top) / SLOT_HEIGHT),
           0,
           TOTAL_SLOTS - 1,
         );
@@ -199,41 +331,31 @@ export function RoomCalendar({ onBookingClick, onTimeSlotClick, onPendingSlotCha
       }
     };
 
-    const handleGlobalEnd = () => {
-      if (touchTimeout.current) {
-        clearTimeout(touchTimeout.current);
-        touchTimeout.current = null;
-      }
-      
+    const handleMouseUp = () => {
       const ds = dragStateRef.current;
       if (ds) {
         const { roomId, dateKey, startIndex, endIndex } = ds;
         const lo = Math.min(startIndex, endIndex);
         const hi = Math.max(startIndex, endIndex);
-        const startTime = slotIndexToTime(lo);
-        const endTime = slotIndexToTime(hi + 1);
         const room = rooms.find((r) => r.id === roomId);
         const day = visibleDays.find((d) => format(d, 'yyyy-MM-dd') === dateKey);
         if (room && day) {
-          const slot: PendingSlot = { room, day, startTime, endTime, dateKey, loIndex: lo, hiIndex: hi };
-          onPendingSlotChange?.(slot);
+          onPendingSlotChange?.({
+            room, day,
+            startTime: slotIndexToTime(lo),
+            endTime: slotIndexToTime(hi + 1),
+            dateKey, loIndex: lo, hiIndex: hi,
+          });
         }
       }
       setDragState(null);
     };
 
-    window.addEventListener('touchmove', handleGlobalMove, { passive: false });
-    window.addEventListener('mousemove', handleGlobalMove as any);
-    window.addEventListener('touchend', handleGlobalEnd);
-    window.addEventListener('mouseup', handleGlobalEnd);
-    window.addEventListener('touchcancel', handleGlobalEnd);
-    
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
     return () => {
-      window.removeEventListener('touchmove', handleGlobalMove);
-      window.removeEventListener('mousemove', handleGlobalMove as any);
-      window.removeEventListener('touchend', handleGlobalEnd);
-      window.removeEventListener('mouseup', handleGlobalEnd);
-      window.removeEventListener('touchcancel', handleGlobalEnd);
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
     };
   }, [!!dragState, rooms, visibleDays, onPendingSlotChange]);
 
@@ -459,9 +581,12 @@ export function RoomCalendar({ onBookingClick, onTimeSlotClick, onPendingSlotCha
                           isToday && 'bg-primary/[0.03] hover:bg-primary/[0.05]',
                           'border-r border-border/40 last:border-r-0'
                         )}
+
+                        // Touch events are handled by per-element DOM listeners
+                        // registered in the useEffect above. Only mouse events
+                        // are handled here via React synthetic events.
                         style={{ height: TOTAL_SLOTS * SLOT_HEIGHT }}
                         onMouseDown={(e) => {
-                          // Desktop dragging starts instantly on mousedown
                           const target = e.target as HTMLElement;
                           if (target.closest('[data-booking="true"]')) return;
                           e.preventDefault();
@@ -477,49 +602,6 @@ export function RoomCalendar({ onBookingClick, onTimeSlotClick, onPendingSlotCha
                             startIndex: slotIdx,
                             endIndex: slotIdx,
                           });
-                        }}
-                        onTouchStart={(e) => {
-                          // Mobile dragging starts after a 300ms long-press
-                          const target = e.target as HTMLElement;
-                          if (target.closest('[data-booking="true"]')) return;
-                          
-                          const touch = e.touches[0];
-                          const rect = e.currentTarget.getBoundingClientRect();
-                          const slotIdx = clamp(
-                            Math.floor((touch.clientY - rect.top) / SLOT_HEIGHT),
-                            0,
-                            TOTAL_SLOTS - 1,
-                          );
-
-                          touchStartPos.current = { x: touch.clientX, y: touch.clientY };
-                          if (touchTimeout.current) clearTimeout(touchTimeout.current);
-
-                          touchTimeout.current = setTimeout(() => {
-                            if (window.navigator && window.navigator.vibrate) {
-                              window.navigator.vibrate(10);
-                            }
-
-                            setDragState({
-                              roomId: selectedRoom.id,
-                              dateKey,
-                              startIndex: slotIdx,
-                              endIndex: slotIdx,
-                            });
-                            touchTimeout.current = null;
-                          }, 300);
-                        }}
-                        onTouchMove={(e) => {
-                          // Handle long-press cancellation if moving too early.
-                          // The actual selection update is handled by the global non-passive listener.
-                          if (touchTimeout.current && touchStartPos.current) {
-                            const touch = e.touches[0];
-                            const dx = Math.abs(touch.clientX - touchStartPos.current.x);
-                            const dy = Math.abs(touch.clientY - touchStartPos.current.y);
-                            if (dx > 10 || dy > 10) {
-                              clearTimeout(touchTimeout.current);
-                              touchTimeout.current = null;
-                            }
-                          }
                         }}
                       >
                         {/* Hour grid lines (full line at :00, subtle at :30) */}
