@@ -800,8 +800,30 @@ export async function findAvailableTimeSlots(
 
   // Apply room name filter when the user specifies a particular room.
   if (roomNameFilter && roomNameFilter.trim().length > 0) {
-    const needle = roomNameFilter.trim().toLowerCase();
-    rooms = rooms.filter((r) => r.name.toLowerCase().includes(needle));
+    const rawNeedle = roomNameFilter.trim().toLowerCase();
+    const normalizedNeedle = rawNeedle.replace(/[^a-z0-9]/g, '');
+    
+    rooms = rooms.filter((r) => {
+      const rawName = r.name.toLowerCase();
+      const normalizedName = rawName.replace(/[^a-z0-9]/g, '');
+      
+      // 1. Exact match (case-insensitive)
+      if (rawName === rawNeedle) return true;
+      
+      // 2. Normalized exact match (e.g., "1124" matches "11-2-4")
+      if (normalizedName === normalizedNeedle) return true;
+      
+      // 3. Partial match on raw name (e.g., "Boardroom" matches "The Boardroom")
+      if (rawName.includes(rawNeedle)) return true;
+      
+      // 4. Partial match on normalized names (e.g., "room1124" matches "1124")
+      if (normalizedNeedle.length > 0 && 
+         (normalizedName.includes(normalizedNeedle) || normalizedNeedle.includes(normalizedName))) {
+        return true;
+      }
+      
+      return false;
+    });
   }
 
   const bookings = await getAllRoomBookingsForDate(date);

@@ -14,7 +14,7 @@ type Message = {
 // A chat entry can be a plain message OR an availability card
 type ChatEntry =
   | { type: 'message'; message: Message }
-  | { type: 'availability'; text: string; availability: AvailabilityDay[]; durationMinutes: number };
+  | { type: 'availability'; text: string; availability: AvailabilityDay[]; durationMinutes: number; suggestions?: string[] };
 
 // Extend window type for SpeechRecognition cross-browser support
 declare global {
@@ -155,14 +155,14 @@ export default function AssistantPage() {
     }
   }, [isRecording, startRecording, stopRecording]);
 
-  const handleSubmit = async (e?: React.FormEvent) => {
+  const handleSubmit = async (e?: React.FormEvent, overrideInput?: string) => {
     e?.preventDefault();
-    if (!input.trim() || isLoading) return;
+    const userMessage = (overrideInput || input).trim();
+    if (!userMessage || isLoading) return;
 
     // If still recording when user hits send, stop first
     if (isRecording) stopRecording();
 
-    const userMessage = input.trim();
     setInput('');
     setIsLoading(true);
 
@@ -175,13 +175,23 @@ export default function AssistantPage() {
     const historyToSend = [...apiHistory, { role: 'user' as const, parts: [{ text: userMessage }] }];
 
     try {
+      // Build local date strings manually — avoids locale/environment differences
+      // with toLocaleDateString and ensures UTC-offset correctness.
+      const now = new Date();
+      const yr = now.getFullYear();
+      const mo = String(now.getMonth() + 1).padStart(2, '0');
+      const dy = String(now.getDate()).padStart(2, '0');
+      const localDate = `${yr}-${mo}-${dy}`; // YYYY-MM-DD in the browser's local TZ
+      const localDayOfWeek = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][now.getDay()];
+
       const response = await fetch('/api/assistant', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          // History is everything up to (not including) the current message
           history: apiHistory,
           message: userMessage,
+          clientDate: localDate,
+          localDayOfWeek,
         })
       });
 
@@ -195,11 +205,22 @@ export default function AssistantPage() {
         }]);
       } else if (data.availability && data.availability.length > 0) {
         // Structured response with booking card
+        let suggestions: string[] | undefined = undefined;
+        if (data.isFallback) {
+          // Extract unique room names from all dates
+          const roomNames = new Set<string>();
+          data.availability.forEach((day: AvailabilityDay) => {
+            day.rooms.forEach((room: any) => roomNames.add(room.roomName));
+          });
+          suggestions = Array.from(roomNames);
+        }
+
         setEntries(prev => [...prev, {
           type: 'availability',
           text: data.text,
           availability: data.availability,
           durationMinutes: data.durationMinutes ?? 60,
+          suggestions,
         }]);
         // Update API history with just the text
         setApiHistory([
@@ -228,6 +249,10 @@ export default function AssistantPage() {
       e.preventDefault();
       handleSubmit();
     }
+  };
+
+  const handleSuggestionClick = (roomName: string) => {
+    handleSubmit(undefined, roomName);
   };
 
   // Progress arc for the timer ring (0–10s)
@@ -267,7 +292,26 @@ export default function AssistantPage() {
                   {entry.text && (
                     <p className="text-sm text-text-secondary mb-3 leading-relaxed">{entry.text}</p>
                   )}
-                  <BookingCard availability={entry.availability} durationMinutes={entry.durationMinutes} />
+                  {/* Only show the full slot card when it is NOT a fallback.
+                      Fallback results are unrelated rooms — show buttons only. */}
+                  {!entry.suggestions && (
+                    <BookingCard availability={entry.availability} durationMinutes={entry.durationMinutes} />
+                  )}
+                  
+                  {/* Suggestion Buttons */}
+                  {entry.suggestions && entry.suggestions.length > 0 && (
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      {entry.suggestions.map((room) => (
+                        <button
+                          key={room}
+                          onClick={() => handleSuggestionClick(room)}
+                          className="px-4 py-1.5 rounded-full text-xs font-medium border border-primary/30 bg-primary/5 text-primary hover:bg-primary/10 transition-colors shadow-sm"
+                        >
+                          {room}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             );
@@ -290,7 +334,7 @@ export default function AssistantPage() {
 
         {/* Input Area */}
         <div className="p-4 bg-white/80 border-t border-white/50 backdrop-blur-md shrink-0 z-10 shadow-[0_-4px_24px_-12px_rgba(0,0,0,0.1)]">
-          <form onSubmit={handleSubmit} className="flex items-end gap-3 max-w-3xl mx-auto">
+          <form onSubmit={(e) => handleSubmit(e)} className="flex items-end gap-3 max-w-3xl mx-auto">
             <textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
