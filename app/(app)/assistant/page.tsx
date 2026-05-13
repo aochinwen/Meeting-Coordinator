@@ -16,15 +16,7 @@ type ChatEntry =
   | { type: 'message'; message: Message }
   | { type: 'availability'; text: string; availability: AvailabilityDay[]; durationMinutes: number; suggestions?: string[] };
 
-// Extend window type for SpeechRecognition cross-browser support
-declare global {
-  interface Window {
-    SpeechRecognition: typeof SpeechRecognition;
-    webkitSpeechRecognition: typeof SpeechRecognition;
-  }
-}
-
-const MAX_RECORDING_SECONDS = 10;
+const MAX_RECORDING_SECONDS = 30;
 
 export default function AssistantPage() {
   const [entries, setEntries] = useState<ChatEntry[]>([
@@ -41,11 +33,14 @@ export default function AssistantPage() {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  // Voice input state
+  // Voice input state (Gemini-powered transcription via MediaRecorder)
   const [isRecording, setIsRecording] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [voiceSupported, setVoiceSupported] = useState(false);
-  const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const streamRef = useRef<MediaStream | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const autoStopRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -55,11 +50,9 @@ export default function AssistantPage() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [entries, isLoading]);
 
-  // Detect Web Speech API support
+  // Detect MediaRecorder support (used for Gemini transcription)
   useEffect(() => {
-    const SpeechRecognitionAPI =
-      window.SpeechRecognition || window.webkitSpeechRecognition;
-    setVoiceSupported(!!SpeechRecognitionAPI);
+    setVoiceSupported(typeof window !== 'undefined' && !!window.MediaRecorder);
   }, []);
 
   // Cleanup on unmount
@@ -79,58 +72,72 @@ export default function AssistantPage() {
       clearTimeout(autoStopRef.current);
       autoStopRef.current = null;
     }
-    if (recognitionRef.current) {
-      try {
-        recognitionRef.current.stop();
-      } catch {
-        // ignore
-      }
-      recognitionRef.current = null;
+    // Stop the MediaRecorder — its onstop handler will send audio to Gemini
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+    }
+    // Release the microphone stream
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(t => t.stop());
+      streamRef.current = null;
     }
     setIsRecording(false);
     setRecordingSeconds(0);
   }, []);
 
-  const startRecording = useCallback(() => {
-    const SpeechRecognitionAPI =
-      window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognitionAPI) return;
+  const startRecording = useCallback(async () => {
+    if (!window.MediaRecorder) return;
 
-    const recognition = new SpeechRecognitionAPI();
-    recognition.lang = 'en-US';
-    recognition.interimResults = true;
-    recognition.continuous = true;
-    recognition.maxAlternatives = 1;
+    let stream: MediaStream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch {
+      console.error('Microphone permission denied');
+      return;
+    }
 
-    let finalTranscript = '';
+    streamRef.current = stream;
+    audioChunksRef.current = [];
 
-    recognition.onresult = (event: SpeechRecognitionEvent) => {
-      let interim = '';
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const transcript = event.results[i][0].transcript;
-        if (event.results[i].isFinal) {
-          finalTranscript += transcript + ' ';
-        } else {
-          interim += transcript;
+    // Prefer webm/opus; fall back to whatever the browser supports
+    const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+      ? 'audio/webm;codecs=opus'
+      : MediaRecorder.isTypeSupported('audio/webm')
+      ? 'audio/webm'
+      : '';
+
+    const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+    mediaRecorderRef.current = recorder;
+
+    recorder.ondataavailable = (e) => {
+      if (e.data.size > 0) audioChunksRef.current.push(e.data);
+    };
+
+    recorder.onstop = async () => {
+      const audioBlob = new Blob(audioChunksRef.current, {
+        type: mimeType || 'audio/webm',
+      });
+      audioChunksRef.current = [];
+
+      if (audioBlob.size < 1000) return; // Too short — skip transcription
+
+      setIsTranscribing(true);
+      try {
+        const form = new FormData();
+        form.append('audio', audioBlob, 'recording.webm');
+        const res = await fetch('/api/transcribe', { method: 'POST', body: form });
+        const data = await res.json();
+        if (data.transcript) {
+          setInput(data.transcript.trim());
         }
+      } catch (err) {
+        console.error('Transcription failed:', err);
+      } finally {
+        setIsTranscribing(false);
       }
-      // Show combined interim in the input box for live feedback
-      setInput((finalTranscript + interim).trimStart());
     };
 
-    recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
-      console.error('Speech recognition error:', event.error);
-      stopRecording();
-    };
-
-    recognition.onend = () => {
-      // Trim trailing whitespace from final transcript
-      setInput(prev => prev.trim());
-      stopRecording();
-    };
-
-    recognitionRef.current = recognition;
-    recognition.start();
+    recorder.start(250); // Collect data every 250 ms
     setIsRecording(true);
     setRecordingSeconds(0);
 
@@ -162,6 +169,7 @@ export default function AssistantPage() {
 
     // If still recording when user hits send, stop first
     if (isRecording) stopRecording();
+    if (isTranscribing) return; // Wait for transcription to finish
 
     setInput('');
     setIsLoading(true);
@@ -339,7 +347,7 @@ export default function AssistantPage() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={isRecording ? 'Listening…' : 'Ask for a room…'}
+              placeholder={isTranscribing ? 'Transcribing…' : isRecording ? 'Listening… (click mic to stop)' : 'Ask for a room…'}
               className="flex-1 resize-none rounded-2xl border border-border bg-white px-4 py-3 text-sm font-light focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all max-h-32 min-h-[44px]"
               rows={1}
             />
@@ -348,16 +356,21 @@ export default function AssistantPage() {
             {voiceSupported && (
               <button
                 type="button"
-                onClick={toggleRecording}
-                title={isRecording ? 'Stop recording' : 'Start voice input'}
+                onClick={isTranscribing ? undefined : toggleRecording}
+                disabled={isTranscribing}
+                title={isTranscribing ? 'Transcribing…' : isRecording ? 'Stop recording' : 'Start voice input (powered by Gemini)'}
                 className={[
                   'shrink-0 relative flex items-center justify-center rounded-xl transition-all duration-200 h-11 w-11',
-                  isRecording
+                  isTranscribing
+                    ? 'bg-primary/10 border border-primary/30 text-primary cursor-not-allowed'
+                    : isRecording
                     ? 'bg-red-500/10 border border-red-400/40 text-red-500 hover:bg-red-500/20'
                     : 'bg-white border border-border text-text-secondary hover:bg-surface hover:text-primary hover:border-primary/30',
                 ].join(' ')}
               >
-                {isRecording ? (
+                {isTranscribing ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : isRecording ? (
                   <>
                     {/* Timer ring */}
                     <svg
@@ -411,8 +424,15 @@ export default function AssistantPage() {
             <div className="flex items-center justify-center gap-2 mt-2 animate-in fade-in slide-in-from-bottom-1 duration-200">
               <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
               <span className="text-xs text-red-500 font-medium tabular-nums">
-                Recording {recordingSeconds}s / {MAX_RECORDING_SECONDS}s — click mic to stop
+                Recording {recordingSeconds}s / {MAX_RECORDING_SECONDS}s
               </span>
+            </div>
+          )}
+          {/* Transcribing status bar */}
+          {isTranscribing && (
+            <div className="flex items-center justify-center gap-2 mt-2 animate-in fade-in slide-in-from-bottom-1 duration-200">
+              <Loader2 className="w-3 h-3 text-primary animate-spin" />
+              <span className="text-xs text-primary font-medium">Transcribing with Gemini…</span>
             </div>
           )}
 
