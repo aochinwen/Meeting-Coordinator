@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
-import { Send, Sparkles, Loader2 } from 'lucide-react';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { Send, Sparkles, Loader2, Mic, MicOff } from 'lucide-react';
 import { ChatMessage } from '@/components/ui/ChatMessage';
 import { BookingCard, AvailabilityDay } from '@/components/ui/BookingCard';
 
@@ -15,6 +15,16 @@ type Message = {
 type ChatEntry =
   | { type: 'message'; message: Message }
   | { type: 'availability'; text: string; availability: AvailabilityDay[]; durationMinutes: number };
+
+// Extend window type for SpeechRecognition cross-browser support
+declare global {
+  interface Window {
+    SpeechRecognition: typeof SpeechRecognition;
+    webkitSpeechRecognition: typeof SpeechRecognition;
+  }
+}
+
+const MAX_RECORDING_SECONDS = 10;
 
 export default function AssistantPage() {
   const [entries, setEntries] = useState<ChatEntry[]>([
@@ -30,15 +40,127 @@ export default function AssistantPage() {
   const [apiHistory, setApiHistory] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+
+  // Voice input state
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const [voiceSupported, setVoiceSupported] = useState(false);
+  const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const autoStopRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [entries, isLoading]);
 
+  // Detect Web Speech API support
+  useEffect(() => {
+    const SpeechRecognitionAPI =
+      window.SpeechRecognition || window.webkitSpeechRecognition;
+    setVoiceSupported(!!SpeechRecognitionAPI);
+  }, []);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      stopRecording();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const stopRecording = useCallback(() => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    if (autoStopRef.current) {
+      clearTimeout(autoStopRef.current);
+      autoStopRef.current = null;
+    }
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch {
+        // ignore
+      }
+      recognitionRef.current = null;
+    }
+    setIsRecording(false);
+    setRecordingSeconds(0);
+  }, []);
+
+  const startRecording = useCallback(() => {
+    const SpeechRecognitionAPI =
+      window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognitionAPI) return;
+
+    const recognition = new SpeechRecognitionAPI();
+    recognition.lang = 'en-US';
+    recognition.interimResults = true;
+    recognition.continuous = true;
+    recognition.maxAlternatives = 1;
+
+    let finalTranscript = '';
+
+    recognition.onresult = (event: SpeechRecognitionEvent) => {
+      let interim = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcript = event.results[i][0].transcript;
+        if (event.results[i].isFinal) {
+          finalTranscript += transcript + ' ';
+        } else {
+          interim += transcript;
+        }
+      }
+      // Show combined interim in the input box for live feedback
+      setInput((finalTranscript + interim).trimStart());
+    };
+
+    recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
+      console.error('Speech recognition error:', event.error);
+      stopRecording();
+    };
+
+    recognition.onend = () => {
+      // Trim trailing whitespace from final transcript
+      setInput(prev => prev.trim());
+      stopRecording();
+    };
+
+    recognitionRef.current = recognition;
+    recognition.start();
+    setIsRecording(true);
+    setRecordingSeconds(0);
+
+    // Live seconds counter
+    timerRef.current = setInterval(() => {
+      setRecordingSeconds(prev => prev + 1);
+    }, 1000);
+
+    // Auto-stop after MAX_RECORDING_SECONDS
+    autoStopRef.current = setTimeout(() => {
+      stopRecording();
+    }, MAX_RECORDING_SECONDS * 1000);
+  }, [stopRecording]);
+
+  const toggleRecording = useCallback(() => {
+    if (isRecording) {
+      stopRecording();
+    } else {
+      // Clear existing input when starting a fresh voice recording
+      setInput('');
+      startRecording();
+    }
+  }, [isRecording, startRecording, stopRecording]);
+
   const handleSubmit = async (e?: React.FormEvent) => {
     e?.preventDefault();
     if (!input.trim() || isLoading) return;
+
+    // If still recording when user hits send, stop first
+    if (isRecording) stopRecording();
 
     const userMessage = input.trim();
     setInput('');
@@ -108,6 +230,12 @@ export default function AssistantPage() {
     }
   };
 
+  // Progress arc for the timer ring (0–10s)
+  const radius = 14;
+  const circumference = 2 * Math.PI * radius;
+  const progress = recordingSeconds / MAX_RECORDING_SECONDS;
+  const dashOffset = circumference * (1 - progress);
+
   return (
     <div className="flex flex-col h-[calc(100vh-4rem)] max-w-4xl mx-auto p-4 md:p-6 lg:p-8">
       {/* Header */}
@@ -167,10 +295,64 @@ export default function AssistantPage() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Ask for a room..."
+              placeholder={isRecording ? 'Listening…' : 'Ask for a room…'}
               className="flex-1 resize-none rounded-2xl border border-border bg-white px-4 py-3 text-sm font-light focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all max-h-32 min-h-[44px]"
               rows={1}
             />
+
+            {/* Voice Button */}
+            {voiceSupported && (
+              <button
+                type="button"
+                onClick={toggleRecording}
+                title={isRecording ? 'Stop recording' : 'Start voice input'}
+                className={[
+                  'shrink-0 relative flex items-center justify-center rounded-xl transition-all duration-200 h-11 w-11',
+                  isRecording
+                    ? 'bg-red-500/10 border border-red-400/40 text-red-500 hover:bg-red-500/20'
+                    : 'bg-white border border-border text-text-secondary hover:bg-surface hover:text-primary hover:border-primary/30',
+                ].join(' ')}
+              >
+                {isRecording ? (
+                  <>
+                    {/* Timer ring */}
+                    <svg
+                      className="absolute inset-0 w-full h-full -rotate-90"
+                      viewBox="0 0 36 36"
+                      aria-hidden="true"
+                    >
+                      <circle
+                        cx="18"
+                        cy="18"
+                        r={radius}
+                        fill="none"
+                        stroke="currentColor"
+                        strokeOpacity="0.15"
+                        strokeWidth="2"
+                      />
+                      <circle
+                        cx="18"
+                        cy="18"
+                        r={radius}
+                        fill="none"
+                        stroke="currentColor"
+                        strokeOpacity="0.7"
+                        strokeWidth="2"
+                        strokeDasharray={circumference}
+                        strokeDashoffset={dashOffset}
+                        strokeLinecap="round"
+                        style={{ transition: 'stroke-dashoffset 0.9s linear' }}
+                      />
+                    </svg>
+                    <MicOff className="w-4 h-4 relative z-10" />
+                  </>
+                ) : (
+                  <Mic className="w-4 h-4" />
+                )}
+              </button>
+            )}
+
+            {/* Send Button */}
             <button
               type="submit"
               disabled={!input.trim() || isLoading}
@@ -179,6 +361,17 @@ export default function AssistantPage() {
               <Send className="w-5 h-5 ml-0.5" />
             </button>
           </form>
+
+          {/* Recording status bar */}
+          {isRecording && (
+            <div className="flex items-center justify-center gap-2 mt-2 animate-in fade-in slide-in-from-bottom-1 duration-200">
+              <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+              <span className="text-xs text-red-500 font-medium tabular-nums">
+                Recording {recordingSeconds}s / {MAX_RECORDING_SECONDS}s — click mic to stop
+              </span>
+            </div>
+          )}
+
           <div className="text-center mt-3">
             <span className="text-[10px] text-text-tertiary">AI can make mistakes. Verify bookings on the Schedule page.</span>
           </div>
