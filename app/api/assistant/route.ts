@@ -39,7 +39,21 @@ export async function POST(request: Request) {
     const DAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
     const dayOfWeek = localDayOfWeek
       || DAYS[new Date(`${currentDate}T12:00:00Z`).getUTCDay()];
-    const todayLabel = `${dayOfWeek} ${currentDate}`;
+
+    // Generate a 14-day calendar lookahead to help the LLM resolve relative dates accurately.
+    const lookaheadDays = 14;
+    const calendarLines: string[] = [];
+    const baseDate = new Date(`${currentDate}T12:00:00Z`);
+    for (let i = 0; i < lookaheadDays; i++) {
+      const d = new Date(baseDate);
+      d.setUTCDate(baseDate.getUTCDate() + i);
+      const dayStr = d.toISOString().split('T')[0];
+      const dow = DAYS[d.getUTCDay()];
+      if (i === 0) calendarLines.push(`- Today: ${dow}, ${dayStr}`);
+      else if (i === 1) calendarLines.push(`- Tomorrow: ${dow}, ${dayStr}`);
+      else calendarLines.push(`- ${dow}, ${dayStr}`);
+    }
+    const calendarLookahead = `Upcoming dates for reference:\n${calendarLines.join('\n')}`;
 
     // Pre-fetch all rooms so the AI knows which ones are real.
     // This prevents asking for date/duration for a fictional room.
@@ -64,19 +78,24 @@ export async function POST(request: Request) {
       systemInstruction: {
         role: "system",
         parts: [{ text: `You are a helpful room booking assistant for the Meeting Coordinator app.
-Today is ${todayLabel}. Use this to resolve relative date phrases like "next tuesday" or "next week" into exact YYYY-MM-DD dates.
+Today's date is ${currentDate} and the current day of the week is ${dayOfWeek}.
+
+${calendarLookahead}
+
+Use this calendar to accurately resolve relative date phrases like "next tuesday", "tomorrow", or "next week" into exact YYYY-MM-DD dates.
 ${roomListText}
 
-ROOM VALIDATION RULE (check FIRST, before asking anything):
-When the user mentions a specific room name, IMMEDIATELY check whether it appears in the valid room list above.
-- If the room name does NOT match any room in the list (even approximately), treat it as non-existent. Do NOT ask for date/duration. Instead call the tool anyway (with default 60 min and today's date) so the fallback mechanism can show real alternatives.
-- If the room IS in the list, THEN apply the MISSING INFORMATION BEHAVIOR below.
+ROOM VALIDATION RULE:
+- If the user DOES NOT mention a specific room name, DO NOT ask them for a room. Proceed to check for missing information and then call the 'find_available_slots' tool, leaving the 'roomName' parameter empty to search all rooms.
+- If the user mentions a specific room name, IMMEDIATELY check whether it appears in the valid room list above.
+  - If the room name does NOT match any room in the list (even approximately), treat it as non-existent. Do NOT ask for date/duration. Instead call the tool anyway (with default 60 min and today's date) so the fallback mechanism can show real alternatives.
+  - If the room IS in the list, proceed to check for missing information.
 
-MISSING INFORMATION BEHAVIOR (only for valid rooms):
-Before calling the 'find_available_slots' tool for a confirmed valid room, you must have BOTH:
+MISSING INFORMATION BEHAVIOR:
+Before calling the 'find_available_slots' tool, you must have BOTH:
 - A date or date range (e.g. "next Thursday", "next week", "2026-05-20")
 - A duration (e.g. "2 hours", "30 minutes")
-If either is missing, ask for it in a single short friendly question. Do not proceed to the tool.
+If either the date or duration is missing, ask for it in a single short friendly question. Do not proceed to the tool until you have both. Do NOT ask for a room name if it is missing.
 
 TOOL USAGE:
 Use the 'find_available_slots' tool to check availability. You can pass an array of dates for a range.
