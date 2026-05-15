@@ -65,38 +65,47 @@ export function RoomSelector({
     return date ? [date] : [];
   }, [occurrenceDates, date]);
 
-  const fetchAvailability = useCallback(async () => {
-    if (!startTime || !endTime || dates.length === 0) return;
-    setIsLoading(true);
-    try {
-      const result = await getRoomAvailabilityForDates(
-        dates,
-        startTime,
-        endTime,
-        minCapacity,
-      );
-      setAvailability(result);
-
-      // If the selected room is now entirely unavailable (no free dates),
-      // deselect it. Keep it selected if it's partially available — the
-      // user explicitly chose 'allow publish with warning' behavior.
-      if (selectedRoomId) {
-        const match = result.find((r) => r.room.id === selectedRoomId);
-        if (!match || match.availableCount === 0) {
-          onRoomSelect(null);
-          setSelectedRoomName('');
-        }
-      }
-    } catch (err) {
-      console.error('Error fetching room availability:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [dates, startTime, endTime, minCapacity, selectedRoomId, onRoomSelect]);
-
   useEffect(() => {
+    let ignore = false;
+
+    async function fetchAvailability() {
+      if (!startTime || !endTime || dates.length === 0) return;
+      setIsLoading(true);
+      try {
+        const result = await getRoomAvailabilityForDates(
+          dates,
+          startTime,
+          endTime,
+          minCapacity,
+        );
+        
+        if (ignore) return;
+        
+        setAvailability(result);
+
+        // If the selected room is now entirely unavailable (no free dates),
+        // deselect it. Keep it selected if it's partially available — the
+        // user explicitly chose 'allow publish with warning' behavior.
+        if (selectedRoomId) {
+          const match = result.find((r) => r.room.id === selectedRoomId);
+          if (!match || match.availableCount === 0) {
+            onRoomSelect(null);
+            setSelectedRoomName('');
+          }
+        }
+      } catch (err) {
+        if (!ignore) console.error('Error fetching room availability:', err);
+      } finally {
+        if (!ignore) setIsLoading(false);
+      }
+    }
+
     fetchAvailability();
-  }, [fetchAvailability]);
+
+    return () => {
+      ignore = true;
+    };
+  }, [dates, startTime, endTime, minCapacity, selectedRoomId, onRoomSelect]);
 
   // Keep the displayed room name in sync with `selectedRoomId`. Needed when
   // the parent prefills `selectedRoomId` from URL params (Room Calendar drag
