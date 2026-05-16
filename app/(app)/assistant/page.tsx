@@ -43,6 +43,7 @@ export default function AssistantPage() {
   const streamRef = useRef<MediaStream | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const autoStopRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingTranscriptRef = useRef<string | null>(null);
 
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -129,6 +130,7 @@ export default function AssistantPage() {
         const data = await res.json();
         if (data.transcript) {
           setInput(data.transcript.trim());
+          pendingTranscriptRef.current = data.transcript.trim();
         }
       } catch (err) {
         console.error('Transcription failed:', err);
@@ -251,6 +253,14 @@ export default function AssistantPage() {
       setIsLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!isTranscribing && pendingTranscriptRef.current) {
+      const text = pendingTranscriptRef.current;
+      pendingTranscriptRef.current = null;
+      handleSubmit(undefined, text);
+    }
+  }, [isTranscribing, handleSubmit]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {

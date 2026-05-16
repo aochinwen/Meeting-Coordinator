@@ -24,6 +24,8 @@ export const metadata: Metadata = {
 };
 
 
+
+
 export default async function RootLayout({
   children,
 }: Readonly<{
@@ -36,6 +38,7 @@ export default async function RootLayout({
       </head>
       <body className="h-full bg-board text-text-primary font-nunito flex flex-col">
         {children}
+
         <Analytics />
         <SpeedInsights />
       </body>

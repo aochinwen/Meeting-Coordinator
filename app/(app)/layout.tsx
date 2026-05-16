@@ -1,5 +1,6 @@
 import { Header } from "@/components/Header";
 import { Sidebar } from "@/components/Sidebar";
+import { AssistantButton } from "@/components/AssistantButton";
 
 export default function AppLayout({
   children,
@@ -15,6 +16,7 @@ export default function AppLayout({
           {children}
         </main>
       </div>
+      <AssistantButton />
     </>
   );
 }

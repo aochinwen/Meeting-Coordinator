@@ -73,7 +73,7 @@ export function DashboardChrome({
         </Link>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-6 shrink-0">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 shrink-0">
         <StatCard
           icon={<CalendarCheck2 className="h-5 w-5 text-primary" />}
           iconBg="bg-status-green-bg/30"
@@ -167,7 +167,7 @@ function StatCard({
   value: number;
 }) {
   return (
-    <div className="bg-surface border border-border/30 rounded-[24px] sm:rounded-3xl p-4 sm:p-6 flex sm:flex-col justify-between items-center sm:items-start sm:h-[178px]">
+    <div className="bg-surface border border-border/30 rounded-3xl p-4 sm:p-6 flex sm:flex-col justify-between items-center sm:items-start sm:h-[178px]">
       <div className="flex items-center gap-4 sm:flex-col sm:items-start sm:justify-between sm:w-full sm:h-full">
         <div className="flex items-center justify-between w-auto sm:w-full">
           <div className={`h-10 w-10 sm:h-11 sm:w-11 rounded-full flex items-center justify-center shrink-0 ${iconBg}`}>
