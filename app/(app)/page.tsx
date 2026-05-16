@@ -143,6 +143,13 @@ async function CalendarBranch({
     .gte('date', range.start)
     .lte('date', range.end);
 
+  if (params.statusFilter === 'cancelled') {
+    q = q.eq('status', 'cancelled');
+  } else if (params.statusFilter !== 'all') {
+    // Default: 'active'
+    q = q.neq('status', 'cancelled');
+  }
+
   if (resolvedFilters?.meetingIds) {
     q = q.in('id', Array.from(resolvedFilters.meetingIds));
   }
@@ -253,9 +260,15 @@ async function TasksListBranch({
 
   let q = supabase
     .from('meetings')
-    .select('id, title, date, meeting_checklist_tasks(id, description, is_completed, due_days_before)')
+    .select('id, title, date, status, meeting_checklist_tasks(id, description, is_completed, due_days_before)')
     .gte('date', start)
     .lte('date', end);
+
+  if (params.statusFilter === 'cancelled') {
+    q = q.eq('status', 'cancelled');
+  } else if (params.statusFilter !== 'all') {
+    q = q.neq('status', 'cancelled');
+  }
 
   if (resolvedFilters?.meetingIds) {
     q = q.in('id', Array.from(resolvedFilters.meetingIds));
@@ -332,6 +345,7 @@ type ChromeParams = {
   anchor: string;
   types: string;
   person: string;
+  statusFilter: string;
 };
 
 type ResolvedFilters = {
@@ -459,6 +473,12 @@ async function MeetingsListBranch({
     `, { count: 'exact' })
     .gte('date', start)
     .lte('date', end);
+
+  if (params.statusFilter === 'cancelled') {
+    q = q.eq('status', 'cancelled');
+  } else if (params.statusFilter !== 'all') {
+    q = q.neq('status', 'cancelled');
+  }
 
   if (resolvedFilters?.meetingIds) {
     q = q.in('id', Array.from(resolvedFilters.meetingIds));
@@ -678,6 +698,7 @@ async function DashboardContent({
   anchor,
   types,
   person,
+  statusFilter,
 }: {
   page: number;
   search: string;
@@ -689,6 +710,7 @@ async function DashboardContent({
   anchor: string;
   types: string;
   person: string;
+  statusFilter: string;
 }) {
   const supabase = await createClient();
   const [stats, { data: peopleRows }, resolvedFilters] = await Promise.all([
@@ -709,6 +731,7 @@ async function DashboardContent({
     anchor,
     types,
     person,
+    statusFilter,
   };
 
   // Build the "current" param record used by helper hrefs (omit defaults).
@@ -723,6 +746,7 @@ async function DashboardContent({
     anchor: view === 'calendar' ? anchor : undefined,
     types: types || undefined,
     person: person || undefined,
+    statusFilter: statusFilter && statusFilter !== 'active' ? statusFilter : undefined,
   };
 
   if (view === 'calendar') {
@@ -780,6 +804,7 @@ export default async function DashboardPage({
     anchor?: string;
     types?: string;
     person?: string;
+    statusFilter?: string;
   }>;
 }) {
   const sp = await searchParams;
@@ -794,6 +819,7 @@ export default async function DashboardPage({
   const anchor = clampAnchor(sp.anchor);
   const types = sp.types ?? '';
   const person = sp.person ?? '';
+  const statusFilter = sp.statusFilter ?? 'active';
 
   return (
     <Suspense fallback={<DashboardSkeleton />}>
@@ -808,6 +834,7 @@ export default async function DashboardPage({
         anchor={anchor}
         types={types}
         person={person}
+        statusFilter={statusFilter}
       />
     </Suspense>
   );

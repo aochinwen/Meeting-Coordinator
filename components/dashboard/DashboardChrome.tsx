@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { Plus, CalendarCheck2, Clock, Users } from 'lucide-react';
-import { FilterDropdown, SortDropdown } from '@/components/DropdownFilter';
+import { FilterDropdown, SortDropdown, StatusDropdown } from '@/components/DropdownFilter';
 import { ViewToggle } from './ViewToggle';
 import { TypeFilter, type SelectedTypes } from './TypeFilter';
 import { PersonFilter, type PersonFilterOption } from './PersonFilter';
@@ -40,6 +40,7 @@ export function DashboardChrome({
     anchor: string;
     types: string;
     person: string;
+    statusFilter: string;
   };
   selectedTypes: SelectedTypes;
   view: 'list' | 'calendar';
@@ -127,6 +128,8 @@ export function DashboardChrome({
               calView={params.calView}
               anchor={params.anchor}
               types={params.types}
+              person={params.person}
+              statusFilter={params.statusFilter}
             />
           )}
           {showSort && (
@@ -139,8 +142,22 @@ export function DashboardChrome({
               calView={params.calView}
               anchor={params.anchor}
               types={params.types}
+              person={params.person}
+              statusFilter={params.statusFilter}
             />
           )}
+          <StatusDropdown
+            search={params.search}
+            filter={params.filter}
+            sortBy={params.sortBy}
+            sortOrder={params.sortOrder}
+            view={params.view}
+            calView={params.calView}
+            anchor={params.anchor}
+            types={params.types}
+            person={params.person}
+            statusFilter={params.statusFilter}
+          />
         </div>
       </div>
 

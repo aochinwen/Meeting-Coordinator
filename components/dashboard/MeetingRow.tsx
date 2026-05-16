@@ -44,8 +44,8 @@ function useLiveStatus(meeting: FormattedMeeting) {
 
   useEffect(() => {
     const calculateStatus = () => {
-      if (meeting.status === 'cancelled') return 'Cancelled';
-      if (meeting.status === 'completed') return 'Completed';
+      if (meeting.status?.toLowerCase() === 'cancelled') return 'Cancelled';
+      if (meeting.status?.toLowerCase() === 'completed') return 'Completed';
 
       const now = new Date();
       const localToday = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;

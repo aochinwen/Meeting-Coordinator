@@ -436,6 +436,132 @@ export async function updateSeriesPattern(
 }
 
 /**
+ * Helper to release room bookings for a set of meeting IDs
+ */
+async function releaseRoomBookings(meetingIds: string[]): Promise<void> {
+  if (meetingIds.length === 0) return;
+  const supabase = createClient();
+  const { error } = await supabase
+    .from('room_bookings')
+    .update({ status: 'cancelled', updated_at: new Date().toISOString() })
+    .in('meeting_id', meetingIds);
+    
+  if (error) {
+    console.error('Error releasing room bookings:', error);
+  }
+}
+
+/**
+ * Cancel a single meeting occurrence
+ */
+export async function cancelMeetingOccurrence(meetingId: string, currentUserId?: string): Promise<void> {
+  const supabase = createClient();
+  
+  const { error } = await supabase
+    .from('meetings')
+    .update({ status: 'cancelled', updated_at: new Date().toISOString() })
+    .eq('id', meetingId);
+  
+  if (error) {
+    console.error('Error cancelling meeting:', error);
+    throw error;
+  }
+  
+  await releaseRoomBookings([meetingId]);
+  
+  await supabase.from('meeting_activities').insert({
+    meeting_id: meetingId,
+    user_id: currentUserId || null,
+    activity_type: 'meeting_cancelled',
+    content: 'cancelled the meeting',
+  });
+}
+
+/**
+ * Cancel a meeting series and all its future instances from a specific date forward
+ */
+export async function cancelSeriesFromDate(seriesId: string, fromDate: Date, currentUserId?: string): Promise<void> {
+  const supabase = createClient();
+  const dateStr = format(fromDate, 'yyyy-MM-dd');
+  
+  // Update series end date so no more are generated
+  const prevDate = new Date(fromDate);
+  prevDate.setDate(prevDate.getDate() - 1);
+  await supabase
+    .from('meeting_series')
+    .update({ end_date: format(prevDate, 'yyyy-MM-dd'), updated_at: new Date().toISOString() })
+    .eq('id', seriesId);
+
+  // Find all future meetings
+  const { data: meetingsToCancel } = await supabase
+    .from('meetings')
+    .select('id')
+    .eq('series_id', seriesId)
+    .gte('date', dateStr)
+    .neq('status', 'cancelled');
+    
+  if (!meetingsToCancel || meetingsToCancel.length === 0) return;
+  const meetingIds = meetingsToCancel.map(m => m.id);
+  
+  // Update statuses
+  const { error: updateError } = await supabase
+    .from('meetings')
+    .update({ status: 'cancelled', updated_at: new Date().toISOString() })
+    .in('id', meetingIds);
+    
+  if (updateError) {
+    console.error('Error cancelling future meetings:', updateError);
+    throw updateError;
+  }
+  
+  await releaseRoomBookings(meetingIds);
+  
+  const activities = meetingIds.map(id => ({
+    meeting_id: id,
+    user_id: currentUserId || null,
+    activity_type: 'meeting_cancelled',
+    content: 'cancelled the meeting',
+  }));
+  await supabase.from('meeting_activities').insert(activities);
+}
+
+/**
+ * Cancel a meeting series and all its instances
+ */
+export async function cancelMeetingSeries(seriesId: string, currentUserId?: string): Promise<void> {
+  const supabase = createClient();
+  
+  const { data: meetingsToCancel } = await supabase
+    .from('meetings')
+    .select('id')
+    .eq('series_id', seriesId)
+    .neq('status', 'cancelled');
+    
+  if (!meetingsToCancel || meetingsToCancel.length === 0) return;
+  const meetingIds = meetingsToCancel.map(m => m.id);
+  
+  const { error: updateError } = await supabase
+    .from('meetings')
+    .update({ status: 'cancelled', updated_at: new Date().toISOString() })
+    .in('id', meetingIds);
+    
+  if (updateError) {
+    console.error('Error cancelling meeting series:', updateError);
+    throw updateError;
+  }
+  
+  await releaseRoomBookings(meetingIds);
+  
+  const activities = meetingIds.map(id => ({
+    meeting_id: id,
+    user_id: currentUserId || null,
+    activity_type: 'meeting_cancelled',
+    content: 'cancelled the meeting',
+  }));
+  await supabase.from('meeting_activities').insert(activities);
+}
+
+/**
  * Delete a single meeting occurrence
  */
 export async function deleteMeetingOccurrence(meetingId: string): Promise<void> {

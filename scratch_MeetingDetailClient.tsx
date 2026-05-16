@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useMemo, memo } from 'react';
 import {
   ChevronRight, Calendar, Clock, Users, MapPin, FileText,
   CheckCircle2, MessageSquare, Plus, Check, Edit, Trash2,
-  Mail, Copy, ExternalLink, MoreHorizontal, ArrowLeft, X
+  Mail, Copy, ExternalLink, MoreHorizontal, ArrowLeft
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { User } from '@supabase/supabase-js';
@@ -12,7 +12,6 @@ import { createClient } from '@/utils/supabase/client';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { DeleteMeetingModal } from './DeleteMeetingModal';
-import { CancelMeetingModal } from './CancelMeetingModal';
 import { AddParticipantsModal } from './AddParticipantsModal';
 import { EditMeetingVenueModal } from './EditMeetingVenueModal';
 import { EditMeetingModal } from '@/components/EditMeetingModal';
@@ -122,7 +121,6 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
   const [isAddingParticipants, setIsAddingParticipants] = useState(false);
   const [isEditVenueOpen, setIsEditVenueOpen] = useState(false);
   const [isEditMeetingOpen, setIsEditMeetingOpen] = useState(false);
-  const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
   const [highlightedTaskId, setHighlightedTaskId] = useState<string | null>(null);
   const [people, setPeople] = useState<PersonOption[]>(() => {
     // Hydrate from initialData.profileMap so the assignee picker works
@@ -587,8 +585,6 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
     }
   }, []);
 
-  const isCancelled = meeting?.status === 'cancelled';
-
   return (
     <div className="max-w-[1280px] mx-auto pb-24 flex flex-col pt-6 sm:pt-8 space-y-6 sm:space-y-8 px-4 sm:px-6 lg:px-8">
       {/* Header */}
@@ -617,36 +613,14 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
             </button>
 
 
-            {!isCancelled && (
-              <>
-                <button
-                  onClick={() => setIsEditMeetingOpen(true)}
-                  title="Edit Meeting"
-                  className="h-9 w-9 sm:h-auto sm:w-auto sm:px-4 sm:py-2 bg-board border border-border text-text-primary rounded-full text-sm font-medium transition-all active:scale-95 hover:bg-surface flex items-center justify-center sm:gap-2"
-                >
-                  <Edit className="h-4 w-4" />
-                  <span className="hidden sm:inline">Edit</span>
-                </button>
-                <button
-                  onClick={() => setIsCancelModalOpen(true)}
-                  title="Cancel Meeting"
-                  className="h-9 w-9 sm:h-auto sm:w-auto sm:px-4 sm:py-2 bg-amber/10 text-status-amber border border-status-amber/30 rounded-full text-sm font-medium transition-all active:scale-95 hover:bg-status-amber/10 flex items-center justify-center sm:gap-2"
-                >
-                  <X className="h-4 w-4" />
-                  <span className="hidden sm:inline">Cancel</span>
-                </button>
-              </>
-            )}
-            {isCancelled && (
-              <button
-                onClick={() => setIsEditMeetingOpen(true)}
-                title="Restore Meeting"
-                className="h-9 w-9 sm:h-auto sm:w-auto sm:px-4 sm:py-2 bg-board border border-border text-text-primary rounded-full text-sm font-medium transition-all active:scale-95 hover:bg-surface flex items-center justify-center sm:gap-2"
-              >
-                <Edit className="h-4 w-4" />
-                <span className="hidden sm:inline">Restore</span>
-              </button>
-            )}
+            <button
+              onClick={() => setIsEditMeetingOpen(true)}
+              title="Edit Meeting"
+              className="h-9 w-9 sm:h-auto sm:w-auto sm:px-4 sm:py-2 bg-board border border-border text-text-primary rounded-full text-sm font-medium transition-all active:scale-95 hover:bg-surface flex items-center justify-center sm:gap-2"
+            >
+              <Edit className="h-4 w-4" />
+              <span className="hidden sm:inline">Edit</span>
+            </button>
 
             <button
               onClick={() => setIsDeleteModalOpen(true)}
@@ -661,13 +635,7 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
 
         {/* Title & description */}
         <div className="flex flex-col gap-2">
-          {isCancelled && (
-            <div className="inline-flex items-center self-start gap-1.5 px-2.5 py-1 rounded-full bg-status-amber/10 border border-status-amber/20 text-status-amber text-xs font-bold uppercase tracking-wider mb-1">
-              <X className="h-3.5 w-3.5" />
-              Cancelled
-            </div>
-          )}
-          <h1 className={cn("text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight font-literata leading-tight", isCancelled ? "text-text-tertiary line-through" : "text-text-primary")}>
+          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight text-text-primary font-literata leading-tight">
             {meeting.title}
           </h1>
           {meeting.description && (
@@ -789,13 +757,12 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
                     className={cn(
                       "p-6 flex gap-4 transition-colors border-b last:border-b-0 border-border/10",
                       task.is_completed ? "bg-white/30" : "bg-transparent",
-                      highlightedTaskId === task.id && "ring-2 ring-primary/40 ring-offset-2 ring-offset-white bg-status-green-bg/40",
-                      isCancelled && "opacity-70 pointer-events-none"
+                      highlightedTaskId === task.id && "ring-2 ring-primary/40 ring-offset-2 ring-offset-white bg-status-green-bg/40"
                     )}
                   >
                     <div
                       className="pt-0.5 shrink-0 cursor-pointer"
-                      onClick={() => !isCancelled && toggleTask(task.id, task.is_completed)}
+                      onClick={() => toggleTask(task.id, task.is_completed)}
                     >
                       <div className={cn(
                         "w-6 h-6 rounded-md border-2 flex items-center justify-center transition-all",
@@ -956,46 +923,44 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
               )}
             </div>
 
-            {!isCancelled && (
-              <div className="p-4 bg-status-grey-bg/20 border-t border-border/20">
-                <div className="flex flex-col gap-2">
-                  <div className="bg-white border border-border/50 rounded-full flex items-center gap-3 px-4 py-2 w-full">
-                    <Plus className="h-4 w-4 text-text-tertiary shrink-0" />
-                    <input
-                      type="text"
-                      placeholder="Add a new action item..."
-                      className="flex-1 bg-transparent border-none focus:outline-none text-sm font-normal text-text-secondary placeholder:text-text-tertiary"
-                      value={newTaskInput}
-                      onChange={(e) => setNewTaskInput(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && addTask()}
-                    />
-                    <button
-                      onClick={addTask}
-                      disabled={!newTaskInput.trim()}
-                      className="px-3 py-1 font-bold text-xs text-primary transition-all hover:bg-primary/10 rounded-full disabled:opacity-50"
-                    >
-                      SAVE
-                    </button>
-                  </div>
-                  <div className="flex items-center gap-2 px-2">
-                    <Calendar className="h-3.5 w-3.5 text-text-tertiary" />
-                    <span className="text-xs text-text-tertiary">Due date:</span>
-                    <input
-                      type="date"
-                      value={newTaskDueDate}
-                      onChange={(e) => setNewTaskDueDate(e.target.value)}
-                      className="text-xs bg-transparent border-none focus:outline-none text-text-secondary cursor-pointer"
-                      title="Select due date (will be stored as days before meeting)"
-                    />
-                    {newTaskDueDate && meeting && (
-                      <span className="text-xs text-text-tertiary">
-                        ({calculateDueDaysBefore(newTaskDueDate, meeting.date)} days before)
-                      </span>
-                    )}
-                  </div>
+            <div className="p-4 bg-status-grey-bg/20 border-t border-border/20">
+              <div className="flex flex-col gap-2">
+                <div className="bg-white border border-border/50 rounded-full flex items-center gap-3 px-4 py-2 w-full">
+                  <Plus className="h-4 w-4 text-text-tertiary shrink-0" />
+                  <input
+                    type="text"
+                    placeholder="Add a new action item..."
+                    className="flex-1 bg-transparent border-none focus:outline-none text-sm font-normal text-text-secondary placeholder:text-text-tertiary"
+                    value={newTaskInput}
+                    onChange={(e) => setNewTaskInput(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && addTask()}
+                  />
+                  <button
+                    onClick={addTask}
+                    disabled={!newTaskInput.trim()}
+                    className="px-3 py-1 font-bold text-xs text-primary transition-all hover:bg-primary/10 rounded-full disabled:opacity-50"
+                  >
+                    SAVE
+                  </button>
+                </div>
+                <div className="flex items-center gap-2 px-2">
+                  <Calendar className="h-3.5 w-3.5 text-text-tertiary" />
+                  <span className="text-xs text-text-tertiary">Due date:</span>
+                  <input
+                    type="date"
+                    value={newTaskDueDate}
+                    onChange={(e) => setNewTaskDueDate(e.target.value)}
+                    className="text-xs bg-transparent border-none focus:outline-none text-text-secondary cursor-pointer"
+                    title="Select due date (will be stored as days before meeting)"
+                  />
+                  {newTaskDueDate && meeting && (
+                    <span className="text-xs text-text-tertiary">
+                      ({calculateDueDaysBefore(newTaskDueDate, meeting.date)} days before)
+                    </span>
+                  )}
                 </div>
               </div>
-            )}
+            </div>
           </div>
 
           {/* Participants */}
@@ -1270,24 +1235,6 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
             } catch (err) {
               console.error('Error refreshing meeting data:', err);
             }
-          }}
-        />
-      )}
-
-      {/* Cancel Meeting Modal */}
-      {meeting && (
-        <CancelMeetingModal
-          isOpen={isCancelModalOpen}
-          onClose={() => setIsCancelModalOpen(false)}
-          meetingId={meeting.id}
-          seriesId={meeting.series_id}
-          meetingDate={meeting.date}
-          meetingTitle={meeting.title}
-          currentUser={currentUser}
-          onSuccess={() => {
-            fetchMeeting();
-            fetchRoomBooking();
-            fetchActivitiesWithMap(profileMapRef.current);
           }}
         />
       )}
