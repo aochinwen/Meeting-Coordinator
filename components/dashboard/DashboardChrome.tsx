@@ -7,6 +7,7 @@ import { FilterDropdown, SortDropdown, StatusDropdown } from '@/components/Dropd
 import { ViewToggle } from './ViewToggle';
 import { TypeFilter, type SelectedTypes } from './TypeFilter';
 import { PersonFilter, type PersonFilterOption } from './PersonFilter';
+import { RoomFilter, type RoomFilterOption } from './RoomFilter';
 import { SearchForm } from './SearchForm';
 import { LoadingScrim } from './LoadingScrim';
 import type { DashboardParams } from './url';
@@ -25,6 +26,8 @@ export function DashboardChrome({
   stats,
   people,
   selectedPersonId,
+  rooms,
+  selectedRoomId,
   showDateFilter = true,
   showSort = true,
   children,
@@ -40,6 +43,7 @@ export function DashboardChrome({
     anchor: string;
     types: string;
     person: string;
+    room: string;
     statusFilter: string;
   };
   selectedTypes: SelectedTypes;
@@ -47,6 +51,8 @@ export function DashboardChrome({
   stats: ChromeStats;
   people: PersonFilterOption[];
   selectedPersonId: string | null;
+  rooms: RoomFilterOption[];
+  selectedRoomId: string | null;
   showDateFilter?: boolean;
   showSort?: boolean;
   children: React.ReactNode;
@@ -118,6 +124,7 @@ export function DashboardChrome({
         <div className="grid grid-cols-2 sm:flex gap-2 shrink-0 w-full sm:w-auto sm:self-end">
           <TypeFilter current={current} selected={selectedTypes} />
           <PersonFilter current={current} people={people} selectedId={selectedPersonId} />
+          <RoomFilter current={current} rooms={rooms} selectedId={selectedRoomId} />
           {showDateFilter && (
             <FilterDropdown
               search={params.search}
@@ -129,6 +136,7 @@ export function DashboardChrome({
               anchor={params.anchor}
               types={params.types}
               person={params.person}
+              room={params.room}
               statusFilter={params.statusFilter}
             />
           )}
@@ -143,6 +151,7 @@ export function DashboardChrome({
               anchor={params.anchor}
               types={params.types}
               person={params.person}
+              room={params.room}
               statusFilter={params.statusFilter}
             />
           )}
@@ -156,6 +165,7 @@ export function DashboardChrome({
             anchor={params.anchor}
             types={params.types}
             person={params.person}
+            room={params.room}
             statusFilter={params.statusFilter}
           />
         </div>

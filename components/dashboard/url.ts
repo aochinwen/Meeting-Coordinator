@@ -11,6 +11,7 @@ export type DashboardParams = {
   anchor?: string;
   types?: string;
   person?: string;
+  room?: string;
   statusFilter?: string;
 };
 

@@ -3,7 +3,7 @@ import { Suspense } from 'react';
 import { ChevronRight, Video, Target, User, Repeat } from 'lucide-react';
 import { cn, generatePagination } from '@/lib/utils';
 import Link from 'next/link';
-import { DashboardSkeleton } from '@/components/ui/loading-skeleton';
+import { DashboardSkeleton, DashboardContentSkeleton } from '@/components/ui/loading-skeleton';
 import { DashboardChrome, type ChromeStats } from '@/components/dashboard/DashboardChrome';
 import { parseTypes, type SelectedTypes } from '@/components/dashboard/types';
 import { CalendarContainer } from '@/components/dashboard/CalendarContainer';
@@ -119,22 +119,17 @@ async function CalendarBranch({
   current,
   params,
   selectedTypes,
-  stats,
-  people,
   mode,
   anchor,
-  resolvedFilters,
 }: {
   current: DashboardParams;
   params: ChromeParams;
   selectedTypes: SelectedTypes;
-  stats: ChromeStats;
-  people: { id: string; name: string }[];
   mode: CalendarMode;
   anchor: string;
-  resolvedFilters: ResolvedFilters | null;
 }) {
   const supabase = await createClient();
+  const resolvedFilters = await resolveDashboardFilters(supabase, params.person, params.search);
   const range = visibleRange(mode, anchor);
 
   let q = supabase
@@ -150,11 +145,15 @@ async function CalendarBranch({
     q = q.neq('status', 'cancelled');
   }
 
+  if (params.room) {
+    q = q.eq('room_id', params.room);
+  }
+
   if (resolvedFilters?.meetingIds) {
     q = q.in('id', Array.from(resolvedFilters.meetingIds));
   }
 
-  q = q.order('date', { ascending: true });
+  q = q.order('date', { ascending: true }).order('start_time', { ascending: true, nullsFirst: false });
 
   const { data: meetings } = await q;
   const events: CalendarEvent[] = [];
@@ -218,21 +217,9 @@ async function CalendarBranch({
   }
 
   return (
-    <DashboardChrome
-      current={current}
-      params={params}
-      selectedTypes={selectedTypes}
-      view="calendar"
-      stats={stats}
-      people={people}
-      selectedPersonId={params.person || null}
-      showDateFilter={false}
-      showSort={false}
-    >
-      <CalendarContainer current={current} mode={mode} anchor={anchor}>
-        <CalendarGrid current={current} mode={mode} anchor={anchor} events={events} />
-      </CalendarContainer>
-    </DashboardChrome>
+    <CalendarContainer current={current} mode={mode} anchor={anchor}>
+      <CalendarGrid current={current} mode={mode} anchor={anchor} events={events} />
+    </CalendarContainer>
   );
 }
 
@@ -241,21 +228,14 @@ async function CalendarBranch({
 /* -------------------------------------------------------------------------- */
 
 async function TasksListBranch({
-  current,
   params,
   selectedTypes,
-  stats,
-  people,
-  resolvedFilters,
 }: {
-  current: DashboardParams;
   params: ChromeParams;
   selectedTypes: SelectedTypes;
-  stats: ChromeStats;
-  people: { id: string; name: string }[];
-  resolvedFilters: ResolvedFilters | null;
 }) {
   const supabase = await createClient();
+  const resolvedFilters = await resolveDashboardFilters(supabase, params.person, params.search);
   const { start, end } = rangeFromFilter(params.filter);
 
   let q = supabase
@@ -270,11 +250,15 @@ async function TasksListBranch({
     q = q.neq('status', 'cancelled');
   }
 
+  if (params.room) {
+    q = q.eq('room_id', params.room);
+  }
+
   if (resolvedFilters?.meetingIds) {
     q = q.in('id', Array.from(resolvedFilters.meetingIds));
   }
 
-  q = q.order('date', { ascending: true });
+  q = q.order('date', { ascending: true }).order('start_time', { ascending: true, nullsFirst: false });
 
   const { data: meetings } = await q;
 
@@ -316,19 +300,7 @@ async function TasksListBranch({
     items.sort((a, b) => (sortAsc ? a.dueDate.localeCompare(b.dueDate) : b.dueDate.localeCompare(a.dueDate)));
   }
 
-  return (
-    <DashboardChrome
-      current={current}
-      params={params}
-      selectedTypes={selectedTypes}
-      view="list"
-      stats={stats}
-      people={people}
-      selectedPersonId={params.person || null}
-    >
-      <TasksList tasks={items} />
-    </DashboardChrome>
-  );
+  return <TasksList tasks={items} />;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -345,6 +317,7 @@ type ChromeParams = {
   anchor: string;
   types: string;
   person: string;
+  room: string;
   statusFilter: string;
 };
 
@@ -444,20 +417,15 @@ async function MeetingsListBranch({
   current,
   params,
   selectedTypes,
-  stats,
-  people,
   page,
-  resolvedFilters,
 }: {
   current: DashboardParams;
   params: ChromeParams;
   selectedTypes: SelectedTypes;
-  stats: ChromeStats;
-  people: { id: string; name: string }[];
   page: number;
-  resolvedFilters: ResolvedFilters | null;
 }) {
   const supabase = await createClient();
+  const resolvedFilters = await resolveDashboardFilters(supabase, params.person, params.search);
   const { start, end } = rangeFromFilter(params.filter);
   const from = (page - 1) * PAGE_SIZE;
   const to = from + PAGE_SIZE - 1;
@@ -480,15 +448,23 @@ async function MeetingsListBranch({
     q = q.neq('status', 'cancelled');
   }
 
+  if (params.room) {
+    q = q.eq('room_id', params.room);
+  }
+
   if (resolvedFilters?.meetingIds) {
     q = q.in('id', Array.from(resolvedFilters.meetingIds));
   }
   const validSortColumns = ['date', 'title', 'status'];
   const sortColumn = validSortColumns.includes(params.sortBy) ? params.sortBy : 'date';
   q = q.order(sortColumn, { ascending: params.sortOrder === 'asc' });
+  if (sortColumn === 'date') {
+    q = q.order('start_time', { ascending: params.sortOrder === 'asc', nullsFirst: false });
+  }
 
-  const [{ data: meetingsData, count: meetingsCount }] = await Promise.all([
+  const [{ data: meetingsData, count: meetingsCount }, { data: peopleRows }] = await Promise.all([
     q.range(from, to),
+    supabase.from('people').select('id, name'),
   ]);
 
   const totalMeetings = meetingsCount || 0;
@@ -496,7 +472,7 @@ async function MeetingsListBranch({
   const currentPage = Math.min(Math.max(1, page), totalPages);
 
   const profileMap = new Map<string, string>();
-  people?.forEach((p) => profileMap.set(p.id, p.name));
+  (peopleRows ?? []).forEach((p) => profileMap.set(p.id, p.name));
 
   const meetings = (meetingsData as unknown as MeetingWithRelations[]) || [];
   const rangeStart = totalMeetings === 0 ? 0 : from + 1;
@@ -579,15 +555,7 @@ async function MeetingsListBranch({
   const pageHref = (p: number) => buildDashboardHref(current, { page: p });
 
   return (
-    <DashboardChrome
-      current={current}
-      params={params}
-      selectedTypes={selectedTypes}
-      view="list"
-      stats={stats}
-      people={people}
-      selectedPersonId={params.person || null}
-    >
+    <>
       <div className="bg-white rounded-[24px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] border border-[rgba(196,200,188,0.2)] overflow-hidden hidden md:block">
         <div className="grid grid-cols-12 gap-4 px-6 py-4 bg-[rgba(234,230,222,0.5)] border-b border-[rgba(196,200,188,0.2)] text-xs tracking-[1.2px] uppercase text-text-secondary font-light shrink-0">
           <div className="col-span-3">Meeting Details</div>
@@ -679,7 +647,7 @@ async function MeetingsListBranch({
           )}
         </div>
       </div>
-    </DashboardChrome>
+    </>
   );
 }
 
@@ -698,6 +666,7 @@ async function DashboardContent({
   anchor,
   types,
   person,
+  room,
   statusFilter,
 }: {
   page: number;
@@ -710,15 +679,17 @@ async function DashboardContent({
   anchor: string;
   types: string;
   person: string;
+  room: string;
   statusFilter: string;
 }) {
   const supabase = await createClient();
-  const [stats, { data: peopleRows }, resolvedFilters] = await Promise.all([
+  const [stats, { data: peopleRows }, { data: roomRows }] = await Promise.all([
     fetchStats(supabase),
     supabase.from('people').select('id, name').order('name', { ascending: true }),
-    resolveDashboardFilters(supabase, person, search),
+    supabase.from('rooms').select('id, name').order('name', { ascending: true }),
   ]);
   const people = peopleRows || [];
+  const rooms = roomRows || [];
   const selectedTypes = parseTypes(types);
 
   const params: ChromeParams = {
@@ -731,6 +702,7 @@ async function DashboardContent({
     anchor,
     types,
     person,
+    room,
     statusFilter,
   };
 
@@ -746,47 +718,60 @@ async function DashboardContent({
     anchor: view === 'calendar' ? anchor : undefined,
     types: types || undefined,
     person: person || undefined,
+    room: room || undefined,
     statusFilter: statusFilter && statusFilter !== 'active' ? statusFilter : undefined,
   };
 
-  if (view === 'calendar') {
-    return (
+  const isCalendar = view === 'calendar';
+  const isTasksOnly = selectedTypes.tasks && !selectedTypes.meetings;
+
+  let branchContent: React.ReactNode;
+  if (isCalendar) {
+    branchContent = (
       <CalendarBranch
         current={current}
         params={params}
         selectedTypes={selectedTypes}
-        stats={stats}
-        people={people}
         mode={calView}
         anchor={anchor}
-        resolvedFilters={resolvedFilters}
       />
     );
-  }
-
-  if (selectedTypes.tasks && !selectedTypes.meetings) {
-    return (
+  } else if (isTasksOnly) {
+    branchContent = (
       <TasksListBranch
+        params={params}
+        selectedTypes={selectedTypes}
+      />
+    );
+  } else {
+    branchContent = (
+      <MeetingsListBranch
         current={current}
         params={params}
         selectedTypes={selectedTypes}
-        stats={stats}
-        people={people}
-        resolvedFilters={resolvedFilters}
+        page={page}
       />
     );
   }
 
   return (
-    <MeetingsListBranch
+    <DashboardChrome
       current={current}
       params={params}
       selectedTypes={selectedTypes}
+      view={isCalendar ? 'calendar' : 'list'}
       stats={stats}
       people={people}
-      page={page}
-      resolvedFilters={resolvedFilters}
-    />
+      selectedPersonId={person || null}
+      rooms={rooms}
+      selectedRoomId={room || null}
+      showDateFilter={!isCalendar}
+      showSort={!isCalendar}
+    >
+      <Suspense fallback={<DashboardContentSkeleton />}>
+        {branchContent}
+      </Suspense>
+    </DashboardChrome>
   );
 }
 
@@ -804,6 +789,7 @@ export default async function DashboardPage({
     anchor?: string;
     types?: string;
     person?: string;
+    room?: string;
     statusFilter?: string;
   }>;
 }) {
@@ -819,6 +805,7 @@ export default async function DashboardPage({
   const anchor = clampAnchor(sp.anchor);
   const types = sp.types ?? '';
   const person = sp.person ?? '';
+  const room = sp.room ?? '';
   const statusFilter = sp.statusFilter ?? 'active';
 
   return (
@@ -834,6 +821,7 @@ export default async function DashboardPage({
         anchor={anchor}
         types={types}
         person={person}
+        room={room}
         statusFilter={statusFilter}
       />
     </Suspense>

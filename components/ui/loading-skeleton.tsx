@@ -125,6 +125,63 @@ export function DashboardSkeleton() {
   );
 }
 
+// Dashboard content-area-only skeleton (chrome already visible)
+export function DashboardContentSkeleton() {
+  return (
+    <>
+      <div className="bg-white rounded-[24px] shadow-sm border border-border overflow-hidden hidden md:flex flex-col">
+        <div className="grid grid-cols-12 gap-4 px-6 py-4 bg-surface/50 border-b border-border">
+          {[...Array(5)].map((_, i) => (
+            <Skeleton key={i} className="h-4 col-span-2" />
+          ))}
+        </div>
+        <div className="divide-y divide-border/10">
+          {[...Array(5)].map((_, i) => (
+            <div key={i} className="grid grid-cols-12 gap-4 px-6 py-6 items-center">
+              <div className="col-span-4 flex items-center gap-4">
+                <Skeleton className="h-12 w-12 rounded-full" />
+                <div className="flex flex-col gap-2">
+                  <Skeleton className="h-5 w-48" />
+                  <Skeleton className="h-3 w-32" />
+                </div>
+              </div>
+              <Skeleton className="h-4 col-span-2" />
+              <Skeleton className="h-8 col-span-2 w-24 rounded-full" />
+              <Skeleton className="h-4 col-span-2" />
+              <Skeleton className="h-6 col-span-2 w-20 rounded-full" />
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="md:hidden flex flex-col gap-3">
+        {[...Array(3)].map((_, i) => (
+          <div key={i} className="bg-white border border-border/30 rounded-2xl p-4 space-y-3">
+            <div className="flex items-start gap-3">
+              <Skeleton className="h-10 w-10 rounded-full shrink-0" />
+              <div className="flex-1 space-y-2">
+                <Skeleton className="h-4 w-3/4" />
+                <Skeleton className="h-3 w-full" />
+              </div>
+            </div>
+            <div className="flex items-center justify-between">
+              <Skeleton className="h-8 w-24 rounded-full" />
+              <Skeleton className="h-6 w-20 rounded-full" />
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="flex flex-col gap-3 sm:gap-0 sm:flex-row sm:items-center sm:justify-between pt-2 shrink-0">
+        <Skeleton className="h-4 w-40" />
+        <div className="flex items-center gap-2">
+          {[...Array(5)].map((_, i) => (
+            <Skeleton key={i} className="h-10 w-10 rounded-2xl" />
+          ))}
+        </div>
+      </div>
+    </>
+  );
+}
+
 // Directory page loading skeleton
 export function DirectorySkeleton() {
   return (

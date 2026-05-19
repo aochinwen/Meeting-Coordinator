@@ -14,23 +14,25 @@ interface FilterDropdownProps {
   anchor?: string;
   types?: string;
   person?: string;
+  room?: string;
   statusFilter?: string;
 }
 
-function extraQs(view?: string, calView?: string, anchor?: string, types?: string, person?: string, statusFilter?: string) {
+function extraQs(view?: string, calView?: string, anchor?: string, types?: string, person?: string, room?: string, statusFilter?: string) {
   const usp = new URLSearchParams();
   if (view) usp.set('view', view);
   if (calView) usp.set('calView', calView);
   if (anchor) usp.set('anchor', anchor);
   if (types) usp.set('types', types);
   if (person) usp.set('person', person);
+  if (room) usp.set('room', room);
   if (statusFilter) usp.set('statusFilter', statusFilter);
   const s = usp.toString();
   return s ? `&${s}` : '';
 }
 
-export function FilterDropdown({ search, filter, sortBy, sortOrder, view, calView, anchor, types, person, statusFilter }: FilterDropdownProps) {
-  const extra = extraQs(view, calView, anchor, types, person, statusFilter);
+export function FilterDropdown({ search, filter, sortBy, sortOrder, view, calView, anchor, types, person, room, statusFilter }: FilterDropdownProps) {
+  const extra = extraQs(view, calView, anchor, types, person, room, statusFilter);
   const [isOpen, setIsOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -89,8 +91,8 @@ export function FilterDropdown({ search, filter, sortBy, sortOrder, view, calVie
   );
 }
 
-export function SortDropdown({ search, filter, sortBy, sortOrder, view, calView, anchor, types, person, statusFilter }: FilterDropdownProps) {
-  const extra = extraQs(view, calView, anchor, types, person, statusFilter);
+export function SortDropdown({ search, filter, sortBy, sortOrder, view, calView, anchor, types, person, room, statusFilter }: FilterDropdownProps) {
+  const extra = extraQs(view, calView, anchor, types, person, room, statusFilter);
   const [isOpen, setIsOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -149,8 +151,8 @@ export function SortDropdown({ search, filter, sortBy, sortOrder, view, calView,
   );
 }
 
-export function StatusDropdown({ search, filter, sortBy, sortOrder, view, calView, anchor, types, person, statusFilter }: FilterDropdownProps) {
-  const extra = extraQs(view, calView, anchor, types, person, statusFilter);
+export function StatusDropdown({ search, filter, sortBy, sortOrder, view, calView, anchor, types, person, room, statusFilter }: FilterDropdownProps) {
+  const extra = extraQs(view, calView, anchor, types, person, room, statusFilter);
   const [isOpen, setIsOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -180,21 +182,21 @@ export function StatusDropdown({ search, filter, sortBy, sortOrder, view, calVie
       {isOpen && (
         <div className="absolute top-full right-0 mt-2 w-48 bg-white rounded-2xl shadow-lg border border-border/30 py-2 z-20">
           <Link
-            href={`/?search=${encodeURIComponent(search)}&filter=${filter}&sortBy=${sortBy}&sortOrder=${sortOrder}${extraQs(view, calView, anchor, types, person, 'active')}`}
+            href={`/?search=${encodeURIComponent(search)}&filter=${filter}&sortBy=${sortBy}&sortOrder=${sortOrder}${extraQs(view, calView, anchor, types, person, room, 'active')}`}
             onClick={() => setIsOpen(false)}
             className={`block px-4 py-2 text-sm font-light hover:bg-board/50 ${currentStatus === 'active' ? 'text-primary font-medium' : 'text-text-secondary'}`}
           >
             Active (Default)
           </Link>
           <Link
-            href={`/?search=${encodeURIComponent(search)}&filter=${filter}&sortBy=${sortBy}&sortOrder=${sortOrder}${extraQs(view, calView, anchor, types, person, 'cancelled')}`}
+            href={`/?search=${encodeURIComponent(search)}&filter=${filter}&sortBy=${sortBy}&sortOrder=${sortOrder}${extraQs(view, calView, anchor, types, person, room, 'cancelled')}`}
             onClick={() => setIsOpen(false)}
             className={`block px-4 py-2 text-sm font-light hover:bg-board/50 ${currentStatus === 'cancelled' ? 'text-primary font-medium' : 'text-text-secondary'}`}
           >
             Cancelled
           </Link>
           <Link
-            href={`/?search=${encodeURIComponent(search)}&filter=${filter}&sortBy=${sortBy}&sortOrder=${sortOrder}${extraQs(view, calView, anchor, types, person, 'all')}`}
+            href={`/?search=${encodeURIComponent(search)}&filter=${filter}&sortBy=${sortBy}&sortOrder=${sortOrder}${extraQs(view, calView, anchor, types, person, room, 'all')}`}
             onClick={() => setIsOpen(false)}
             className={`block px-4 py-2 text-sm font-light hover:bg-board/50 ${currentStatus === 'all' ? 'text-primary font-medium' : 'text-text-secondary'}`}
           >

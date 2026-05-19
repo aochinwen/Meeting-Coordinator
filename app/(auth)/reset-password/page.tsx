@@ -1,6 +1,6 @@
 'use client';
 
-import { useActionState, useState } from 'react';
+import { Suspense, useActionState, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { resetPassword } from '@/app/actions/auth';
 import { Loader2, Lock, CheckCircle2, ArrowRight } from 'lucide-react';
@@ -54,8 +54,6 @@ function PasswordInput({
     </div>
   );
 }
-
-import { Suspense } from 'react';
 
 function ResetPasswordContent() {
   const searchParams = useSearchParams();

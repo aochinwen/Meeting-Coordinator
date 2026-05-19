@@ -1,7 +1,8 @@
 'use client';
 
 import { logout } from '@/app/actions/auth';
-import { LogOut } from 'lucide-react';
+import { LogOut, Settings } from 'lucide-react';
+import Link from 'next/link';
 import { useState, useTransition } from 'react';
 
 export function SignOutButton({ initials }: { initials: string }) {
@@ -24,6 +25,15 @@ export function SignOutButton({ initials }: { initials: string }) {
       {isOpen && (
         <div className="absolute right-0 top-full pt-2 z-50">
           <div className="w-44 bg-white rounded-2xl shadow-lg shadow-black/10 border border-[rgba(196,200,188,0.3)] overflow-hidden">
+            <Link
+              href="/settings"
+              onClick={() => setIsOpen(false)}
+              className="w-full flex items-center gap-2 px-4 py-3 text-sm text-[#4a4e4a] hover:bg-[#f5f1ea] transition-colors"
+            >
+              <Settings className="w-4 h-4" />
+              Settings
+            </Link>
+            <div className="h-px bg-[rgba(196,200,188,0.3)]" />
             <form
               action={() => startTransition(() => logout())}
             >

@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
     if (!error) {
       // If this is a password recovery flow, redirect to reset-password page
       if (type === 'recovery') {
-        return NextResponse.redirect(`${origin}/reset-password?code=${code}&type=recovery`);
+        return NextResponse.redirect(`${origin}/reset-password?type=recovery`);
       }
       return NextResponse.redirect(`${origin}${next}`);
     }
