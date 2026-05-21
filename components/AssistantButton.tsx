@@ -21,14 +21,14 @@ export function AssistantButton() {
   return (
     <Link
       href="/assistant"
-      className="fixed bottom-24 right-8 z-[9999] group flex items-center justify-center transition-all duration-500 ease-in-out"
+      className="fixed bottom-4 right-4 sm:bottom-8 sm:right-8 z-[9999] group flex items-center justify-center transition-all duration-500 ease-in-out"
       aria-label="AI Assistant"
     >
       {/* Dynamic Glow Layer - Very bright to ensure visibility */}
-      <div className="absolute inset-0 bg-primary/40 rounded-full blur-3xl group-hover:bg-primary/60 group-hover:scale-150 transition-all duration-700 animate-pulse" />
+      <div className="absolute inset-0 bg-primary/40 rounded-full blur-2xl sm:blur-3xl group-hover:bg-primary/60 group-hover:scale-150 transition-all duration-700 animate-pulse" />
       
       {/* Main Orb */}
-      <div className="relative h-16 w-16 bg-primary rounded-full flex items-center justify-center shadow-[0_10px_30px_rgba(var(--primary-rgb),0.4)] group-hover:scale-110 group-active:scale-95 transition-all duration-500 ease-out border-2 border-white/20">
+      <div className="relative h-12 w-12 sm:h-16 sm:w-16 bg-primary rounded-full flex items-center justify-center shadow-[0_10px_30px_rgba(var(--primary-rgb),0.4)] group-hover:scale-110 group-active:scale-95 transition-all duration-500 ease-out border-2 border-white/20">
         {/* Shine/Reflection */}
         <div className="absolute inset-0 bg-gradient-to-tr from-white/10 via-white/20 to-transparent pointer-events-none rounded-full" />
         
@@ -36,7 +36,7 @@ export function AssistantButton() {
         <div className="absolute inset-[-4px] border border-primary/20 rounded-full animate-ping [animation-duration:3s]" />
         
         {/* Icon */}
-        <Sparkles className="w-7 h-7 text-white drop-shadow-md" />
+        <Sparkles className="w-5 h-5 sm:w-7 sm:h-7 text-white drop-shadow-md" />
         
         {/* Inner Glow */}
         <div className="absolute inset-0 rounded-full shadow-[inset_0_0_15px_rgba(255,255,255,0.3)]" />
