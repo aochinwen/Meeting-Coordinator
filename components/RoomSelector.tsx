@@ -76,7 +76,6 @@ export function RoomSelector({
           dates,
           startTime,
           endTime,
-          minCapacity,
         );
         
         if (ignore) return;
@@ -214,10 +213,7 @@ export function RoomSelector({
               <div className="px-4 py-6 text-center">
                 <AlertCircle className="h-8 w-8 text-coral-text mx-auto mb-2" />
                 <p className="text-sm text-text-secondary font-light">
-                  No rooms meet the capacity requirement
-                </p>
-                <p className="text-xs text-text-tertiary mt-1">
-                  Try lowering the participant count
+                  No available rooms during the meeting time
                 </p>
               </div>
             ) : (
@@ -290,7 +286,7 @@ export function RoomSelector({
       {startTime && endTime && !isLoading && totalRoomCount === 0 && (
         <div className="flex items-center gap-2 text-xs">
           <div className="h-2 w-2 rounded-full bg-coral-text" />
-          <span className="text-coral-text">No rooms meet the capacity requirement</span>
+          <span className="text-coral-text">No available rooms during the meeting time</span>
         </div>
       )}
       {startTime && endTime && !isLoading && totalRoomCount > 0 && (
@@ -310,7 +306,7 @@ export function RoomSelector({
               <span className="text-coral-text">
                 {isRecurring
                   ? `No room is free on all ${totalDates} dates`
-                  : 'No rooms available at this time'}
+                  : 'No available rooms during the meeting time'}
               </span>
             </>
           )}

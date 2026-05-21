@@ -208,16 +208,16 @@ export function MeetingRowDesktop({ meeting }: { meeting: FormattedMeeting }) {
         </div>
       </div>
 
-      {/* Expanded Rich Details View with smooth slide-open grid transition */}
+      {/* Expanded Rich Details View */}
       <div
         className={cn(
-          "grid transition-all duration-300 ease-out border-[rgba(196,200,188,0.12)] w-full overflow-hidden",
-          isExpanded 
-            ? "grid-rows-[1fr] border-t pb-6 pt-3 bg-[rgba(255,255,255,0.45)]" 
-            : "grid-rows-[0fr] border-t-0 pb-0 pt-0 bg-transparent"
+          "overflow-hidden transition-all duration-300 ease-out w-full",
+          isExpanded
+            ? "max-h-[2000px] border-t border-[rgba(196,200,188,0.12)] pb-6 pt-3 bg-[rgba(255,255,255,0.45)]"
+            : "max-h-0"
         )}
       >
-        <div className="overflow-hidden px-6 w-full">
+        <div className="px-6 w-full">
           <div 
             className={cn(
               "transition-all duration-300 ease-out transform flex flex-col lg:flex-row gap-8 mt-1 w-full",

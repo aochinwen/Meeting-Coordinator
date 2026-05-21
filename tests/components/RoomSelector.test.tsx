@@ -77,7 +77,6 @@ describe('RoomSelector', () => {
         ['2024-01-15'],
         '10:00',
         '11:00',
-        2, // default minCapacity
       );
     });
   });
@@ -89,11 +88,11 @@ describe('RoomSelector', () => {
     });
   });
 
-  it('shows empty state when no rooms meet capacity', async () => {
+  it('shows empty state when no rooms are available', async () => {
     mockGetAvailability.mockResolvedValueOnce([]);
     render(<RoomSelector {...defaultProps} />);
     await waitFor(() => {
-      expect(screen.getByText('No rooms meet the capacity requirement')).toBeInTheDocument();
+      expect(screen.getByText('No available rooms during the meeting time')).toBeInTheDocument();
     });
   });
 
@@ -228,7 +227,7 @@ describe('RoomSelector', () => {
       mockGetAvailability.mockResolvedValueOnce([fullyAvailable(roomA, dates)]);
       render(<RoomSelector {...defaultProps} occurrenceDates={dates} />);
       await waitFor(() => {
-        expect(mockGetAvailability).toHaveBeenCalledWith(dates, '10:00', '11:00', 2);
+        expect(mockGetAvailability).toHaveBeenCalledWith(dates, '10:00', '11:00');
       });
     });
 
@@ -246,7 +245,7 @@ describe('RoomSelector', () => {
           totalCount: 3,
         },
       ]);
-      render(<RoomSelector {...defaultProps} occurrenceDates={dates} />);
+      render(<RoomSelector {...defaultProps} occurrenceDates={dates} isRecurring={true} />);
       await waitFor(() => {
         expect(screen.getByText('1 of 2 rooms free on all 3 dates')).toBeInTheDocument();
       });
@@ -265,7 +264,7 @@ describe('RoomSelector', () => {
           totalCount: 3,
         },
       ]);
-      render(<RoomSelector {...defaultProps} occurrenceDates={dates} />);
+      render(<RoomSelector {...defaultProps} occurrenceDates={dates} isRecurring={true} />);
       await waitFor(() => {
         expect(screen.getByText('No room is free on all 3 dates')).toBeInTheDocument();
       });
