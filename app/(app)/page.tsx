@@ -560,10 +560,10 @@ async function MeetingsListBranch({
         <div className="grid grid-cols-12 gap-4 px-6 py-4 bg-[rgba(234,230,222,0.5)] border-b border-[rgba(196,200,188,0.2)] text-xs tracking-[1.2px] uppercase text-text-secondary font-light shrink-0">
           <div className="col-span-3">Meeting Details</div>
           <div className="col-span-2">Date & Time</div>
-          <div className="col-span-2">Room</div>
+          <div className="hidden lg:block lg:col-span-2">Room</div>
           <div className="col-span-2">Attendees</div>
-          <div className="col-span-2">Progress</div>
-          <div className="col-span-1 text-right">Status</div>
+          <div className="col-span-3 lg:col-span-2">Progress</div>
+          <div className="col-span-2 lg:col-span-1 text-right">Status</div>
         </div>
         <div className="divide-y divide-[rgba(196,200,188,0.1)]">
           {formattedMeetings.length > 0 ? formattedMeetings.map((meeting) => (
