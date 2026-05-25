@@ -26,8 +26,7 @@ export default async function DashboardPage() {
   // Run independent database queries in parallel to reduce TTFB
   const [
     { data: meetingsData },
-    { data: profiles },
-    { count: usersCount }
+    { data: profiles }
   ] = await Promise.all([
     // Fetch meetings with participants and tasks
     supabase
@@ -44,19 +43,15 @@ export default async function DashboardPage() {
     supabase
       .from('profiles')
       .select('id, name')
-      .order('name', { ascending: true }),
-
-    // Fetch active team members count
-    supabase
-      .from('profiles')
-      .select('*', { count: 'exact', head: true })
+      .order('name', { ascending: true })
   ]);
   
   // Create a profile map for quick lookup
   const profileMap = new Map<string, string>();
   profiles?.forEach(p => profileMap.set(p.id, p.name));
 
-  const activeTeamMembers = usersCount || 18;
+  // Derive active team members directly from the fetched profiles instead of a separate count query
+  const activeTeamMembers = profiles?.length || 18;
 
   const meetings = (meetingsData as unknown as MeetingWithRelations[]) || [];
   const thisWeekMeetingsCount = meetings.length; // Simplified for now
