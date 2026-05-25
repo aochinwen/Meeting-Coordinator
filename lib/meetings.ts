@@ -128,8 +128,6 @@ export async function generateSeriesInstances(
   const { copyTemplateTasks = true } = options;
   const supabase = createClient();
   
-  console.log('Generating series instances for series:', seriesId, 'weeks:', weeksToGenerate);
-  
   // Get series data if not provided
   let data = seriesData;
   if (!data) {
@@ -164,8 +162,6 @@ export async function generateSeriesInstances(
     } as CreateSeriesInput & { created_by?: string; created_by_name?: string };
   }
   
-  console.log('Series data for generation:', data);
-  
   // Get existing instances to avoid duplicates
   const { data: existingMeetings } = await supabase
     .from('meetings')
@@ -186,8 +182,6 @@ export async function generateSeriesInstances(
     return d;
   })();
   
-  console.log('Generating from date:', lastDate);
-  
   // Generate occurrence dates
   const config: RecurrenceConfig = {
     frequency: data.frequency,
@@ -196,15 +190,10 @@ export async function generateSeriesInstances(
     endDate: data.end_date ? new Date(data.end_date) : null,
   };
   
-  console.log('Recurrence config:', config);
-  
   // Generate enough occurrences for the requested weeks
   const occurrences = generateOccurrences(config, weeksToGenerate * 7, lastDate);
   
-  console.log('Generated occurrences:', occurrences.length, occurrences);
-  
   if (occurrences.length === 0) {
-    console.log('No occurrences generated, returning early');
     return;
   }
   
@@ -225,8 +214,6 @@ export async function generateSeriesInstances(
     created_by_name: (data as any)?.created_by_name || null,
   }));
   
-  console.log('Meetings to insert:', meetings);
-  
   // Insert meetings
   const { data: insertedMeetings, error: insertError } = await supabase
     .from('meetings')
@@ -238,8 +225,6 @@ export async function generateSeriesInstances(
     throw insertError;
   }
   
-  console.log('Successfully inserted meetings');
-
   // Insert meeting activities for created event
   if (insertedMeetings && insertedMeetings.length > 0) {
     const createdBy = (data as any)?.created_by || null;
@@ -252,12 +237,13 @@ export async function generateSeriesInstances(
     const { error: activityError } = await supabase
       .from('meeting_activities')
       .insert(activitiesToInsert);
-      
+
     if (activityError) {
       console.error('Error logging meeting creation activities:', activityError);
     }
   }
-  
+
+
   // Copy template checklist tasks to each meeting instance
   if (copyTemplateTasks && data.template_id) {
     await copyTemplateTasksToMeetings(data.template_id, meetings);
