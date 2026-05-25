@@ -244,10 +244,7 @@ export function RoomCalendar({ onBookingClick, onTimeSlotClick, onPendingSlotCha
   const getBookingsForRoomAndDay = (room: Room, day: Date): BookingWithRoom[] => {
     const dateKey = format(day, 'yyyy-MM-dd');
     const dayBookings = bookings[dateKey] || [];
-    return dayBookings.reduce<BookingWithRoom[]>((acc, b) => {
-      if (b.room_id === room.id) acc.push(b as BookingWithRoom);
-      return acc;
-    }, []);
+    return dayBookings.filter(b => b.room_id === room.id) as BookingWithRoom[];
   };
 
   // Calculate position and height for a booking
