@@ -10,7 +10,7 @@ import { X, MapPin, Clock, Calendar, AlertTriangle, Check, ChevronRight, DoorOpe
 import { useConfetti } from '@/lib/useConfetti';
 import { cn } from '@/lib/utils';
 import { format, addDays, startOfWeek, isSameDay, parseISO, getISODay } from 'date-fns';
-import { Room, RoomBooking, getRooms, getRoomBookings, checkRoomAvailability, bookRoom, cancelRoomBooking } from '@/lib/rooms';
+import { Room, RoomBooking, getRooms, getRoomBookings, bookRoom, cancelRoomBooking } from '@/lib/rooms';
 import { checkConflicts, updateMeetingOccurrence, updateSeriesPattern } from '@/lib/meetings';
 import { calculateEndTime } from '@/lib/recurrence';
 import { createClient } from '@/utils/supabase/client';
