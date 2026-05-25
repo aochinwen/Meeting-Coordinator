@@ -327,20 +327,20 @@ export async function updateMeetingOccurrence(
       .eq('status', 'confirmed');
 
     if (bookings && bookings.length > 0) {
-      for (const booking of bookings) {
-        const bookingUpdate: any = {};
-        if (changes.date) bookingUpdate.date = changes.date;
-        if (changes.start_time !== undefined) bookingUpdate.start_time = changes.start_time;
-        if (changes.end_time !== undefined) bookingUpdate.end_time = changes.end_time;
+      const bookingUpdate: any = {};
+      if (changes.date) bookingUpdate.date = changes.date;
+      if (changes.start_time !== undefined) bookingUpdate.start_time = changes.start_time;
+      if (changes.end_time !== undefined) bookingUpdate.end_time = changes.end_time;
 
-        const { error: bookingError } = await supabase
-          .from('room_bookings')
-          .update(bookingUpdate)
-          .eq('id', booking.id);
-          
-        if (bookingError) {
-          console.error('Error syncing room booking time:', bookingError);
-        }
+      const bookingIds = bookings.map((b) => b.id);
+
+      const { error: bookingError } = await supabase
+        .from('room_bookings')
+        .update(bookingUpdate)
+        .in('id', bookingIds);
+
+      if (bookingError) {
+        console.error('Error syncing room booking time:', bookingError);
       }
     }
   }
