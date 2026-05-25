@@ -23,22 +23,22 @@ interface Profile {
 export default async function DashboardPage() {
   const supabase = await createClient();
 
-  // Fetch meetings with participants and tasks
-  const { data: meetingsData } = await supabase
-    .from('meetings')
-    .select(`
-      *,
-      meeting_participants(user_id),
-      meeting_checklist_tasks(id, is_completed)
-    `)
-    .order('date', { ascending: true })
-    .limit(10);
-  
-  // Fetch all users for attendee names
-  const { data: profiles } = await supabase
-    .from('profiles')
-    .select('id, name')
-    .order('name', { ascending: true });
+  // Fetch meetings and profiles in parallel
+  const [{ data: meetingsData }, { data: profiles }] = await Promise.all([
+    supabase
+      .from('meetings')
+      .select(`
+        *,
+        meeting_participants(user_id),
+        meeting_checklist_tasks(id, is_completed)
+      `)
+      .order('date', { ascending: true })
+      .limit(10),
+    supabase
+      .from('profiles')
+      .select('id, name')
+      .order('name', { ascending: true })
+  ]);
   
   // Create a profile map for quick lookup
   const profileMap = new Map<string, string>();
