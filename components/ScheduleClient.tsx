@@ -14,23 +14,18 @@ import { formatRecurrencePattern, calculateEndTime, generateOccurrences, getEndD
 import { bookRoom, bookRoomForRecurrentMeetings, Room } from '@/lib/rooms';
 import { MeetingTemplateModal } from '@/components/MeetingTemplateModal';
 import { MeetingCreatedModal } from '@/components/MeetingCreatedModal';
-import { RoomSelector } from '@/components/RoomSelector';
+import { MeetingDetailsForm } from './schedule/MeetingDetailsForm';
+import { RecurrenceSettings } from './schedule/RecurrenceSettings';
+import { TemplateSelection } from './schedule/TemplateSelection';
+import { ChecklistTasks } from './schedule/ChecklistTasks';
+import { ScheduleSummary } from './schedule/ScheduleSummary';
+import { ParticipantSelection } from './schedule/ParticipantSelection';
+import { OrganizerTips } from './schedule/OrganizerTips';
+import { Template, UserData, MeetingTask } from './schedule/types';
 
 interface ScheduleClientProps {
   initialTemplates?: Template[];
   currentUser?: User;
-}
-
-interface Template {
-  id: string;
-  name: string;
-  description?: string | null;
-}
-
-interface UserData {
-  id: string;
-  name: string;
-  division: string | null;
 }
 
 export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleClientProps) {
@@ -481,17 +476,17 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
         occurrencesCount: isRecurring ? previewDates.length : 1,
       });
       setShowCreatedModal(true);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error creating meeting:', err);
-      console.error('Error details:', err.message, err.stack);
-      setError('Failed to create meeting: ' + (err.message || 'Please try again.'));
+      const errorMsg = err instanceof Error ? err.message : 'Please try again.';
+      setError('Failed to create meeting: ' + errorMsg);
     } finally {
       setIsSubmitting(false);
     }
   };
   
   // Meeting checklist tasks
-  const [meetingTasks, setMeetingTasks] = useState<Array<{ id: string; description: string; due_days_before: number | null; dueDateMode: 'days' | 'date' }>>([]);
+  const [meetingTasks, setMeetingTasks] = useState<MeetingTask[]>([]);
   const [newMeetingTask, setNewMeetingTask] = useState('');
 
   const handleAddMeetingTask = () => {
@@ -558,7 +553,7 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
           .eq('template_id', templateId);
         
         if (tasksData) {
-          setMeetingTasks((tasksData as any[]).map((task) => ({
+          setMeetingTasks(tasksData.map((task: { description: string; due_days_before: number | null }) => ({
             id: crypto.randomUUID(),
             description: task.description,
             due_days_before: task.due_days_before ?? null,
@@ -642,348 +637,49 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
         {/* Left Column - Configuration */}
         <div className="w-full sm:flex-[2] flex flex-col gap-6 sm:gap-8 min-w-0">
 
-          {/* Meeting Details */}
-          <div className="bg-white border border-border/20 rounded-[24px] p-6 flex flex-col gap-6 shadow-sm">
-            <div className="flex items-center gap-3">
-              <CalendarIcon className="h-5 w-5 text-text-primary" />
-              <h2 className="text-xl font-bold text-text-primary font-literata">
-                Meeting Details
-              </h2>
-            </div>
+          <MeetingDetailsForm
+            title={title}
+            setTitle={setTitle}
+            description={description}
+            setDescription={setDescription}
+            startDate={startDate}
+            setStartDate={setStartDate}
+            startTime={startTime}
+            setStartTime={setStartTime}
+            endTime={endTime}
+            isCustomDuration={isCustomDuration}
+            setIsCustomDuration={setIsCustomDuration}
+            duration={duration}
+            setDuration={setDuration}
+            setCustomEndTime={setCustomEndTime}
+            selectedRoomId={selectedRoomId}
+            setSelectedRoomId={setSelectedRoomId}
+            participantCount={selectedParticipants.length}
+            allOccurrenceDates={allOccurrenceDates}
+          />
 
-            <div className="flex flex-col gap-4">
-              <div className="flex flex-col gap-2">
-                <label className="text-sm font-bold text-text-primary">Meeting Name <span className="text-coral-text">*</span></label>
-                <input
-                  type="text"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  placeholder="Enter meeting name..."
-                  className="w-full px-4 py-3 bg-surface border-none rounded-2xl text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/20 text-sm font-light"
-                />
-              </div>
-
-              <div className="flex flex-col gap-2">
-                <label className="text-sm font-bold text-text-primary">Description</label>
-                <textarea
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Add meeting description or agenda..."
-                  rows={3}
-                  className="w-full px-4 py-3 bg-surface border-none rounded-2xl text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/20 text-sm font-light resize-none"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Recurrence Settings */}
-          <div className="bg-white border border-border/20 rounded-[24px] p-6 flex flex-col gap-6 shadow-sm">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <Repeat className="h-5 w-5 text-text-primary" />
-                <h2 className="text-xl font-bold text-text-primary font-literata">
-                  Recurrence Settings
-                </h2>
-              </div>
-              {/* Recurrence Toggle */}
-              <button
-                onClick={() => setIsRecurring(!isRecurring)}
-                className={cn(
-                  "relative inline-flex h-7 w-12 items-center rounded-full transition-colors",
-                  isRecurring ? "bg-primary" : "bg-status-grey-bg"
-                )}
-              >
-                <span
-                  className={cn(
-                    "inline-block h-5 w-5 transform rounded-full bg-white transition-transform",
-                    isRecurring ? "translate-x-6" : "translate-x-1"
-                  )}
-                />
-              </button>
-            </div>
-            
-            {isRecurring && (
-              <div className="flex flex-col gap-6">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 sm:gap-8">
-                  <div className="flex flex-col gap-3">
-                    <label className="text-xs font-bold text-text-secondary uppercase tracking-widest">Frequency</label>
-                    <div className="flex bg-status-grey-bg rounded-[16px] p-1">
-                      {(['daily', 'weekly', 'bi-weekly', 'monthly'] as const).map((freq) => (
-                        <button
-                          key={freq}
-                          onClick={() => setFrequency(freq)}
-                          className={cn(
-                            "flex-1 py-1.5 rounded-[12px] text-sm font-bold transition-all capitalize",
-                            frequency === freq 
-                              ? "bg-white text-text-primary shadow-sm" 
-                              : "text-text-primary hover:bg-white/50"
-                          )}
-                        >
-                          {freq === 'daily' ? 'Daily' : freq === 'weekly' ? 'Weekly' : freq === 'bi-weekly' ? 'Bi-Weekly' : 'Monthly'}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="flex flex-col gap-3">
-                    <label className="text-xs font-bold text-text-secondary uppercase tracking-widest">Repeat Days</label>
-                    <div className="flex items-center gap-2 mt-1">
-                      {['M', 'T', 'W', 'Th', 'F'].map((day) => {
-                        const mappedDay = day === 'Th' ? 'T' : day;
-                        return (
-                          <button
-                            key={day}
-                            onClick={() => toggleDay(day)}
-                            className={cn(
-                              "h-10 w-10 rounded-full flex items-center justify-center text-sm font-bold transition-all border",
-                              selectedDays.includes(day)
-                                ? "bg-primary text-white border-primary"
-                                : "bg-status-grey-bg text-text-primary border-transparent hover:bg-cream"
-                            )}
-                          >
-                            {mappedDay}
-                          </button>
-                        )
-                      })}
-                    </div>
-                  </div>
-                </div>
-
-                {/* End Rule */}
-                <div className="flex flex-col gap-3 border-t border-border/20 pt-5">
-                  <label className="text-xs font-bold text-text-secondary uppercase tracking-widest">Ends</label>
-                  <div className="flex flex-col gap-3">
-                    {/* Never */}
-                    <div
-                      className={cn(
-                        "flex items-center gap-4 p-4 rounded-2xl border-2 cursor-pointer transition-all",
-                        endRule === 'never' ? "border-primary bg-surface/50" : "border-border/50 hover:border-primary/30"
-                      )}
-                      onClick={() => setEndRule('never')}
-                    >
-                      <div className={cn("h-5 w-5 rounded-full border-2 flex items-center justify-center shrink-0", endRule === 'never' ? "border-primary bg-primary" : "border-border/50")}>
-                        {endRule === 'never' && <div className="h-2 w-2 rounded-full bg-white" />}
-                      </div>
-                      <div>
-                        <h4 className="font-bold text-text-primary text-sm">No end</h4>
-                        <p className="text-xs font-light text-text-secondary">Series continues indefinitely</p>
-                      </div>
-                    </div>
-
-                    {/* After N occurrences */}
-                    <div
-                      className={cn(
-                        "flex items-center gap-4 p-4 rounded-2xl border-2 cursor-pointer transition-all",
-                        endRule === 'count' ? "border-primary bg-surface/50" : "border-border/50 hover:border-primary/30"
-                      )}
-                      onClick={() => setEndRule('count')}
-                    >
-                      <div className={cn("h-5 w-5 rounded-full border-2 flex items-center justify-center shrink-0", endRule === 'count' ? "border-primary bg-primary" : "border-border/50")}>
-                        {endRule === 'count' && <div className="h-2 w-2 rounded-full bg-white" />}
-                      </div>
-                      <div className="flex-1">
-                        <h4 className="font-bold text-text-primary text-sm mb-1">After occurrences</h4>
-                        {endRule === 'count' ? (
-                          <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                            <input
-                              type="number"
-                              min={1}
-                              max={100}
-                              value={endCount}
-                              onChange={(e) => setEndCount(Math.max(1, Math.min(100, parseInt(e.target.value) || 1)))}
-                              className="w-20 px-3 py-1.5 bg-white border border-border rounded-xl text-sm font-bold text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/20 text-center"
-                            />
-                            <span className="text-xs font-light text-text-secondary">occurrences (max 100)</span>
-                          </div>
-                        ) : (
-                          <p className="text-xs font-light text-text-secondary">Stop after a set number of meetings</p>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Until date */}
-                    <div
-                      className={cn(
-                        "flex items-center gap-4 p-4 rounded-2xl border-2 cursor-pointer transition-all",
-                        endRule === 'date' ? "border-primary bg-surface/50" : "border-border/50 hover:border-primary/30"
-                      )}
-                      onClick={() => setEndRule('date')}
-                    >
-                      <div className={cn("h-5 w-5 rounded-full border-2 flex items-center justify-center shrink-0", endRule === 'date' ? "border-primary bg-primary" : "border-border/50")}>
-                        {endRule === 'date' && <div className="h-2 w-2 rounded-full bg-white" />}
-                      </div>
-                      <div className="flex-1">
-                        <h4 className="font-bold text-text-primary text-sm mb-1">Until date</h4>
-                        {endRule === 'date' ? (
-                          <div onClick={(e) => e.stopPropagation()}>
-                            <input
-                              type="date"
-                              value={endDate}
-                              min={startDate}
-                              onChange={(e) => setEndDate(e.target.value)}
-                              className="w-full px-3 py-1.5 bg-white border border-border rounded-xl text-sm font-light text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-                            />
-                          </div>
-                        ) : (
-                          <p className="text-xs font-light text-text-secondary">Stop on a specific calendar date</p>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-            
-            {!isRecurring && (
-              <p className="text-sm text-text-tertiary font-light">
-                This meeting will occur once on the selected date.
-              </p>
-            )}
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t border-border/20 pt-5">
-              <div className="flex flex-col gap-3">
-                <label className="text-sm font-bold text-text-primary">Start Date</label>
-                <input
-                  type="date"
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  className="w-full px-4 py-3 bg-surface border-none rounded-2xl text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/20 text-sm font-light"
-                />
-              </div>
-
-              <div className="flex flex-col gap-3">
-                <label className="text-sm font-bold text-text-primary">Start Time</label>
-                <input
-                  type="time"
-                  value={startTime}
-                  onChange={(e) => setStartTime(e.target.value)}
-                  className="w-full px-4 py-3 bg-surface border-none rounded-2xl text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/20 text-sm font-light"
-                />
-                <div className="flex flex-wrap items-center gap-2 pt-1">
-                  {[15, 30, 60].map((dur) => (
-                    <button
-                      key={dur}
-                      type="button"
-                      onClick={() => {
-                        setDuration(dur);
-                        setIsCustomDuration(false);
-                      }}
-                      className={cn(
-                        "px-4 py-2 rounded-full text-sm font-bold transition-all",
-                        !isCustomDuration && duration === dur
-                          ? "bg-primary text-white shadow-sm"
-                          : "bg-status-grey-bg text-text-primary hover:bg-cream"
-                      )}
-                    >
-                      {dur === 60 ? '1h' : `${dur}m`}
-                    </button>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={() => setIsCustomDuration(true)}
-                    className={cn(
-                      "px-4 py-2 rounded-full text-sm font-bold transition-all",
-                      isCustomDuration
-                        ? "bg-primary text-white shadow-sm"
-                        : "bg-status-grey-bg text-text-primary hover:bg-cream"
-                    )}
-                  >
-                    Custom
-                  </button>
-                </div>
-              </div>
-
-              <div className="flex flex-col gap-3 md:col-span-2">
-                <label className="text-sm font-bold text-text-primary">End Time</label>
-                <input
-                  type="time"
-                  value={endTime}
-                  disabled={!isCustomDuration}
-                  onChange={(e) => {
-                    if (isCustomDuration) {
-                      const newEndTime = e.target.value;
-                      setCustomEndTime(newEndTime);
-                      const [startH, startM] = startTime.split(':').map(Number);
-                      const [endH, endM] = newEndTime.split(':').map(Number);
-                      let diffMinutes = (endH * 60 + endM) - (startH * 60 + startM);
-                      if (diffMinutes < 0) diffMinutes += 24 * 60;
-                      setDuration(diffMinutes);
-                    }
-                  }}
-                  className={cn(
-                    "w-full px-4 py-3 bg-surface border-none rounded-2xl text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/20 text-sm font-light",
-                    !isCustomDuration && "opacity-60 cursor-not-allowed"
-                  )}
-                />
-                {!isCustomDuration && (
-                  <p className="text-xs font-light text-text-secondary">
-                    End time is calculated from duration
-                  </p>
-                )}
-              </div>
-
-              <div className="md:col-span-2 bg-white border border-border/20 rounded-[20px] p-4">
-                <RoomSelector
-                  date={startDate}
-                  startTime={startTime}
-                  endTime={endTime}
-                  selectedRoomId={selectedRoomId}
-                  onRoomSelect={setSelectedRoomId}
-                  minCapacity={selectedParticipants.length + 1}
-                  occurrenceDates={allOccurrenceDates}
-                />
-              </div>
-            </div>
-          </div>
+          <RecurrenceSettings
+            isRecurring={isRecurring}
+            setIsRecurring={setIsRecurring}
+            frequency={frequency}
+            setFrequency={setFrequency}
+            selectedDays={selectedDays}
+            toggleDay={toggleDay}
+            endRule={endRule}
+            setEndRule={setEndRule}
+            endCount={endCount}
+            setEndCount={setEndCount}
+            endDate={endDate}
+            setEndDate={setEndDate}
+            startDate={startDate}
+          />
 
           {/* Template Selection */}
-          <div className="bg-surface border border-border/30 rounded-[24px] p-6 flex flex-col gap-6">
-            <div className="flex items-center gap-3">
-              <Sparkles className="h-5 w-5 text-text-primary" />
-              <h2 className="text-xl font-bold text-text-primary font-literata">
-                Template Selection
-              </h2>
-            </div>
-            
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-              {initialTemplates.map((template) => (
-                <div 
-                  key={template.id}
-                  onClick={() => handleTemplateSelect(template.id)}
-                  className={cn(
-                    "relative rounded-[24px] p-5 cursor-pointer transition-all border-2",
-                    selectedTemplate === template.id
-                      ? "bg-cream border-primary shadow-sm" 
-                      : "bg-white border-border/50 hover:border-primary/50"
-                  )}
-                >
-                  {selectedTemplate === template.id && (
-                    <div className="absolute top-3 right-3 h-5 w-5 bg-primary rounded-full flex items-center justify-center">
-                      <div className="w-2 h-2 bg-white rounded-full"></div>
-                    </div>
-                  )}
-                  <Users className="h-5 w-5 text-text-primary mb-3" />
-                  <h3 className="font-bold text-text-primary text-base mb-1">{template.name}</h3>
-                  {template.description && (
-                    <p className="text-xs font-light text-text-secondary">{template.description}</p>
-                  )}
-                </div>
-              ))}
-
-              <div 
-                onClick={() => handleTemplateSelect(null)}
-                className={cn(
-                  "relative rounded-[24px] p-5 cursor-pointer transition-all border-2 border-dashed flex flex-col items-center justify-center text-center",
-                  selectedTemplate === null
-                    ? "bg-cream border-primary shadow-sm" 
-                    : "bg-transparent border-border/50 hover:border-primary/50"
-                )}
-              >
-                <PlusCircle className="h-6 w-6 text-text-secondary mb-2" />
-                <h3 className="font-bold text-text-tertiary text-sm">Custom Type</h3>
-              </div>
-            </div>
-          </div>
+          <TemplateSelection
+            initialTemplates={initialTemplates}
+            selectedTemplate={selectedTemplate}
+            handleTemplateSelect={handleTemplateSelect}
+          />
 
           {/* Meeting Roles - Chairman, Coordinator & Invitees */}
           <div className="bg-white border border-border/20 rounded-[24px] p-6 flex flex-col gap-6 shadow-sm">
@@ -1062,280 +758,44 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
           </div>
 
           {/* Checklist Tasks */}
-          <div className="bg-white border border-border/20 rounded-[24px] p-6 flex flex-col gap-6 shadow-sm">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <svg className="h-5 w-5 text-text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-                </svg>
-                <h2 className="text-xl font-bold text-text-primary font-literata">
-                  Checklist Tasks
-                </h2>
-              </div>
-            </div>
-            <p className="text-sm text-text-tertiary font-light -mt-4">
-              Add default tasks for this meeting. These will be created for each occurrence.
-            </p>
-
-            <div className="space-y-3">
-              {meetingTasks.map((task) => (
-                <div 
-                  key={task.id} 
-                  className="flex items-start gap-4 p-4 bg-board border border-border/50 rounded-2xl hover:border-border transition-colors group"
-                >
-                  <div className="w-6 h-6 rounded border border-border flex items-center justify-center text-transparent bg-white mt-1 shrink-0">
-                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                  </div>
-                  <div className="flex-1 flex flex-col gap-2">
-                    <span className="text-base text-text-primary font-light">{task.description}</span>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <button
-                        onClick={() => toggleTaskDueDateMode(task.id)}
-                        className="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border border-border bg-white text-text-tertiary hover:border-primary/50 hover:text-primary transition-colors shrink-0"
-                      >
-                        {task.dueDateMode === 'days' ? '# days' : 'pick date'}
-                      </button>
-                      {task.dueDateMode === 'days' ? (
-                        <>
-                          <input
-                            type="number"
-                            placeholder="days before meeting"
-                            value={task.due_days_before ?? ''}
-                            onChange={(e) => {
-                              const val = e.target.value === '' ? null : parseInt(e.target.value, 10);
-                              updateTaskDueDays(task.id, isNaN(val as number) ? null : val);
-                            }}
-                            className="w-36 px-2 py-1 text-xs border border-border rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-primary/30 text-text-primary placeholder:text-text-tertiary"
-                          />
-                          <span className="text-xs text-text-tertiary">
-                            {task.due_days_before === null
-                              ? 'no due date'
-                              : task.due_days_before >= 0
-                              ? `${task.due_days_before} day${task.due_days_before !== 1 ? 's' : ''} before`
-                              : `${Math.abs(task.due_days_before)} day${Math.abs(task.due_days_before) !== 1 ? 's' : ''} after`}
-                          </span>
-                        </>
-                      ) : (
-                        <>
-                          <input
-                            type="date"
-                            value={computeTaskAbsoluteDate(task.due_days_before, startDate)}
-                            onChange={(e) => handleTaskDatePickerChange(task.id, e.target.value)}
-                            className="px-2 py-1 text-xs border border-border rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-primary/30 text-text-primary"
-                          />
-                          {task.due_days_before !== null && startDate && (
-                            <span className="text-xs text-text-tertiary">
-                              {task.due_days_before >= 0
-                                ? `${task.due_days_before} day${task.due_days_before !== 1 ? 's' : ''} before`
-                                : `${Math.abs(task.due_days_before)} day${Math.abs(task.due_days_before) !== 1 ? 's' : ''} after`}
-                            </span>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  </div>
-                  <button 
-                    onClick={() => removeMeetingTask(task.id)}
-                    className="text-text-tertiary hover:text-coral-text transition-colors p-2 rounded-xl hover:bg-coral-text/10 opacity-0 group-hover:opacity-100 mt-0.5"
-                  >
-                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                    </svg>
-                  </button>
-                </div>
-              ))}
-            </div>
-
-            <div className="flex items-center gap-3">
-              <input
-                type="text"
-                value={newMeetingTask}
-                onChange={(e) => setNewMeetingTask(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleAddMeetingTask()}
-                placeholder="Add a checklist task..."
-                className="flex-1 px-4 py-3 bg-surface border border-border rounded-2xl text-text-primary placeholder:text-text-tertiary focus:outline-none focus:ring-2 focus:ring-primary/20 text-sm font-light"
-              />
-              <button 
-                onClick={handleAddMeetingTask}
-                disabled={!newMeetingTask.trim()}
-                className="px-6 py-3 bg-board text-text-primary border border-border rounded-2xl text-base font-light hover:bg-surface transition-colors disabled:opacity-50 flex items-center gap-2 shrink-0"
-              >
-                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
-                Add Task
-              </button>
-            </div>
-          </div>
-
+          <ChecklistTasks
+            meetingTasks={meetingTasks}
+            newMeetingTask={newMeetingTask}
+            setNewMeetingTask={setNewMeetingTask}
+            handleAddMeetingTask={handleAddMeetingTask}
+            removeMeetingTask={removeMeetingTask}
+            toggleTaskDueDateMode={toggleTaskDueDateMode}
+            updateTaskDueDays={updateTaskDueDays}
+            handleTaskDatePickerChange={handleTaskDatePickerChange}
+            computeTaskAbsoluteDate={computeTaskAbsoluteDate}
+            startDate={startDate}
+          />
         </div>
 
         {/* Right Column - Summary & Tips */}
         <div className="w-full sm:flex-1 flex flex-col gap-6 min-w-0">
           
-          {/* Schedule Summary Card */}
-          <div className="bg-primary rounded-[24px] p-8 flex flex-col gap-6 text-white shadow-lg relative overflow-hidden">
-            <div className="absolute top-[-20px] right-[-20px] h-32 w-32 bg-white/10 blur-[30px] rounded-full point-events-none"></div>
-            
-            <h3 className="text-2xl font-bold tracking-tight font-literata">
-              Schedule Summary
-            </h3>
-            
-            <div className="flex flex-col gap-6 mt-2 relative z-10">
-              <div className="flex items-start gap-4">
-                <CalendarIcon className="h-5 w-5 mt-0.5 text-status-green-bg/80" />
-                <div className="flex flex-col">
-                  <span className="text-[10px] font-medium text-status-green-bg/80 uppercase tracking-wider mb-1">Event Name</span>
-                  <span className="text-base font-bold leading-tight">{title || 'Untitled Meeting'}</span>
-                </div>
-              </div>
+          <ScheduleSummary
+            title={title}
+            startTime={startTime}
+            endTime={endTime}
+            duration={duration}
+            recurrenceDisplay={recurrenceDisplay}
+            selectedParticipants={selectedParticipants}
+            users={users}
+          />
 
-              <div className="flex items-start gap-4">
-                <Clock className="h-5 w-5 mt-0.5 text-status-green-bg/80" />
-                <div className="flex flex-col">
-                  <span className="text-[10px] font-medium text-status-green-bg/80 uppercase tracking-wider mb-1">Time & Duration</span>
-                  <span className="text-base font-bold leading-tight">{startTime} — {endTime}<br/>({duration}m)</span>
-                </div>
-              </div>
+          <ParticipantSelection
+            users={users}
+            selectedParticipants={selectedParticipants}
+            toggleParticipant={toggleParticipant}
+          />
 
-              <div className="flex items-start gap-4">
-                <Repeat className="h-5 w-5 mt-0.5 text-status-green-bg/80" />
-                <div className="flex flex-col">
-                  <span className="text-[10px] font-medium text-status-green-bg/80 uppercase tracking-wider mb-1">Recurrence</span>
-                  <span className="text-base font-bold leading-tight">{recurrenceDisplay}</span>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-4">
-                <UserPlus className="h-5 w-5 mt-0.5 text-status-green-bg/80" />
-                <div className="flex flex-col">
-                  <span className="text-[10px] font-medium text-status-green-bg/80 uppercase tracking-wider mb-2">Participants</span>
-                  <div className="flex -space-x-2">
-                    {selectedParticipants.slice(0, 3).map((userId, i) => {
-                      const user = users.find(u => u.id === userId);
-                      return (
-                        <div key={userId} className="h-8 w-8 rounded-full border-2 border-primary bg-primary overflow-hidden flex items-center justify-center">
-                          <span className="text-white text-xs font-bold">
-                            {user?.name?.charAt(0) || '?'}
-                          </span>
-                        </div>
-                      );
-                    })}
-                    {selectedParticipants.length > 3 && (
-                      <div className="h-8 w-8 rounded-full border-2 border-primary bg-warm flex items-center justify-center text-text-primary text-[10px] font-bold">
-                        +{selectedParticipants.length - 3}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Participant Selection */}
-          <div className="bg-white border border-border/20 rounded-[24px] p-6 flex flex-col gap-4">
-            <div className="flex items-center gap-2">
-              <Users className="h-5 w-5 text-text-primary" />
-              <h3 className="text-base font-bold text-text-primary font-literata">
-                Participants
-              </h3>
-            </div>
-            
-            <div className="flex flex-col gap-2 max-h-48 overflow-y-auto">
-              {users.map((user) => (
-                <div
-                  key={user.id}
-                  onClick={() => toggleParticipant(user.id)}
-                  className={cn(
-                    "flex items-center gap-3 p-3 rounded-2xl cursor-pointer transition-colors",
-                    selectedParticipants.includes(user.id)
-                      ? "bg-mint/50 border border-sage/30"
-                      : "hover:bg-surface border border-transparent"
-                  )}
-                >
-                  <div className={cn(
-                    "h-8 w-8 rounded-full flex items-center justify-center text-white text-xs font-bold",
-                    selectedParticipants.includes(user.id) ? "bg-primary" : "bg-sage"
-                  )}>
-                    {user.name.charAt(0)}
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-sm font-bold text-text-primary">{user.name}</p>
-                    <p className="text-xs text-text-tertiary">{user.division}</p>
-                  </div>
-                  {selectedParticipants.includes(user.id) && (
-                    <div className="h-5 w-5 rounded-full bg-primary flex items-center justify-center">
-                      <div className="h-2 w-2 bg-white rounded-full" />
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-            
-            <p className="text-xs text-text-tertiary">
-              {selectedParticipants.length} participant{selectedParticipants.length !== 1 ? 's' : ''} selected
-            </p>
-          </div>
-
-          {/* Organizer Tips */}
-          <div className="bg-amber border border-amber-border/30 rounded-[24px] p-6 flex flex-col gap-4">
-            <div className="flex items-center gap-2">
-              <Lightbulb className="h-5 w-5 text-text-primary" />
-              <h3 className="text-base font-bold text-text-primary font-literata">
-                Organizer Tips
-              </h3>
-            </div>
-            
-            <div className="flex flex-col gap-4">
-              {conflicts.length > 0 ? (
-                conflicts.slice(0, 2).map((conflict, i) => (
-                  <div key={i} className="flex items-start gap-3">
-                    <AlertCircle className="h-4 w-4 text-coral-text shrink-0 mt-0.5" />
-                    <p className="text-sm font-light text-text-primary leading-snug">
-                      <strong className="font-bold">{conflict.userName}</strong> has a conflict: {conflict.meetingTitle} at {conflict.startTime}
-                    </p>
-                  </div>
-                ))
-              ) : (
-                <div className="flex items-start gap-3">
-                  <Sparkles className="h-5 w-5 text-primary shrink-0 mt-0.5" />
-                  <p className="text-sm font-light text-text-primary leading-snug">
-                    <strong className="font-bold">No conflicts detected!</strong> All selected participants are available at this time.
-                  </p>
-                </div>
-              )}
-              
-              {previewDates.length > 0 && (
-                <div className="flex items-start gap-3">
-                  <CalendarIcon className="h-4 w-4 text-text-tertiary shrink-0 mt-0.5" />
-                  <div className="text-sm font-light text-text-primary leading-snug w-full">
-                    <div className="flex items-center justify-between mb-1">
-                      <p className="font-bold">Upcoming occurrences:</p>
-                      {totalOccurrences !== null && (
-                        <span className="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full bg-primary/10 text-primary">
-                          {totalOccurrences} total
-                        </span>
-                      )}
-                    </div>
-                    <ul className="space-y-1">
-                      {previewDates.slice(0, 5).map((date, i) => (
-                        <li key={i} className="text-xs text-text-secondary">
-                          {date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
-                        </li>
-                      ))}
-                      {totalOccurrences !== null && totalOccurrences > 5 && (
-                        <li className="text-xs text-text-tertiary">
-                          +{totalOccurrences - 5} more
-                        </li>
-                      )}
-                    </ul>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
+          <OrganizerTips
+            conflicts={conflicts}
+            previewDates={previewDates}
+            totalOccurrences={totalOccurrences}
+          />
 
           {/* Live Preview */}
           <div className="bg-white border border-border/30 rounded-[24px] p-6 flex items-center justify-between cursor-pointer hover:bg-surface transition-colors shadow-sm">

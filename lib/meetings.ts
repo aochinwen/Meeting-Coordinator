@@ -219,9 +219,12 @@ export async function generateSeriesInstances(
   console.log('Meetings to insert:', meetings);
   
   // Insert meetings
+  // Strip 'participants' since it is not a column in 'meetings' table
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const meetingsToInsert = meetings.map(({ participants, ...rest }) => rest);
   const { error: insertError } = await supabase
     .from('meetings')
-    .insert(meetings);
+    .insert(meetingsToInsert);
   
   if (insertError) {
     console.error('Error inserting meetings:', insertError);
