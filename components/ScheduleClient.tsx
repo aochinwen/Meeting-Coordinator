@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
-  Users, User as UserIcon, PlusCircle, Calendar as CalendarIcon, 
+  Users, PlusCircle, Calendar as CalendarIcon,
   Clock, Repeat, UserPlus, Lightbulb, AlertTriangle, Eye, Sparkles, AlertCircle
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
