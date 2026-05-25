@@ -922,16 +922,30 @@ export async function splitSeriesAtDate(
       .from('meetings')
       .select('id')
       .eq('series_id', newSeriesId);
-    for (const m of forwardMeetings || []) {
-      // Skip meetings that already have these participants (overridden ones).
-      const { data: existing } = await supabase
+
+    if (forwardMeetings && forwardMeetings.length > 0) {
+      const meetingIds = forwardMeetings.map((m) => m.id);
+
+      const { data: allExisting } = await supabase
         .from('meeting_participants')
-        .select('user_id')
-        .eq('meeting_id', m.id);
-      const existingIds = new Set((existing || []).map((p) => p.user_id));
-      const missing = newPattern.participants.filter((id) => !existingIds.has(id));
-      if (missing.length > 0) {
-        await addMeetingParticipants(m.id, missing, true);
+        .select('meeting_id, user_id')
+        .in('meeting_id', meetingIds);
+
+      const existingByMeeting = new Map<string, Set<string>>();
+      for (const p of allExisting || []) {
+        if (!existingByMeeting.has(p.meeting_id)) {
+          existingByMeeting.set(p.meeting_id, new Set());
+        }
+        existingByMeeting.get(p.meeting_id)!.add(p.user_id);
+      }
+
+      for (const m of forwardMeetings) {
+        // Skip meetings that already have these participants (overridden ones).
+        const existingIds = existingByMeeting.get(m.id) || new Set<string>();
+        const missing = newPattern.participants.filter((id) => !existingIds.has(id));
+        if (missing.length > 0) {
+          await addMeetingParticipants(m.id, missing, true);
+        }
       }
     }
   }
