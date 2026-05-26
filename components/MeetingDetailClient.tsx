@@ -73,6 +73,7 @@ export function MeetingDetailClient({ meetingId, currentUser }: MeetingDetailCli
   const [tasks, setTasks] = useState<Task[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [newTaskInput, setNewTaskInput] = useState('');
   const [commentInput, setCommentInput] = useState('');
   const [copied, setCopied] = useState(false);
@@ -137,10 +138,11 @@ export function MeetingDetailClient({ meetingId, currentUser }: MeetingDetailCli
 
     if (error) {
       console.error('Error fetching meeting:', error);
+      setFetchError('Failed to load meeting details.');
       return;
     }
 
-    setMeeting(data as any);
+    setMeeting(data as unknown as Meeting);
   }
 
   async function fetchParticipants() {
@@ -154,10 +156,11 @@ export function MeetingDetailClient({ meetingId, currentUser }: MeetingDetailCli
 
     if (error) {
       console.error('Error fetching participants:', error);
+      setFetchError('Failed to load participants.');
       return;
     }
 
-    setParticipants(data as any || []);
+    setParticipants((data as unknown as Participant[]) || []);
   }
 
   async function fetchTasks() {
@@ -172,10 +175,11 @@ export function MeetingDetailClient({ meetingId, currentUser }: MeetingDetailCli
 
     if (error) {
       console.error('Error fetching tasks:', error);
+      setFetchError('Failed to load tasks.');
       return;
     }
 
-    setTasks(data as any || []);
+    setTasks((data as unknown as Task[]) || []);
   }
 
   async function fetchActivities() {
@@ -191,10 +195,11 @@ export function MeetingDetailClient({ meetingId, currentUser }: MeetingDetailCli
 
     if (error) {
       console.error('Error fetching activities:', error);
+      setFetchError('Failed to load activities.');
       return;
     }
 
-    setActivities(data as any || []);
+    setActivities((data as unknown as Activity[]) || []);
   }
 
   async function toggleTask(taskId: string, currentStatus: boolean) {
@@ -292,6 +297,16 @@ export function MeetingDetailClient({ meetingId, currentUser }: MeetingDetailCli
     );
   }
 
+  if (fetchError) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full p-8">
+        <AlertTriangle className="h-12 w-12 text-status-amber mb-4" />
+        <h2 className="text-xl font-bold text-text-primary mb-2">Error Loading Data</h2>
+        <p className="text-text-secondary">{fetchError}</p>
+      </div>
+    );
+  }
+
   if (!meeting) {
     return (
       <div className="max-w-[1280px] mx-auto pb-24 h-full flex flex-col pt-8 space-y-8 px-8">
@@ -361,10 +376,6 @@ export function MeetingDetailClient({ meetingId, currentUser }: MeetingDetailCli
             {copied ? 'Copied!' : 'Copy Link'}
           </button>
 
-          <button className="px-5 py-2.5 bg-primary text-white rounded-full text-sm font-medium shadow-md transition-all active:scale-95 hover:bg-primary/90 flex items-center gap-2">
-            <Mail className="h-4 w-4" />
-            Send Invites
-          </button>
         </div>
       </div>
 
@@ -643,9 +654,6 @@ export function MeetingDetailClient({ meetingId, currentUser }: MeetingDetailCli
               )}
             </div>
 
-            <button className="w-full py-2.5 text-sm font-bold text-primary border border-primary/20 rounded-2xl hover:bg-surface transition-colors mt-2">
-              View Full History
-            </button>
           </div>
 
           <div className="bg-white border border-border/20 rounded-3xl overflow-hidden shadow-sm flex flex-col relative h-[220px]">
@@ -663,10 +671,10 @@ export function MeetingDetailClient({ meetingId, currentUser }: MeetingDetailCli
 
             <div className="p-6 flex flex-col gap-1 z-20 bg-white relative">
               <h4 className="text-sm font-bold text-text-primary font-literata">
-                Meeting Venue
+                Meeting Location
               </h4>
               <p className="text-xs font-normal text-text-secondary">
-                North Wing, Room 402 - Main Campus
+                {(meeting?.override_fields as any)?.location || 'TBD (Virtual / To be updated)'}
               </p>
             </div>
           </div>
