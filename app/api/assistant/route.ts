@@ -1,8 +1,33 @@
 import { NextResponse } from 'next/server';
 import { GoogleGenerativeAI, FunctionDeclaration, SchemaType } from '@google/generative-ai';
 import { findAvailableTimeSlots, getRooms } from '@/lib/rooms';
+import { generateAllOccurrences, generateOccurrences, calculateEndTime, formatRecurrencePattern, RecurrenceConfig } from '@/lib/recurrence';
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
+
+const checkRecurringAvailabilityTool: FunctionDeclaration = {
+  name: "check_recurring_availability",
+  description: "Check room availability for a recurring meeting series at a fixed time across all occurrence dates. Use this for any recurring/repeating meeting request.",
+  parameters: {
+    type: SchemaType.OBJECT,
+    properties: {
+      frequency: { type: SchemaType.STRING, description: "Recurrence frequency: 'daily', 'weekly', 'bi-weekly', 'monthly' (same weekday position), or 'monthly-by-date' (same calendar day)" },
+      daysOfWeek: {
+        type: SchemaType.ARRAY,
+        items: { type: SchemaType.STRING },
+        description: "Days of week codes required for weekly/bi-weekly: 'Su', 'M', 'T', 'W', 'Th', 'F', 'Sa'"
+      },
+      startDate: { type: SchemaType.STRING, description: "Series start date in YYYY-MM-DD format" },
+      endDate: { type: SchemaType.STRING, description: "End date in YYYY-MM-DD format (when endRule is 'date')" },
+      endCount: { type: SchemaType.NUMBER, description: "Number of occurrences (when endRule is 'count')" },
+      endRule: { type: SchemaType.STRING, description: "End rule: 'date', 'count', or 'never'" },
+      time: { type: SchemaType.STRING, description: "Fixed meeting time in HH:MM 24-hour format (e.g. '10:00')" },
+      durationMinutes: { type: SchemaType.NUMBER, description: "Duration of each meeting in minutes" },
+      roomName: { type: SchemaType.STRING, description: "Room name to check availability for" },
+    },
+    required: ["frequency", "startDate", "time", "durationMinutes", "roomName", "endRule"]
+  }
+};
 
 const findAvailableSlotsTool: FunctionDeclaration = {
   name: "find_available_slots",
@@ -70,7 +95,7 @@ export async function POST(request: Request) {
 
     const model = genAI.getGenerativeModel({
       model: "gemini-2.5-flash",
-      tools: [{ functionDeclarations: [findAvailableSlotsTool] }]
+      tools: [{ functionDeclarations: [findAvailableSlotsTool, checkRecurringAvailabilityTool] }]
     });
 
     const chat = model.startChat({
@@ -112,7 +137,29 @@ SUCCESSFUL SEARCH:
 Write a SHORT 1-2 sentence summary (e.g. "Here are the available slots — pick a time!"). Do NOT list rooms or slots in text; they appear in an interactive card.
 If no slots found, say so clearly.
 When the user confirms a room and time, output a markdown booking link:
-[Book {RoomName}](/schedule?room={roomId}&date={YYYY-MM-DD}&time={HH:MM}&endTime={HH:MM})` }]
+[Book {RoomName}](/schedule?room={roomId}&date={YYYY-MM-DD}&time={HH:MM}&endTime={HH:MM})
+
+RECURRING MEETING BEHAVIOR:
+If the user mentions recurring/repeating meetings (e.g. "every week", "weekly", "daily", "every Monday", "repeat", "series"), use 'check_recurring_availability' instead of 'find_available_slots'.
+
+Before calling 'check_recurring_availability', collect ALL of:
+- Frequency (daily/weekly/bi-weekly/monthly/monthly-by-date)
+- Days of week (for weekly/bi-weekly) — e.g. "Monday and Wednesday"
+- For monthly: ask "Same date each month (e.g. the 28th), or same weekday (e.g. the 4th Monday)?"
+  Use frequency 'monthly-by-date' for same date, 'monthly' for same weekday position.
+- Start date
+- Fixed meeting time — ask "What time?" if not provided
+- Duration
+- Room name — ask "Which room?" if not provided
+- End rule — ALWAYS ask: "How many occurrences, or until when? (e.g. '10 times', 'until December', or 'ongoing')"
+
+Once you have all details, CONFIRM with a brief summary before calling the tool:
+e.g. "Got it — every Monday & Wednesday at 10:00–11:00 in the Boardroom, starting 2026-06-23, for 8 occurrences. Shall I check availability?"
+Wait for user confirmation, then call the tool.
+
+After 'check_recurring_availability' returns:
+- Write a SHORT 1-2 sentence summary. The interactive card shows conflicts and the booking button.
+- Do NOT list individual dates in text.` }]
       }
     });
 
@@ -129,7 +176,127 @@ When the user confirms a room and time, output a markdown booking link:
       let durationMinutes = 60;
       let isFallback = false;
 
+      let recurringAvailabilityResult: {
+        roomId: string | null;
+        roomName: string | null;
+        frequency: string;
+        daysOfWeek: string[] | null;
+        startDate: string;
+        time: string;
+        endTime: string;
+        durationMinutes: number;
+        endRule: string;
+        endDate?: string;
+        endCount?: number;
+        totalOccurrences: number;
+        availableCount: number;
+        conflictDates: string[];
+      } | null = null;
+
       for (const call of functionCalls) {
+        if (call.name === "check_recurring_availability") {
+          const args = call.args as {
+            frequency: string;
+            daysOfWeek?: string[];
+            startDate: string;
+            endDate?: string;
+            endCount?: number;
+            endRule: string;
+            time: string;
+            durationMinutes: number;
+            roomName: string;
+          };
+
+          console.log('[assistant] recurring tool args:', JSON.stringify(args));
+
+          const config: RecurrenceConfig = {
+            frequency: args.frequency as RecurrenceConfig['frequency'],
+            daysOfWeek: args.daysOfWeek || null,
+            startDate: new Date(args.startDate + 'T12:00:00Z'),
+            endDate: args.endDate ? new Date(args.endDate + 'T12:00:00Z') : null,
+          };
+
+          let occurrenceDates: Date[];
+          if (args.endRule === 'count' && args.endCount) {
+            const dayBefore = new Date(args.startDate + 'T12:00:00Z');
+            dayBefore.setUTCDate(dayBefore.getUTCDate() - 1);
+            occurrenceDates = generateOccurrences(config, args.endCount, dayBefore);
+          } else if (args.endRule === 'date' && args.endDate) {
+            occurrenceDates = generateAllOccurrences(config, new Date(args.endDate + 'T12:00:00Z'));
+          } else {
+            // never / fallback: default 8 occurrences
+            const dayBefore = new Date(args.startDate + 'T12:00:00Z');
+            dayBefore.setUTCDate(dayBefore.getUTCDate() - 1);
+            occurrenceDates = generateOccurrences(config, 8, dayBefore);
+          }
+
+          const [th, tm] = args.time.split(':').map(Number);
+          const requestedStartMins = th * 60 + tm;
+          const requestedEndMins = requestedStartMins + args.durationMinutes;
+          const startHour = th;
+          const endHour = Math.ceil(requestedEndMins / 60);
+
+          let resolvedRoomId: string | null = null;
+          let resolvedRoomName: string | null = null;
+          const occurrenceResults: { date: string; available: boolean }[] = [];
+
+          for (const d of occurrenceDates) {
+            const dateStr = d.toISOString().split('T')[0];
+            const slots = await findAvailableTimeSlots(dateStr, startHour, endHour, args.durationMinutes, args.roomName);
+            let available = false;
+            for (const room of slots) {
+              for (const slot of room.slots) {
+                const [sh, sm] = slot.startTime.split(':').map(Number);
+                const [eh, em] = slot.endTime.split(':').map(Number);
+                const slotStart = sh * 60 + sm;
+                const slotEnd = eh * 60 + em;
+                if (slotStart <= requestedStartMins && slotEnd >= requestedEndMins) {
+                  available = true;
+                  if (!resolvedRoomId) {
+                    resolvedRoomId = room.roomId;
+                    resolvedRoomName = room.roomName;
+                  }
+                  break;
+                }
+              }
+              if (available) break;
+            }
+            occurrenceResults.push({ date: dateStr, available });
+          }
+
+          const conflictDates = occurrenceResults.filter(r => !r.available).map(r => r.date);
+          const availableCount = occurrenceResults.filter(r => r.available).length;
+
+          recurringAvailabilityResult = {
+            roomId: resolvedRoomId,
+            roomName: resolvedRoomName ?? args.roomName,
+            frequency: args.frequency,
+            daysOfWeek: args.daysOfWeek || null,
+            startDate: args.startDate,
+            time: args.time,
+            endTime: calculateEndTime(args.time, args.durationMinutes),
+            durationMinutes: args.durationMinutes,
+            endRule: args.endRule,
+            endDate: args.endDate,
+            endCount: args.endCount,
+            totalOccurrences: occurrenceResults.length,
+            availableCount,
+            conflictDates,
+          };
+
+          functionResponses.push({
+            functionResponse: {
+              name: call.name,
+              response: {
+                totalOccurrences: occurrenceResults.length,
+                availableCount,
+                conflictDates,
+                conflictCount: conflictDates.length,
+              }
+            }
+          });
+        }
+
         if (call.name === "find_available_slots") {
           const args = call.args as { dates: string[]; durationMinutes: number; startHour?: number; endHour?: number; roomName?: string };
           durationMinutes = args.durationMinutes;
@@ -196,6 +363,7 @@ When the user confirms a room and time, output a markdown booking link:
         availability: rawAvailability.length > 0 ? rawAvailability : undefined,
         durationMinutes,
         isFallback,
+        recurringAvailability: recurringAvailabilityResult ?? undefined,
       });
     } else {
       return NextResponse.json({

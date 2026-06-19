@@ -8,7 +8,7 @@
  * - Monthly: Specific day of month
  */
 
-export type RecurrenceFrequency = 'daily' | 'weekly' | 'bi-weekly' | 'monthly';
+export type RecurrenceFrequency = 'daily' | 'weekly' | 'bi-weekly' | 'monthly' | 'monthly-by-date';
 
 export interface RecurrenceConfig {
   frequency: RecurrenceFrequency;
@@ -137,6 +137,8 @@ export function getNextOccurrence(
       return getNextBiWeeklyOccurrence(checkDate, config, startDate);
     case 'monthly':
       return getNextMonthlyOccurrence(checkDate, config, startDate);
+    case 'monthly-by-date':
+      return getNextMonthlyByDateOccurrence(checkDate, config, startDate);
     default:
       return null;
   }
@@ -188,6 +190,11 @@ export function isValidOccurrence(date: Date, config: RecurrenceConfig): boolean
       const { weekday, n } = getMonthlyWeekdayPattern(config.startDate);
       const expected = getNthWeekdayOfMonth(date.getFullYear(), date.getMonth(), weekday, n);
       return date.getDate() === expected.getDate();
+    }
+    case 'monthly-by-date': {
+      const targetDay = config.startDate.getDate();
+      const daysInMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+      return date.getDate() === Math.min(targetDay, daysInMonth);
     }
     default:
       return false;
@@ -332,6 +339,34 @@ function getNextBiWeeklyOccurrence(
 }
 
 /**
+ * Return date clamped to last valid day of the given month.
+ * e.g. day=31 in February → Feb 28/29.
+ */
+function clampToMonthEnd(year: number, month: number, day: number): Date {
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  return new Date(year, month, Math.min(day, daysInMonth));
+}
+
+/**
+ * Get next monthly-by-date occurrence (same calendar day each month).
+ * e.g. if start date is the 28th, recurs on the 28th of each month.
+ * Days that overflow short months (e.g. 31 in February) clamp to the last day.
+ */
+function getNextMonthlyByDateOccurrence(
+  afterDate: Date,
+  config: RecurrenceConfig,
+  seriesStartDate: Date
+): Date | null {
+  const targetDay = seriesStartDate.getDate();
+
+  const thisMonthCandidate = clampToMonthEnd(afterDate.getFullYear(), afterDate.getMonth(), targetDay);
+  if (thisMonthCandidate > afterDate) return thisMonthCandidate;
+
+  const nextMonth = new Date(afterDate.getFullYear(), afterDate.getMonth() + 1, 1);
+  return clampToMonthEnd(nextMonth.getFullYear(), nextMonth.getMonth(), targetDay);
+}
+
+/**
  * Get next monthly occurrence (same Nth weekday of month as the series start date)
  * e.g. if start date is the 4th Wednesday, recurs on the 4th Wednesday of each month.
  */
@@ -372,16 +407,20 @@ export const FULL_DAY_MAP: Record<string, string> = {
 /**
  * Format recurrence pattern for display
  */
+const ORDINALS = ['', '1st', '2nd', '3rd', '4th', '5th'];
+const WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
 export function formatRecurrencePattern(
   frequency: RecurrenceFrequency,
-  daysOfWeek: string[] | null
+  daysOfWeek: string[] | null,
+  startDate?: Date
 ): string {
   switch (frequency) {
     case 'daily':
       return 'Every day';
     case 'weekly':
       if (!daysOfWeek || daysOfWeek.length === 0) return 'Weekly';
-      if (daysOfWeek.length === 5 && 
+      if (daysOfWeek.length === 5 &&
           daysOfWeek.every(d => ['M', 'T', 'W', 'Th', 'F'].includes(d))) {
         return 'Every weekday';
       }
@@ -389,8 +428,18 @@ export function formatRecurrencePattern(
     case 'bi-weekly':
       if (!daysOfWeek || daysOfWeek.length === 0) return 'Bi-weekly';
       return `Every 2 weeks on ${daysOfWeek.map(d => FULL_DAY_MAP[d] || d).join(', ')}`;
-    case 'monthly':
-      return 'Every month';
+    case 'monthly': {
+      if (!startDate) return 'Every month';
+      const n = Math.ceil(startDate.getDate() / 7);
+      const weekday = WEEKDAY_NAMES[startDate.getDay()];
+      return `Every month on the ${ORDINALS[n] || `${n}th`} ${weekday}`;
+    }
+    case 'monthly-by-date': {
+      if (!startDate) return 'Every month (same date)';
+      const day = startDate.getDate();
+      const suffix = day === 1 ? 'st' : day === 2 ? 'nd' : day === 3 ? 'rd' : 'th';
+      return `Every month on the ${day}${suffix}`;
+    }
     default:
       return 'Recurring';
   }

@@ -31,6 +31,7 @@ interface UserData {
   id: string;
   name: string;
   division: string | null;
+  email?: string | null;
 }
 
 export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleClientProps) {
@@ -64,7 +65,15 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
       const m = (eh - sh) * 60 + (em - sm);
       if (Number.isFinite(m) && m > 0) durationMins = m;
     }
-    return { room, date, time, endTime, durationMins };
+    const isRecurring = sp.get('recurring') === 'true';
+    const frequency = sp.get('frequency') as 'daily' | 'weekly' | 'bi-weekly' | 'monthly' | 'monthly-by-date' | null;
+    const days = sp.get('days');
+    const daysOfWeek = days ? days.split(',').filter(Boolean) : null;
+    const endRule = sp.get('endRule') as 'date' | 'count' | 'never' | null;
+    const endDate = sp.get('endDate');
+    const endCountRaw = sp.get('endCount');
+    const endCount = endCountRaw ? parseInt(endCountRaw, 10) : null;
+    return { room, date, time, endTime, durationMins, isRecurring, frequency, daysOfWeek, endRule, endDate, endCount };
   })();
 
   // Form state
@@ -81,13 +90,17 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
     return `${endHours.toString().padStart(2, '0')}:${endMinutes.toString().padStart(2, '0')}`;
   });
   const [bufferTime, setBufferTime] = useState(5);
-  const [frequency, setFrequency] = useState<'daily' | 'weekly' | 'bi-weekly' | 'monthly'>('weekly');
-  const [selectedDays, setSelectedDays] = useState<string[]>(['M', 'W']);
-  // A dragged range represents a one-off booking, not a series.
-  const [isRecurring, setIsRecurring] = useState(prefill ? false : true);
-  const [endRule, setEndRule] = useState<'never' | 'count' | 'date'>('date');
-  const [endCount, setEndCount] = useState(10);
+  const [frequency, setFrequency] = useState<'daily' | 'weekly' | 'bi-weekly' | 'monthly' | 'monthly-by-date'>(prefill?.frequency ?? 'weekly');
+  const [selectedDays, setSelectedDays] = useState<string[]>(
+    prefill?.daysOfWeek ?? (['monthly', 'monthly-by-date', 'daily'].includes(prefill?.frequency ?? '') ? [] : ['M', 'W'])
+  );
+  // Default false — only true when explicitly set via URL param (recurring AI booking).
+  // Previously defaulted to true when no prefill, which caused unintended series creation.
+  const [isRecurring, setIsRecurring] = useState(prefill?.isRecurring ?? false);
+  const [endRule, setEndRule] = useState<'never' | 'count' | 'date'>(prefill?.endRule ?? 'date');
+  const [endCount, setEndCount] = useState(prefill?.endCount ?? 10);
   const [endDate, setEndDate] = useState<string>(() => {
+    if (prefill?.endDate) return prefill.endDate;
     const d = new Date();
     d.setMonth(d.getMonth() + 3);
     return d.toISOString().split('T')[0];
@@ -163,7 +176,24 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
       const mins = (eh - sh) * 60 + (em - sm);
       if (Number.isFinite(mins) && mins > 0) setDuration(mins);
     }
-    setIsRecurring(false);
+    const recurring = sp.get('recurring') === 'true';
+    setIsRecurring(recurring);
+    if (recurring) {
+      const freq = sp.get('frequency') as 'daily' | 'weekly' | 'bi-weekly' | 'monthly' | null;
+      if (freq) setFrequency(freq);
+      const days = sp.get('days');
+      if (days) {
+        setSelectedDays(days.split(',').filter(Boolean));
+      } else if (['monthly', 'monthly-by-date', 'daily'].includes(freq ?? '')) {
+        setSelectedDays([]);
+      }
+      const er = sp.get('endRule') as 'date' | 'count' | 'never' | null;
+      if (er) setEndRule(er);
+      const ed = sp.get('endDate');
+      if (ed) setEndDate(ed);
+      const ec = sp.get('endCount');
+      if (ec) { const n = parseInt(ec, 10); if (Number.isFinite(n) && n > 0) setEndCount(n); }
+    }
     setShowTemplateModal(false);
     // Empty deps — run once on mount. We deliberately ignore later URL
     // changes so user edits to form fields aren't overwritten.
@@ -184,7 +214,7 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
       // Then fetch people, excluding rejected users
       let query = supabase
         .from('people')
-        .select('id, name, division')
+        .select('id, name, division, email')
         .order('name');
 
       if (rejectedIds.length > 0) {
@@ -313,7 +343,7 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
       setError('Please select a start date');
       return;
     }
-    if (selectedDays.length === 0 && isRecurring && frequency !== 'monthly') {
+    if (selectedDays.length === 0 && isRecurring && frequency !== 'monthly' && frequency !== 'monthly-by-date') {
       setError('Please select at least one day of the week');
       return;
     }
@@ -322,7 +352,7 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
     setError(null);
     
     // Find current user from users list to safely handle the foreign key constraint
-    const matchingPerson = users.find(u => u.id === currentUser?.id);
+    const matchingPerson = users.find(u => u.id === currentUser?.id || (currentUser?.email && u.email === currentUser.email));
     const createdById = matchingPerson ? matchingPerson.id : null;
     const currentUserName = matchingPerson?.name || currentUser?.email || 'Unknown User';
     
@@ -585,7 +615,7 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
   };
   
   // Format recurrence for display
-  const recurrenceDisplay = isRecurring ? formatRecurrencePattern(frequency, selectedDays) : 'One-time meeting';
+  const recurrenceDisplay = isRecurring ? formatRecurrencePattern(frequency, selectedDays, startDate ? new Date(startDate + 'T00:00:00') : undefined) : 'One-time meeting';
 
   return (
     <div className="max-w-[1280px] mx-auto pb-24 pt-8 space-y-8 px-4 sm:px-6 lg:px-8">
@@ -715,44 +745,95 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
                   <div className="flex flex-col gap-3">
                     <label className="text-xs font-bold text-text-secondary uppercase tracking-widest">Frequency</label>
                     <div className="flex bg-status-grey-bg rounded-[16px] p-1">
-                      {(['daily', 'weekly', 'bi-weekly', 'monthly'] as const).map((freq) => (
-                        <button
-                          key={freq}
-                          onClick={() => setFrequency(freq)}
-                          className={cn(
-                            "flex-1 py-1.5 rounded-[12px] text-sm font-bold transition-all capitalize",
-                            frequency === freq 
-                              ? "bg-white text-text-primary shadow-sm" 
-                              : "text-text-primary hover:bg-white/50"
-                          )}
-                        >
-                          {freq === 'daily' ? 'Daily' : freq === 'weekly' ? 'Weekly' : freq === 'bi-weekly' ? 'Bi-Weekly' : 'Monthly'}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="flex flex-col gap-3">
-                    <label className="text-xs font-bold text-text-secondary uppercase tracking-widest">Repeat Days</label>
-                    <div className="flex flex-wrap items-center gap-2 mt-1">
-                      {['M', 'T', 'W', 'Th', 'F'].map((day) => {
+                      {(['daily', 'weekly', 'bi-weekly', 'monthly'] as const).map((freq) => {
+                        const isMonthly = freq === 'monthly';
+                        const active = isMonthly
+                          ? (frequency === 'monthly' || frequency === 'monthly-by-date')
+                          : frequency === freq;
                         return (
                           <button
-                            key={day}
-                            onClick={() => toggleDay(day)}
+                            key={freq}
+                            onClick={() => {
+                              if (isMonthly) {
+                                if (frequency !== 'monthly' && frequency !== 'monthly-by-date') {
+                                  setFrequency('monthly-by-date');
+                                }
+                              } else {
+                                setFrequency(freq);
+                              }
+                            }}
                             className={cn(
-                              "px-3 py-2 rounded-xl flex items-center justify-center text-xs font-bold transition-all border",
-                              selectedDays.includes(day)
-                                ? "bg-primary text-white border-primary shadow-sm"
-                                : "bg-status-grey-bg text-text-primary border-transparent hover:bg-cream"
+                              "flex-1 py-1.5 rounded-[12px] text-sm font-bold transition-all capitalize",
+                              active ? "bg-white text-text-primary shadow-sm" : "text-text-primary hover:bg-white/50"
                             )}
                           >
-                            {FULL_DAY_MAP[day]}
+                            {freq === 'daily' ? 'Daily' : freq === 'weekly' ? 'Weekly' : freq === 'bi-weekly' ? 'Bi-Weekly' : 'Monthly'}
                           </button>
-                        )
+                        );
                       })}
                     </div>
+
+                    {/* Monthly sub-type options */}
+                    {(frequency === 'monthly' || frequency === 'monthly-by-date') && startDate && (() => {
+                      const sd = new Date(startDate + 'T00:00:00');
+                      const dayNum = sd.getDate();
+                      const suffix = dayNum === 1 ? 'st' : dayNum === 2 ? 'nd' : dayNum === 3 ? 'rd' : 'th';
+                      const n = Math.ceil(dayNum / 7);
+                      const ordinals = ['', '1st', '2nd', '3rd', '4th', '5th'];
+                      const weekdayName = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][sd.getDay()];
+                      return (
+                        <div className="flex flex-col gap-2 mt-1">
+                          {([
+                            { value: 'monthly-by-date' as const, label: `Day ${dayNum}${suffix} of every month` },
+                            { value: 'monthly' as const, label: `The ${ordinals[n] || `${n}th`} ${weekdayName} of every month` },
+                          ]).map(opt => (
+                            <button
+                              key={opt.value}
+                              onClick={() => setFrequency(opt.value)}
+                              className={cn(
+                                "flex items-center gap-3 px-3 py-2.5 rounded-xl border text-sm text-left transition-all",
+                                frequency === opt.value
+                                  ? "border-primary bg-primary/5 text-primary font-medium"
+                                  : "border-border/40 text-text-secondary hover:border-primary/30"
+                              )}
+                            >
+                              <span className={cn(
+                                "w-4 h-4 rounded-full border-2 shrink-0 flex items-center justify-center",
+                                frequency === opt.value ? "border-primary" : "border-border/50"
+                              )}>
+                                {frequency === opt.value && <span className="w-2 h-2 rounded-full bg-primary" />}
+                              </span>
+                              {opt.label}
+                            </button>
+                          ))}
+                        </div>
+                      );
+                    })()}
                   </div>
+
+                  {(frequency === 'weekly' || frequency === 'bi-weekly') && (
+                    <div className="flex flex-col gap-3">
+                      <label className="text-xs font-bold text-text-secondary uppercase tracking-widest">Repeat Days</label>
+                      <div className="flex flex-wrap items-center gap-2 mt-1">
+                        {['M', 'T', 'W', 'Th', 'F'].map((day) => {
+                          return (
+                            <button
+                              key={day}
+                              onClick={() => toggleDay(day)}
+                              className={cn(
+                                "px-3 py-2 rounded-xl flex items-center justify-center text-xs font-bold transition-all border",
+                                selectedDays.includes(day)
+                                  ? "bg-primary text-white border-primary shadow-sm"
+                                  : "bg-status-grey-bg text-text-primary border-transparent hover:bg-cream"
+                              )}
+                            >
+                              {FULL_DAY_MAP[day]}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* End Rule */}

@@ -145,6 +145,8 @@ async function CalendarBranch({
     q = q.neq('status', 'cancelled');
   }
 
+  q = q.neq('status', 'draft');
+
   if (params.room) {
     q = q.eq('room_id', params.room);
   }
@@ -249,6 +251,8 @@ async function TasksListBranch({
   } else if (params.statusFilter !== 'all') {
     q = q.neq('status', 'cancelled');
   }
+
+  q = q.neq('status', 'draft');
 
   if (params.room) {
     q = q.eq('room_id', params.room);
@@ -447,6 +451,8 @@ async function MeetingsListBranch({
   } else if (params.statusFilter !== 'all') {
     q = q.neq('status', 'cancelled');
   }
+
+  q = q.neq('status', 'draft');
 
   if (params.room) {
     q = q.eq('room_id', params.room);

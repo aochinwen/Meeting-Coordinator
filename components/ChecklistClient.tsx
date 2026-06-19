@@ -57,6 +57,24 @@ function ChecklistClientComponent({ meetingId, currentUser }: ChecklistClientPro
   const [meetingDate, setMeetingDate] = useState<string | null>(null);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [editingDescription, setEditingDescription] = useState('');
+  const [currentPersonId, setCurrentPersonId] = useState<string | null>(null);
+
+  // Resolve current person ID from public.people matching currentUser's email/id
+  useEffect(() => {
+    async function resolveCurrentPerson() {
+      if (!currentUser) return;
+      const { data: p } = await supabase
+        .from('people')
+        .select('id')
+        .or(`email.eq.${currentUser.email},id.eq.${currentUser.id}`)
+        .limit(1)
+        .maybeSingle();
+      if (p) {
+        setCurrentPersonId(p.id);
+      }
+    }
+    resolveCurrentPerson();
+  }, [currentUser, supabase]);
 
   const profileMapRef = useRef<Map<string, { name: string }>>(new Map());
 
@@ -218,7 +236,7 @@ function ChecklistClientComponent({ meetingId, currentUser }: ChecklistClientPro
     // Log activity
     await supabase.from('meeting_activities').insert({
       meeting_id: meetingId,
-      user_id: currentUser?.id || null,
+      user_id: currentPersonId || currentUser?.id || null,
       activity_type: currentStatus ? 'task_created' : 'task_completed',
       content: currentStatus ? 'marked task as pending' : 'completed a task',
       metadata: { task_id: taskId },
@@ -268,7 +286,7 @@ function ChecklistClientComponent({ meetingId, currentUser }: ChecklistClientPro
     // Log activity
     await supabase.from('meeting_activities').insert({
       meeting_id: meetingId,
-      user_id: currentUser?.id || null,
+      user_id: currentPersonId || currentUser?.id || null,
       activity_type: 'task_created',
       content: 'added a new task',
       metadata: {},
@@ -291,7 +309,7 @@ function ChecklistClientComponent({ meetingId, currentUser }: ChecklistClientPro
     }
     await supabase.from('meeting_activities').insert({
       meeting_id: meetingId,
-      user_id: currentUser?.id || null,
+      user_id: currentPersonId || currentUser?.id || null,
       activity_type: 'task_deleted',
       content: 'deleted a task',
       metadata: { task_id: taskId },
@@ -343,7 +361,7 @@ function ChecklistClientComponent({ meetingId, currentUser }: ChecklistClientPro
       .from('meeting_activities')
       .insert({
         meeting_id: meetingId,
-        user_id: currentUser?.id || null,
+        user_id: currentPersonId || currentUser?.id || null,
         activity_type: 'comment_added',
         content: commentInput.trim(),
         metadata: {},

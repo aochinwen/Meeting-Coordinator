@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { Send, Sparkles, Loader2, Mic, MicOff } from 'lucide-react';
 import { ChatMessage } from '@/components/ui/ChatMessage';
 import { BookingCard, AvailabilityDay } from '@/components/ui/BookingCard';
+import { RecurringBookingCard, RecurringAvailability } from '@/components/ui/RecurringBookingCard';
 
 type Part = { text: string };
 type Message = {
@@ -14,7 +15,8 @@ type Message = {
 // A chat entry can be a plain message OR an availability card
 type ChatEntry =
   | { type: 'message'; message: Message }
-  | { type: 'availability'; text: string; availability: AvailabilityDay[]; durationMinutes: number; suggestions?: string[] };
+  | { type: 'availability'; text: string; availability: AvailabilityDay[]; durationMinutes: number; suggestions?: string[] }
+  | { type: 'recurring-availability'; text: string; recurringAvailability: RecurringAvailability };
 
 const MAX_RECORDING_SECONDS = 30;
 
@@ -213,6 +215,16 @@ export default function AssistantPage() {
           type: 'message',
           message: { role: 'model', parts: [{ text: `Sorry, I encountered an error: ${data.error}` }] }
         }]);
+      } else if (data.recurringAvailability) {
+        setEntries(prev => [...prev, {
+          type: 'recurring-availability',
+          text: data.text,
+          recurringAvailability: data.recurringAvailability,
+        }]);
+        setApiHistory([
+          ...historyToSend,
+          { role: 'model', parts: [{ text: data.text }] }
+        ]);
       } else if (data.availability && data.availability.length > 0) {
         // Structured response with booking card
         let suggestions: string[] | undefined = undefined;
@@ -300,7 +312,24 @@ export default function AssistantPage() {
               return <ChatMessage key={idx} role={entry.message.role} text={entry.message.parts[0].text} />;
             }
 
-            // Availability card entry
+            // Recurring availability card
+            if (entry.type === 'recurring-availability') {
+              return (
+                <div key={idx} className="flex w-full gap-4 justify-start">
+                  <div className="w-8 h-8 shrink-0 rounded-full bg-primary/10 flex items-center justify-center border border-primary/20 mt-1 shadow-sm">
+                    <Sparkles className="w-4 h-4 text-primary" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    {entry.text && (
+                      <p className="text-sm text-text-secondary mb-3 leading-relaxed">{entry.text}</p>
+                    )}
+                    <RecurringBookingCard ra={entry.recurringAvailability} />
+                  </div>
+                </div>
+              );
+            }
+
+            // One-off availability card entry
             return (
               <div key={idx} className="flex w-full gap-4 justify-start">
                 <div className="w-8 h-8 shrink-0 rounded-full bg-primary/10 flex items-center justify-center border border-primary/20 mt-1 shadow-sm">

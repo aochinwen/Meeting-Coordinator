@@ -18,6 +18,7 @@ interface CancelMeetingModalProps {
   meetingDate: string;
   meetingTitle: string;
   currentUser?: User;
+  currentPersonId?: string;
   onSuccess?: () => void;
 }
 
@@ -31,6 +32,7 @@ export function CancelMeetingModal({
   meetingDate,
   meetingTitle,
   currentUser,
+  currentPersonId,
   onSuccess,
 }: CancelMeetingModalProps) {
   const [selectedScope, setSelectedScope] = useState<CancelScope>('single');
@@ -51,13 +53,13 @@ export function CancelMeetingModal({
     try {
       if (selectedScope === 'single') {
         // Cancel only this occurrence
-        await cancelMeetingOccurrence(meetingId, currentUser?.id);
+        await cancelMeetingOccurrence(meetingId, currentPersonId || currentUser?.id);
       } else if (selectedScope === 'series' && seriesId) {
         // Cancel entire series
-        await cancelMeetingSeries(seriesId, currentUser?.id);
+        await cancelMeetingSeries(seriesId, currentPersonId || currentUser?.id);
       } else if (selectedScope === 'following' && seriesId) {
         // Cancel from this date forward
-        await cancelSeriesFromDate(seriesId, new Date(meetingDate), currentUser?.id);
+        await cancelSeriesFromDate(seriesId, new Date(meetingDate), currentPersonId || currentUser?.id);
       }
       
       onSuccess?.();

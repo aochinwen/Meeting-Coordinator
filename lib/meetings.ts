@@ -18,7 +18,7 @@ export interface CreateSeriesInput {
   template_id?: string;
   title: string;
   description?: string;
-  frequency: 'daily' | 'weekly' | 'bi-weekly' | 'monthly';
+  frequency: 'daily' | 'weekly' | 'bi-weekly' | 'monthly' | 'monthly-by-date';
   days_of_week?: string[];
   start_date: string;
   end_date?: string;
@@ -960,7 +960,7 @@ export interface SplitSeriesInput {
   // Pattern + meeting fields for the new (forward) series.
   title: string;
   description?: string | null;
-  frequency: 'daily' | 'weekly' | 'bi-weekly' | 'monthly';
+  frequency: 'daily' | 'weekly' | 'bi-weekly' | 'monthly' | 'monthly-by-date';
   days_of_week?: string[] | null;
   start_date: string; // YYYY-MM-DD - the first occurrence on the new series
   end_date?: string | null;

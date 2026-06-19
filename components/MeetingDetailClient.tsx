@@ -137,6 +137,24 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
   });
   const [editingAssigneesTaskId, setEditingAssigneesTaskId] = useState<string | null>(null);
   const [pendingAssignees, setPendingAssignees] = useState<Record<string, string[]>>({});
+  const [currentPersonId, setCurrentPersonId] = useState<string | null>(null);
+
+  // Resolve current person ID from public.people matching currentUser's email/id
+  useEffect(() => {
+    async function resolveCurrentPerson() {
+      if (!currentUser) return;
+      const { data: p } = await supabase
+        .from('people')
+        .select('id')
+        .or(`email.eq.${currentUser.email},id.eq.${currentUser.id}`)
+        .limit(1)
+        .maybeSingle();
+      if (p) {
+        setCurrentPersonId(p.id);
+      }
+    }
+    resolveCurrentPerson();
+  }, [currentUser, supabase]);
 
   // Deep-link: ?task=<id> from the dashboard calendar / tasks list scrolls to that task.
   useEffect(() => {
@@ -375,7 +393,7 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
       .eq('id', taskId);
     await supabase.from('meeting_activities').insert({
       meeting_id: meetingId,
-      user_id: currentUser?.id || null,
+      user_id: currentPersonId || currentUser?.id || null,
       activity_type: 'task_assigned',
       content: 'updated task assignees',
       metadata: { task_id: taskId },
@@ -417,7 +435,7 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
 
     await supabase.from('meeting_activities').insert({
       meeting_id: meetingId,
-      user_id: currentUser?.id || null,
+      user_id: currentPersonId || currentUser?.id || null,
       activity_type: currentStatus ? 'task_created' : 'task_completed',
       content: currentStatus ? 'marked task as pending' : 'completed a task',
       metadata: { task_id: taskId },
@@ -466,7 +484,7 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
 
     await supabase.from('meeting_activities').insert({
       meeting_id: meetingId,
-      user_id: currentUser?.id || null,
+      user_id: currentPersonId || currentUser?.id || null,
       activity_type: 'task_created',
       content: 'added a new task',
       metadata: {},
@@ -502,7 +520,7 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
       .from('meeting_activities')
       .insert({
         meeting_id: meetingId,
-        user_id: currentUser?.id || null,
+        user_id: currentPersonId || currentUser?.id || null,
         activity_type: 'comment_added',
         content: commentInput.trim(),
         metadata: {},
@@ -1284,6 +1302,7 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
           meetingDate={meeting.date}
           meetingTitle={meeting.title}
           currentUser={currentUser}
+          currentPersonId={currentPersonId || undefined}
           onSuccess={() => {
             fetchMeeting();
             fetchRoomBooking();
@@ -1305,7 +1324,7 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
       // Log activity
       await supabase.from('meeting_activities').insert({
         meeting_id: meetingId,
-        user_id: currentUser?.id || null,
+        user_id: currentPersonId || currentUser?.id || null,
         activity_type: 'participants_added',
         content: `added ${userIds.length} participant${userIds.length > 1 ? 's' : ''} to the meeting`,
         metadata: { added_count: userIds.length },
@@ -1332,7 +1351,7 @@ function MeetingDetailClientComponent({ meetingId, currentUser, initialData }: M
       // Log activity
       await supabase.from('meeting_activities').insert({
         meeting_id: meetingId,
-        user_id: currentUser?.id || null,
+        user_id: currentPersonId || currentUser?.id || null,
         activity_type: 'participant_removed',
         content: `removed ${participant.user?.name || 'a participant'} from the meeting`,
         metadata: { removed_user_id: userId },
