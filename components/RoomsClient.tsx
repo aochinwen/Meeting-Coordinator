@@ -64,7 +64,7 @@ export function RoomsClient() {
                 <span className="sm:hidden">Manage</span>
               </button>
               <button
-                onClick={() => router.push('/schedule')}
+                onClick={() => (pendingSlot ? handleProceed() : router.push('/schedule'))}
                 className="flex-1 sm:flex-none px-3 sm:px-4 py-2.5 bg-primary text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2 hover:bg-primary/90 transition-colors"
               >
                 <Plus className="h-4 w-4" />
