@@ -229,6 +229,18 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
     }
     loadUsers();
   }, []);
+
+  // Default the coordinator to the current user once the people list loads.
+  // Runs only while the field is still empty so it never overrides a
+  // template's coordinator or a manual selection.
+  useEffect(() => {
+    if (coordinatorId || users.length === 0 || !currentUser) return;
+    const self = users.find(
+      u => u.id === currentUser.id || (currentUser.email && u.email === currentUser.email)
+    );
+    if (self) setCoordinatorId(self.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [users, currentUser]);
   
   // Derive end_date from the end rule
   const resolvedEndDate: string | null = (() => {
@@ -585,7 +597,11 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
         
         if (templateData) {
           setChairmanId(templateData.chairman_id || '');
-          setCoordinatorId(templateData.coordinator_id || '');
+          // Only override when the template names a coordinator, so the
+          // current-user default survives templates without one.
+          if (templateData.coordinator_id) {
+            setCoordinatorId(templateData.coordinator_id);
+          }
         }
         
         // Fetch checklist tasks
