@@ -15,16 +15,29 @@ interface DeleteUserModalProps {
 
 export function DeleteUserModal({ isOpen, onClose, user, onDelete }: DeleteUserModalProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   if (!isOpen || !user) return null;
 
+  const handleClose = () => {
+    setError(null);
+    onClose();
+  };
+
   const handleDelete = async () => {
     setIsSubmitting(true);
+    setError(null);
     try {
       await onDelete(user.id);
       onClose();
-    } catch (error) {
-      console.error('Error deleting user:', error);
+    } catch (err) {
+      console.error('Error deleting user:', err);
+      const code = (err as { code?: string } | null)?.code;
+      setError(
+        code === '23503'
+          ? `${user.name} is still referenced by existing meetings, series, or templates and cannot be removed.`
+          : 'Failed to remove member. Please try again.'
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -46,7 +59,7 @@ export function DeleteUserModal({ isOpen, onClose, user, onDelete }: DeleteUserM
             </h2>
           </div>
           <button
-            onClick={onClose}
+            onClick={handleClose}
             className="p-2 text-text-secondary hover:bg-black/5 rounded-full transition-colors"
           >
             <X className="h-5 w-5" />
@@ -63,10 +76,16 @@ export function DeleteUserModal({ isOpen, onClose, user, onDelete }: DeleteUserM
             </p>
           </div>
 
+          {error && (
+            <div className="mb-6 px-4 py-3 rounded-2xl bg-red-50 border border-red-200 text-sm text-red-700">
+              {error}
+            </div>
+          )}
+
           <div className="flex items-center justify-end gap-3">
             <button
               type="button"
-              onClick={onClose}
+              onClick={handleClose}
               className="px-6 py-3 rounded-2xl text-base font-bold text-text-secondary hover:bg-surface transition-colors"
             >
               Cancel
