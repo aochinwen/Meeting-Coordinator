@@ -21,8 +21,8 @@ create table public.templates (
   id uuid primary key default uuid_generate_v4(),
   name text not null,
   description text,
-  chairman_id uuid references public.people(id),
-  coordinator_id uuid references public.people(id),
+  chairman_id uuid references public.people(id) on delete set null,
+  coordinator_id uuid references public.people(id) on delete set null,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
   updated_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
@@ -61,7 +61,7 @@ create table public.meeting_series (
   duration_minutes integer default 30,
   buffer_minutes integer default 0,
   timezone text default 'UTC',
-  created_by uuid references public.people(id),
+  created_by uuid references public.people(id) on delete set null,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
   updated_at timestamp with time zone default timezone('utc'::text, now()) not null
 );

@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
-  Users, User as UserIcon, PlusCircle, Calendar as CalendarIcon, 
+  Users, PlusCircle, Calendar as CalendarIcon,
   Clock, Repeat, UserPlus, Lightbulb, AlertTriangle, Eye, Sparkles, AlertCircle
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -531,9 +531,8 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
       });
       setShowCreatedModal(true);
     } catch (err: any) {
-      console.error('Error creating meeting:', err);
-      console.error('Error details:', err.message, err.stack);
-      setError('Failed to create meeting: ' + (err.message || 'Please try again.'));
+      console.error('Error creating meeting:', err.message);
+      setError('Failed to create meeting. Please try again.');
     } finally {
       setIsSubmitting(false);
     }

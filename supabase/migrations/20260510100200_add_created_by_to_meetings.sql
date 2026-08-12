@@ -8,7 +8,7 @@ BEGIN
         SELECT 1 FROM information_schema.columns 
         WHERE table_name = 'meetings' AND column_name = 'created_by'
     ) THEN
-        ALTER TABLE public.meetings ADD COLUMN created_by uuid REFERENCES public.people(id);
+        ALTER TABLE public.meetings ADD COLUMN created_by uuid REFERENCES public.people(id) ON DELETE SET NULL;
     END IF;
 
     IF NOT EXISTS (
