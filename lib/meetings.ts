@@ -127,9 +127,7 @@ export async function generateSeriesInstances(
 ): Promise<void> {
   const { copyTemplateTasks = true } = options;
   const supabase = createClient();
-  
-  console.log('Generating series instances for series:', seriesId, 'weeks:', weeksToGenerate);
-  
+
   // Get series data if not provided
   let data = seriesData;
   if (!data) {
@@ -163,9 +161,7 @@ export async function generateSeriesInstances(
       created_by_name: series.created_by_name || undefined,
     } as CreateSeriesInput & { created_by?: string; created_by_name?: string };
   }
-  
-  console.log('Series data for generation:', data);
-  
+
   // Get existing instances to avoid duplicates
   const { data: existingMeetings } = await supabase
     .from('meetings')
@@ -185,9 +181,7 @@ export async function generateSeriesInstances(
     d.setDate(d.getDate() - 1);
     return d;
   })();
-  
-  console.log('Generating from date:', lastDate);
-  
+
   // Generate occurrence dates
   const config: RecurrenceConfig = {
     frequency: data.frequency,
@@ -195,16 +189,11 @@ export async function generateSeriesInstances(
     startDate: new Date(data.start_date),
     endDate: data.end_date ? new Date(data.end_date) : null,
   };
-  
-  console.log('Recurrence config:', config);
-  
+
   // Generate enough occurrences for the requested weeks
   const occurrences = generateOccurrences(config, weeksToGenerate * 7, lastDate);
-  
-  console.log('Generated occurrences:', occurrences.length, occurrences);
-  
+
   if (occurrences.length === 0) {
-    console.log('No occurrences generated, returning early');
     return;
   }
   
@@ -224,9 +213,7 @@ export async function generateSeriesInstances(
     created_by: (data as any)?.created_by || null,
     created_by_name: (data as any)?.created_by_name || null,
   }));
-  
-  console.log('Meetings to insert:', meetings);
-  
+
   // Insert meetings
   const { data: insertedMeetings, error: insertError } = await supabase
     .from('meetings')
@@ -237,8 +224,6 @@ export async function generateSeriesInstances(
     console.error('Error inserting meetings:', insertError);
     throw insertError;
   }
-  
-  console.log('Successfully inserted meetings');
 
   // Insert meeting activities for created event
   if (insertedMeetings && insertedMeetings.length > 0) {
@@ -355,20 +340,20 @@ export async function updateMeetingOccurrence(
       .eq('status', 'confirmed');
 
     if (bookings && bookings.length > 0) {
-      for (const booking of bookings) {
-        const bookingUpdate: any = {};
-        if (changes.date) bookingUpdate.date = changes.date;
-        if (changes.start_time !== undefined) bookingUpdate.start_time = changes.start_time;
-        if (changes.end_time !== undefined) bookingUpdate.end_time = changes.end_time;
+      const bookingUpdate: any = {};
+      if (changes.date) bookingUpdate.date = changes.date;
+      if (changes.start_time !== undefined) bookingUpdate.start_time = changes.start_time;
+      if (changes.end_time !== undefined) bookingUpdate.end_time = changes.end_time;
 
-        const { error: bookingError } = await supabase
-          .from('room_bookings')
-          .update(bookingUpdate)
-          .eq('id', booking.id);
-          
-        if (bookingError) {
-          console.error('Error syncing room booking time:', bookingError);
-        }
+      const bookingIds = bookings.map((b) => b.id);
+
+      const { error: bookingError } = await supabase
+        .from('room_bookings')
+        .update(bookingUpdate)
+        .in('id', bookingIds);
+
+      if (bookingError) {
+        console.error('Error syncing room booking time:', bookingError);
       }
     }
   }
@@ -1076,16 +1061,29 @@ export async function splitSeriesAtDate(
       .from('meetings')
       .select('id')
       .eq('series_id', newSeriesId);
-    for (const m of forwardMeetings || []) {
-      // Skip meetings that already have these participants (overridden ones).
-      const { data: existing } = await supabase
+    if (forwardMeetings && forwardMeetings.length > 0) {
+      const meetingIds = forwardMeetings.map((m) => m.id);
+
+      const { data: allExisting } = await supabase
         .from('meeting_participants')
-        .select('user_id')
-        .eq('meeting_id', m.id);
-      const existingIds = new Set((existing || []).map((p) => p.user_id));
-      const missing = newPattern.participants.filter((id) => !existingIds.has(id));
-      if (missing.length > 0) {
-        await addMeetingParticipants(m.id, missing, true);
+        .select('meeting_id, user_id')
+        .in('meeting_id', meetingIds);
+
+      const existingByMeeting = new Map<string, Set<string>>();
+      for (const p of allExisting || []) {
+        if (!existingByMeeting.has(p.meeting_id)) {
+          existingByMeeting.set(p.meeting_id, new Set());
+        }
+        existingByMeeting.get(p.meeting_id)!.add(p.user_id);
+      }
+
+      for (const m of forwardMeetings) {
+        // Skip meetings that already have these participants (overridden ones).
+        const existingIds = existingByMeeting.get(m.id) || new Set<string>();
+        const missing = newPattern.participants.filter((id) => !existingIds.has(id));
+        if (missing.length > 0) {
+          await addMeetingParticipants(m.id, missing, true);
+        }
       }
     }
   }
