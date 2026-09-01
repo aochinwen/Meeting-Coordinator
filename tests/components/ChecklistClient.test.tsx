@@ -38,7 +38,20 @@ describe('ChecklistClient', () => {
           limit: vi.fn().mockResolvedValue({ data: [], error: null })
         }
       }
-      return { select: vi.fn().mockResolvedValue({ data: [], error: null }) }
+      return {
+        select: vi.fn().mockReturnThis(),
+        insert: vi.fn().mockReturnThis(),
+        update: vi.fn().mockReturnThis(),
+        delete: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        in: vi.fn().mockReturnThis(),
+        order: vi.fn().mockReturnThis(),
+        limit: vi.fn().mockReturnThis(),
+        or: vi.fn().mockReturnThis(),
+        single: vi.fn().mockResolvedValue({ data: null, error: null }),
+        maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+        then: (resolve: any) => resolve({ data: [], error: null }),
+      }
     })
 
     render(<ChecklistClient meetingId="meeting-1" />)
@@ -75,7 +88,20 @@ describe('ChecklistClient', () => {
           insert: vi.fn().mockResolvedValue({ error: null })
         }
       }
-      return { select: vi.fn().mockResolvedValue({ data: [], error: null }) }
+      return {
+        select: vi.fn().mockReturnThis(),
+        insert: vi.fn().mockReturnThis(),
+        update: vi.fn().mockReturnThis(),
+        delete: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        in: vi.fn().mockReturnThis(),
+        order: vi.fn().mockReturnThis(),
+        limit: vi.fn().mockReturnThis(),
+        or: vi.fn().mockReturnThis(),
+        single: vi.fn().mockResolvedValue({ data: null, error: null }),
+        maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+        then: (resolve: any) => resolve({ data: [], error: null }),
+      }
     })
 
     render(<ChecklistClient meetingId="meeting-1" />)
@@ -124,7 +150,20 @@ describe('ChecklistClient', () => {
           insert: vi.fn().mockResolvedValue({ error: null })
         }
       }
-      return { select: vi.fn().mockResolvedValue({ data: [], error: null }) }
+      return {
+        select: vi.fn().mockReturnThis(),
+        insert: vi.fn().mockReturnThis(),
+        update: vi.fn().mockReturnThis(),
+        delete: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        in: vi.fn().mockReturnThis(),
+        order: vi.fn().mockReturnThis(),
+        limit: vi.fn().mockReturnThis(),
+        or: vi.fn().mockReturnThis(),
+        single: vi.fn().mockResolvedValue({ data: null, error: null }),
+        maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+        then: (resolve: any) => resolve({ data: [], error: null }),
+      }
     })
 
     render(<ChecklistClient meetingId="meeting-1" />)

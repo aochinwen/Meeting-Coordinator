@@ -7,6 +7,7 @@
 
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { format } from 'date-fns';
 import { RoomCalendar } from '../../components/RoomCalendar';
 
 // Mock the lib/rooms module
@@ -35,11 +36,15 @@ describe('RoomCalendar', () => {
     { id: 'room-2', name: 'Meeting Room B', capacity: 6, created_at: '', updated_at: '' },
   ];
 
-  const mockBooking: RoomBooking & { meetings?: { title: string; status: string } | null } = {
+  // Use the current date so bookings fall within the calendar's visible
+  // week (RoomCalendar always renders the week containing `new Date()`).
+  const todayKey = format(new Date(), 'yyyy-MM-dd');
+
+  const mockBooking: RoomBooking & { meetings?: { title: string; status: string; series_id: string | null } | null } = {
     id: 'booking-1',
     room_id: 'room-1',
     meeting_id: 'meeting-1',
-    date: '2024-01-15',
+    date: todayKey,
     start_time: '10:00',
     end_time: '11:00',
     status: 'confirmed',
@@ -105,7 +110,7 @@ describe('RoomCalendar', () => {
     render(<RoomCalendar />);
 
     await waitFor(() => {
-      expect(screen.getByText('Failed to load rooms')).toBeInTheDocument();
+      expect(screen.getByText('Failed to load room schedule')).toBeInTheDocument();
     });
   });
 
@@ -123,9 +128,9 @@ describe('RoomCalendar', () => {
   });
 
   it('should display bookings on the calendar', async () => {
-    const bookingWithMeeting: RoomBooking & { meetings?: { title: string; status: string } | null } = {
+    const bookingWithMeeting: RoomBooking & { meetings?: { title: string; status: string; series_id: string | null } | null } = {
       ...mockBooking,
-      meetings: { title: 'Team Standup', status: 'scheduled' },
+      meetings: { title: 'Team Standup', status: 'scheduled', series_id: null },
     };
 
     mockGetRoomBookings.mockResolvedValueOnce([bookingWithMeeting]);
@@ -150,7 +155,7 @@ describe('RoomCalendar', () => {
   it('should display time range on booking', async () => {
     const bookingWithMeeting = {
       ...mockBooking,
-      meetings: { title: 'Team Standup', status: 'scheduled' },
+      meetings: { title: 'Team Standup', status: 'scheduled', series_id: null },
     };
 
     mockGetRoomBookings.mockResolvedValueOnce([bookingWithMeeting]);
@@ -166,7 +171,7 @@ describe('RoomCalendar', () => {
     const onBookingClick = vi.fn();
     const bookingWithMeeting = {
       ...mockBooking,
-      meetings: { title: 'Team Standup', status: 'scheduled' },
+      meetings: { title: 'Team Standup', status: 'scheduled', series_id: null },
     };
 
     mockGetRoomBookings.mockResolvedValueOnce([bookingWithMeeting]);
@@ -185,7 +190,7 @@ describe('RoomCalendar', () => {
     expect(onBookingClick).toHaveBeenCalledWith(
       expect.objectContaining({
         id: 'booking-1',
-        meetings: { title: 'Team Standup', status: 'scheduled' },
+        meetings: { title: 'Team Standup', status: 'scheduled', series_id: null },
       })
     );
   });
@@ -288,14 +293,14 @@ describe('RoomCalendar', () => {
         id: 'booking-1',
         start_time: '10:00',
         end_time: '11:00',
-        meetings: { title: 'Meeting 1', status: 'scheduled' },
+        meetings: { title: 'Meeting 1', status: 'scheduled', series_id: null },
       },
       {
         ...mockBooking,
         id: 'booking-2',
         start_time: '10:30',
         end_time: '11:30',
-        meetings: { title: 'Meeting 2', status: 'scheduled' },
+        meetings: { title: 'Meeting 2', status: 'scheduled', series_id: null },
       },
     ];
 

@@ -420,6 +420,7 @@ export function RoomCalendar({ onBookingClick, onTimeSlotClick, onPendingSlotCha
           <div className="flex items-center gap-1 bg-white border border-border/30 rounded-xl p-1">
             <button
               onClick={goToPreviousWeek}
+              aria-label="Previous week"
               className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-surface transition-colors"
             >
               <ChevronLeft className="h-4 w-4 text-text-secondary" />
@@ -432,13 +433,14 @@ export function RoomCalendar({ onBookingClick, onTimeSlotClick, onPendingSlotCha
             </button>
             <button
               onClick={goToNextWeek}
+              aria-label="Next week"
               className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-surface transition-colors"
             >
               <ChevronRight className="h-4 w-4 text-text-secondary" />
             </button>
           </div>
         </div>
-        
+
         <p className="text-xs sm:text-sm text-text-secondary font-light">
           {format(visibleDays[0], 'MMM d')} - {format(visibleDays[6], 'MMM d, yyyy')}
         </p>
@@ -447,7 +449,10 @@ export function RoomCalendar({ onBookingClick, onTimeSlotClick, onPendingSlotCha
       {/* Calendar Grid */}
       {isLoading ? (
         <div className="flex items-center justify-center py-20">
-          <div className="h-8 w-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+          <div
+            role="status"
+            className="h-8 w-8 border-2 border-primary border-t-transparent rounded-full animate-spin"
+          />
         </div>
       ) : rooms.length === 0 ? (
         <div className="text-center py-20 bg-surface rounded-3xl border border-border/30">

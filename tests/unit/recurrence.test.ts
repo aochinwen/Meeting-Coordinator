@@ -296,9 +296,12 @@ describe('Bi-Weekly Recurrence', () => {
 });
 
 describe('Monthly Recurrence', () => {
+  // 'monthly' recurs on the same Nth-weekday-of-month as startDate (e.g. "3rd
+  // Monday"); recurring on the same calendar day each month is
+  // 'monthly-by-date', which is what these cases exercise.
   test('should generate monthly on same day of month', () => {
     const config: RecurrenceConfig = {
-      frequency: 'monthly',
+      frequency: 'monthly-by-date',
       daysOfWeek: null,
       startDate: new Date(2026, 3, 21), // April 21
       endDate: null,
@@ -317,7 +320,7 @@ describe('Monthly Recurrence', () => {
 
   test('should handle month with fewer days', () => {
     const config: RecurrenceConfig = {
-      frequency: 'monthly',
+      frequency: 'monthly-by-date',
       daysOfWeek: null,
       startDate: new Date(2027, 0, 31), // Jan 31, 2027
       endDate: null,
@@ -336,7 +339,7 @@ describe('Monthly Recurrence', () => {
 
   test('should handle month boundaries correctly', () => {
     const config: RecurrenceConfig = {
-      frequency: 'monthly',
+      frequency: 'monthly-by-date',
       daysOfWeek: null,
       startDate: new Date(2026, 3, 1), // April 1
       endDate: null,

@@ -31,20 +31,31 @@ describe('Meetings Library (Integration Tests)', () => {
             single: vi.fn().mockResolvedValue({ data: { id: 'series-1' }, error: null })
           }
         } else if (table === 'meetings') {
-          return {
-            insert: vi.fn().mockResolvedValue({ error: null }),
-            select: vi.fn().mockReturnThis(),
-            eq: vi.fn().mockReturnThis(),
-            order: vi.fn().mockReturnThis(),
-            limit: vi.fn().mockResolvedValue({
-              data: [
-                { id: 'meeting-1', date: '2024-05-06' },
-                { id: 'meeting-2', date: '2024-05-13' }
-              ],
-              error: null
-            }),
-            in: vi.fn().mockReturnThis()
+          // Chainable AND thenable: every method returns the same chain object
+          // so any call order (select().eq().order().limit(), or
+          // insert().select()) can be awaited at whichever step is terminal.
+          // Resolves to an empty result set everywhere, which keeps
+          // downstream branches (meeting_activities insert, participants
+          // backfill) untriggered without needing to mock those tables too.
+          interface MeetingsChain {
+            insert: (...args: unknown[]) => MeetingsChain
+            select: (...args: unknown[]) => MeetingsChain
+            eq: (...args: unknown[]) => MeetingsChain
+            order: (...args: unknown[]) => MeetingsChain
+            in: (...args: unknown[]) => MeetingsChain
+            limit: (...args: unknown[]) => Promise<{ data: never[]; error: null }>
+            then: (resolve: (value: { data: never[]; error: null }) => unknown) => unknown
           }
+          const meetingsChain: MeetingsChain = {
+            insert: vi.fn(() => meetingsChain),
+            select: vi.fn(() => meetingsChain),
+            eq: vi.fn(() => meetingsChain),
+            order: vi.fn(() => meetingsChain),
+            in: vi.fn(() => meetingsChain),
+            limit: vi.fn(() => Promise.resolve({ data: [], error: null })),
+            then: (resolve) => resolve({ data: [], error: null })
+          }
+          return meetingsChain
         } else if (table === 'meeting_participants') {
           return {
             insert: vi.fn().mockResolvedValue({ error: null }),
@@ -144,10 +155,20 @@ describe('Meetings Library (Integration Tests)', () => {
                     date: '2024-05-01',
                     start_time: '10:30:00',
                     end_time: '11:30:00'
-                  },
-                  users: { name: 'Alice' }
+                  }
                 }
               ],
+              error: null
+            })
+          }
+        } else if (table === 'people') {
+          // checkConflicts looks up participant names via `people`
+          // (select('id, name').in('id', participantIds)) — a separate
+          // query from meeting_participants, so it needs its own mock.
+          return {
+            select: vi.fn().mockReturnThis(),
+            in: vi.fn().mockResolvedValue({
+              data: [{ id: 'user-1', name: 'Alice' }],
               error: null
             })
           }
@@ -160,6 +181,83 @@ describe('Meetings Library (Integration Tests)', () => {
       expect(result.hasConflicts).toBe(true)
       expect(result.conflicts).toHaveLength(1)
       expect(result.conflicts[0].userName).toBe('Alice')
+      expect(result.conflicts[0].meetingTitle).toBe('Another meeting')
+    })
+
+    it('excludes the meeting being edited from its own conflict check', async () => {
+      // Same participant, same date/time overlap as the meeting under edit
+      // (e.g. changing only the room while keeping date/start/end unchanged).
+      mockSupabaseClient.from.mockImplementation((table) => {
+        if (table === 'meeting_participants') {
+          return {
+            select: vi.fn().mockReturnThis(),
+            in: vi.fn().mockReturnThis(),
+            eq: vi.fn().mockResolvedValue({
+              data: [
+                {
+                  user_id: 'user-1',
+                  meetings: {
+                    id: 'meeting-1',
+                    title: 'Meeting Being Edited',
+                    date: '2024-05-01',
+                    start_time: '10:00:00',
+                    end_time: '11:00:00'
+                  }
+                }
+              ],
+              error: null
+            })
+          }
+        }
+        return { select: vi.fn().mockReturnThis(), eq: vi.fn().mockReturnThis(), in: vi.fn().mockResolvedValue({ data: [], error: null }) }
+      })
+
+      const result = await checkConflicts('2024-05-01', '10:00:00', '11:00:00', ['user-1'], 'meeting-1')
+
+      expect(result.hasConflicts).toBe(false)
+      expect(result.conflicts).toHaveLength(0)
+    })
+
+    it('still reports a conflict from a different meeting when excludeMeetingId is set', async () => {
+      mockSupabaseClient.from.mockImplementation((table) => {
+        if (table === 'meeting_participants') {
+          return {
+            select: vi.fn().mockReturnThis(),
+            in: vi.fn().mockReturnThis(),
+            eq: vi.fn().mockResolvedValue({
+              data: [
+                {
+                  user_id: 'user-1',
+                  meetings: {
+                    id: 'meeting-1',
+                    title: 'Meeting Being Edited',
+                    date: '2024-05-01',
+                    start_time: '10:00:00',
+                    end_time: '11:00:00'
+                  }
+                },
+                {
+                  user_id: 'user-1',
+                  meetings: {
+                    id: 'meeting-2',
+                    title: 'Another meeting',
+                    date: '2024-05-01',
+                    start_time: '10:30:00',
+                    end_time: '11:30:00'
+                  }
+                }
+              ],
+              error: null
+            })
+          }
+        }
+        return { select: vi.fn().mockReturnThis(), eq: vi.fn().mockReturnThis(), in: vi.fn().mockResolvedValue({ data: [], error: null }) }
+      })
+
+      const result = await checkConflicts('2024-05-01', '10:00:00', '11:00:00', ['user-1'], 'meeting-1')
+
+      expect(result.hasConflicts).toBe(true)
+      expect(result.conflicts).toHaveLength(1)
       expect(result.conflicts[0].meetingTitle).toBe('Another meeting')
     })
   })

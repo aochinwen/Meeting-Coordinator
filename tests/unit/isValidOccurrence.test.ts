@@ -67,9 +67,11 @@ describe('isValidOccurrence', () => {
   });
 
   describe('Monthly Frequency', () => {
+    // 'monthly' means same Nth-weekday-of-month (e.g. "3rd Monday"); same
+    // calendar day each month is 'monthly-by-date'.
     test('should return true if the day of the month matches the start date day', () => {
       const config = createConfig({
-        frequency: 'monthly',
+        frequency: 'monthly-by-date',
         startDate: new Date(2024, 0, 15),
       });
       expect(isValidOccurrence(new Date(2024, 0, 15), config)).toBe(true);
@@ -79,7 +81,7 @@ describe('isValidOccurrence', () => {
 
     test('should return false if the day of the month does not match the start date day', () => {
       const config = createConfig({
-        frequency: 'monthly',
+        frequency: 'monthly-by-date',
         startDate: new Date(2024, 0, 15),
       });
       expect(isValidOccurrence(new Date(2024, 0, 16), config)).toBe(false);

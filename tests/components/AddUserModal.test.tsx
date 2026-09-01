@@ -16,7 +16,8 @@ describe('AddUserModal', () => {
 
     await userEvent.type(screen.getByLabelText('Full Name'), 'John Doe')
     await userEvent.type(screen.getByLabelText('Division'), 'Sales')
-    await userEvent.selectOptions(screen.getByLabelText('Rank / Role'), 'Manager')
+    await userEvent.click(screen.getByLabelText('Rank / Role'))
+    await userEvent.click(screen.getByText('Manager'))
 
     fireEvent.click(screen.getByText('Add Member'))
 
@@ -34,7 +35,8 @@ describe('AddUserModal', () => {
 
     await userEvent.type(screen.getByLabelText('Full Name'), 'Jane Doe')
     await userEvent.type(screen.getByLabelText('Division'), 'Sales')
-    await userEvent.selectOptions(screen.getByLabelText('Rank / Role'), 'Executive')
+    await userEvent.click(screen.getByLabelText('Rank / Role'))
+    await userEvent.click(screen.getByText('Executive'))
 
     fireEvent.click(screen.getByText('Add Member'))
 

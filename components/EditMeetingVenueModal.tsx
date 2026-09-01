@@ -105,7 +105,7 @@ export function EditMeetingVenueModal({
     setConflicts([]);
 
     // Check for conflicts
-    const result = await checkConflicts(slot.date, slot.startTime, slot.endTime, participantIds);
+    const result = await checkConflicts(slot.date, slot.startTime, slot.endTime, participantIds, meeting.id);
     setConflicts(result.conflicts.map(c => ({
       userId: c.userId,
       userName: c.userName,
@@ -114,7 +114,7 @@ export function EditMeetingVenueModal({
     setIsCheckingConflicts(false);
     console.log('[MODAL] Setting step to confirm');
     setStep('confirm');
-  }, [participantIds]);
+  }, [participantIds, meeting.id]);
 
   // Handle series pattern submission from selector
   const handleSeriesPatternSubmit = useCallback(async (pattern: SeriesPattern) => {

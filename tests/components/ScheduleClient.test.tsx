@@ -4,6 +4,12 @@ import { ScheduleClient } from '../../components/ScheduleClient'
 import userEvent from '@testing-library/user-event'
 import { mockSupabaseClient } from '../mocks/supabase'
 
+// canvas-confetti relies on a real canvas context, which jsdom doesn't
+// implement — stub it out so the success modal's confetti effect is a no-op.
+vi.mock('@/lib/useConfetti', () => ({
+  useConfetti: () => vi.fn(),
+}))
+
 describe('ScheduleClient', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -44,6 +50,11 @@ describe('ScheduleClient', () => {
           return {
              insert: vi.fn().mockResolvedValue({ error: null })
           }
+      } else if (table === 'user_approvals') {
+        return {
+          select: vi.fn().mockReturnThis(),
+          eq: vi.fn().mockResolvedValue({ data: [], error: null })
+        }
       }
       return {
         select: vi.fn().mockReturnThis(),
@@ -68,18 +79,20 @@ describe('ScheduleClient', () => {
     render(<ScheduleClient />)
 
     await waitFor(() => {
-      expect(screen.getByText('Publish Schedule')).toBeInTheDocument()
+      expect(screen.getAllByText('Publish Schedule').length).toBeGreaterThan(0)
     })
 
-    // We don't have a specific title input field. Title comes from the template selected.
-    // In our component, if no template is selected, we can't set title from UI except through template.
-    // Let's just click 'Publish Schedule' which should show error 'Please enter a meeting title'.
+    // The Publish Schedule button stays disabled until a title is entered,
+    // so fill out the title field first.
+    const titleInput = screen.getByPlaceholderText('Enter meeting name...')
+    fireEvent.change(titleInput, { target: { value: 'Strategy Review' } })
 
-    const saveButton = screen.getByText('Publish Schedule')
+    // The button is rendered twice (desktop header + mobile sticky footer), so grab the first.
+    const [saveButton] = screen.getAllByText('Publish Schedule')
     fireEvent.click(saveButton)
 
     await waitFor(() => {
-      expect(screen.getByText('Please enter a meeting title')).toBeInTheDocument()
+      expect(screen.getByText('Meeting Created!')).toBeInTheDocument()
     })
 
     consoleSpy.mockRestore()
@@ -92,7 +105,11 @@ describe('ScheduleClient', () => {
       expect(screen.getByText('Recurrence Settings')).toBeInTheDocument()
     })
 
-    // It is already rendered in the UI with a toggle switch, let's just make sure it exists
+    // Recurrence options are hidden until the toggle switch is turned on.
+    const recurrenceHeader = screen.getByText('Recurrence Settings').closest('.flex.items-center.justify-between')
+    const recurrenceToggle = recurrenceHeader?.querySelector('button')
+    fireEvent.click(recurrenceToggle as HTMLElement)
+
     expect(screen.getByText('Frequency')).toBeInTheDocument()
 
     // Test frequency toggle

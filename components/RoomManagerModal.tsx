@@ -19,7 +19,7 @@ export function RoomManagerModal({ isOpen, onClose }: RoomManagerModalProps) {
   // Form state for adding/editing
   const [editingRoomId, setEditingRoomId] = useState<string | null>(null);
   const [roomName, setRoomName] = useState('');
-  const [roomCapacity, setRoomCapacity] = useState(4);
+  const [roomCapacity, setRoomCapacity] = useState<number | ''>(4);
   const [showAddForm, setShowAddForm] = useState(false);
 
   // Load rooms on mount
@@ -49,14 +49,14 @@ export function RoomManagerModal({ isOpen, onClose }: RoomManagerModalProps) {
       return;
     }
     
-    if (roomCapacity < 1) {
+    if (!roomCapacity || roomCapacity < 1) {
       setError('Capacity must be at least 1');
       return;
     }
-    
+
     setIsSaving(true);
     setError(null);
-    
+
     try {
       await createRoom({
         name: roomName.trim(),
@@ -84,14 +84,14 @@ export function RoomManagerModal({ isOpen, onClose }: RoomManagerModalProps) {
       return;
     }
     
-    if (roomCapacity < 1) {
+    if (!roomCapacity || roomCapacity < 1) {
       setError('Capacity must be at least 1');
       return;
     }
-    
+
     setIsSaving(true);
     setError(null);
-    
+
     try {
       await updateRoom(editingRoomId, {
         name: roomName.trim(),
@@ -181,6 +181,7 @@ export function RoomManagerModal({ isOpen, onClose }: RoomManagerModalProps) {
           </div>
           <button
             onClick={onClose}
+            aria-label="Close"
             className="h-10 w-10 rounded-full hover:bg-surface flex items-center justify-center transition-colors"
           >
             <X className="h-5 w-5 text-text-secondary" />
@@ -199,7 +200,10 @@ export function RoomManagerModal({ isOpen, onClose }: RoomManagerModalProps) {
         <div className="flex-1 overflow-y-auto p-6">
           {isLoading ? (
             <div className="flex items-center justify-center py-12">
-              <div className="h-8 w-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+              <div
+                role="status"
+                className="h-8 w-8 border-2 border-primary border-t-transparent rounded-full animate-spin"
+              />
             </div>
           ) : rooms.length === 0 ? (
             <div className="text-center py-12">
@@ -291,7 +295,10 @@ export function RoomManagerModal({ isOpen, onClose }: RoomManagerModalProps) {
                     min={1}
                     max={100}
                     value={roomCapacity}
-                    onChange={(e) => setRoomCapacity(parseInt(e.target.value) || 1)}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setRoomCapacity(value === '' ? '' : parseInt(value, 10) || 0);
+                    }}
                     className="w-24 px-4 py-3 bg-white border border-border/50 rounded-xl text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/20 text-sm text-center"
                     disabled={isSaving}
                   />
@@ -303,7 +310,7 @@ export function RoomManagerModal({ isOpen, onClose }: RoomManagerModalProps) {
             <div className="flex items-center gap-3 mt-6">
               <button
                 onClick={editingRoomId ? handleUpdateRoom : handleAddRoom}
-                disabled={isSaving || !roomName.trim()}
+                disabled={isSaving}
                 className="flex-1 px-4 py-2.5 bg-primary text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2 disabled:opacity-50 transition-all active:scale-95"
               >
                 {isSaving ? (

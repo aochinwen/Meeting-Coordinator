@@ -33,9 +33,9 @@ describe('DirectoryClient', () => {
     render(<DirectoryClient initialUsers={initialUsers} activeTeamsCount={2} />)
 
     await waitFor(() => {
-      expect(screen.getByText('Alice')).toBeInTheDocument()
-      expect(screen.getByText('Engineering')).toBeInTheDocument()
-      expect(screen.getByText('Bob')).toBeInTheDocument()
+      expect(screen.getAllByText('Alice').length).toBeGreaterThan(0)
+      expect(screen.getAllByText('Engineering').length).toBeGreaterThan(0)
+      expect(screen.getAllByText('Bob').length).toBeGreaterThan(0)
     })
   })
 

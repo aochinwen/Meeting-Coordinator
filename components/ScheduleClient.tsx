@@ -203,28 +203,32 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
   // Load users on mount (exclude rejected users from user_approvals)
   useEffect(() => {
     async function loadUsers() {
-      // First, get rejected user IDs from user_approvals
-      const { data: rejectedApprovals } = await supabase
-        .from('user_approvals')
-        .select('user_id')
-        .eq('status', 'rejected');
+      try {
+        // First, get rejected user IDs from user_approvals
+        const { data: rejectedApprovals } = await supabase
+          .from('user_approvals')
+          .select('user_id')
+          .eq('status', 'rejected');
 
-      const rejectedIds = rejectedApprovals?.map(a => a.user_id) || [];
+        const rejectedIds = rejectedApprovals?.map(a => a.user_id) || [];
 
-      // Then fetch people, excluding rejected users
-      let query = supabase
-        .from('people')
-        .select('id, name, division, email')
-        .order('name');
+        // Then fetch people, excluding rejected users
+        let query = supabase
+          .from('people')
+          .select('id, name, division, email')
+          .order('name');
 
-      if (rejectedIds.length > 0) {
-        query = query.not('id', 'in', `(${rejectedIds.join(',')})`);
-      }
+        if (rejectedIds.length > 0) {
+          query = query.not('id', 'in', `(${rejectedIds.join(',')})`);
+        }
 
-      const { data, error } = await query;
+        const { data, error } = await query;
 
-      if (!error && data) {
-        setUsers(data);
+        if (!error && data) {
+          setUsers(data);
+        }
+      } catch (error) {
+        console.error('Error loading users:', error);
       }
     }
     loadUsers();

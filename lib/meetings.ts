@@ -1106,7 +1106,8 @@ export async function checkConflicts(
   date: string,
   startTime: string,
   endTime: string,
-  participantIds: string[]
+  participantIds: string[],
+  excludeMeetingId?: string
 ): Promise<{
   hasConflicts: boolean;
   conflicts: Array<{
@@ -1135,6 +1136,7 @@ export async function checkConflicts(
     .select(`
       user_id,
       meetings!inner(
+        id,
         title,
         date,
         start_time,
@@ -1143,16 +1145,20 @@ export async function checkConflicts(
     `)
     .in('user_id', participantIds)
     .eq('meetings.date', date);
-  
+
   if (error || !existingMeetings) {
     return { hasConflicts: false, conflicts: [] };
   }
-  
-  // Check for time overlaps
+
+  // Check for time overlaps, excluding the meeting being edited (if any)
   const conflicts = existingMeetings.filter((participant: any) => {
+    if (excludeMeetingId && participant.meetings.id === excludeMeetingId) {
+      return false;
+    }
+
     const meetingStart = participant.meetings.start_time;
     const meetingEnd = participant.meetings.end_time;
-    
+
     // Overlap check: (StartA < EndB) and (EndA > StartB)
     return startTime < meetingEnd && endTime > meetingStart;
   });
