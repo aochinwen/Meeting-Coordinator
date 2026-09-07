@@ -523,21 +523,12 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
       }
       
       console.log('Meeting created with ID:', seriesId);
-      
-      setCreatedMeeting({
-        id: seriesId,
-        title: title.trim(),
-        date: startDate,
-        startTime,
-        endTime,
-        isRecurring,
-        occurrencesCount: isRecurring ? previewDates.length : 1,
-      });
-      setShowCreatedModal(true);
+
+      router.push(`/meetings/${seriesId}`);
+      return;
     } catch (err: any) {
       console.error('Error creating meeting:', err.message);
       setError('Failed to create meeting. Please try again.');
-    } finally {
       setIsSubmitting(false);
     }
   };
