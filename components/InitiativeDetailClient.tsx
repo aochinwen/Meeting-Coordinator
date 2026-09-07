@@ -79,7 +79,7 @@ export function InitiativeDetailClient({ initiative }: InitiativeDetailClientPro
   };
 
   return (
-    <div className="max-w-[1280px] mx-auto space-y-8 pb-12">
+    <div className="max-w-7xl mx-auto space-y-8 pb-12">
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-4xl font-bold tracking-tight text-text-primary font-literata">{initiative.title}</h1>
@@ -138,12 +138,12 @@ export function InitiativeDetailClient({ initiative }: InitiativeDetailClientPro
 
         {currentSlide ? (
           <>
-            <div className="rounded-2xl border border-border bg-board p-2 min-h-[300px] flex items-center justify-center">
+            <div className="rounded-2xl border border-border bg-board p-2 min-h-75 flex items-center justify-center">
               {currentSlide.media_type === 'video_upload' || currentSlide.media_type === 'video_url' ? (
-                <video src={currentMediaUrl} controls className="w-full max-h-[500px] rounded-xl" />
+                <video src={currentMediaUrl} controls className="w-full max-h-125 rounded-xl" />
               ) : (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={currentMediaUrl} alt={currentSlide.title} className="w-full max-h-[500px] object-contain rounded-xl" />
+                <img src={currentMediaUrl} alt={currentSlide.title} className="w-full max-h-125 object-contain rounded-xl" />
               )}
             </div>
 

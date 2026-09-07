@@ -31,12 +31,12 @@ function PasswordInput({
           placeholder={placeholder}
           required
           minLength={8}
-          className="w-full px-4 py-3 pr-12 rounded-xl border border-[rgba(196,200,188,0.5)] bg-[#faf6f0] text-[#2e3230] placeholder:text-[#78716c] focus:outline-none focus:ring-2 focus:ring-[#4a7c59]/40 focus:border-[#4a7c59] transition-all text-sm"
+          className="w-full px-4 py-3 pr-12 rounded-xl border border-[rgba(196,200,188,0.5)] bg-board text-text-primary placeholder:text-text-tertiary focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all text-sm"
         />
         <button
           type="button"
           onClick={() => setVisible((v) => !v)}
-          className="absolute right-3 top-1/2 -translate-y-1/2 text-[#78716c] hover:text-[#4a7c59] transition-colors p-1"
+          className="absolute right-3 top-1/2 -translate-y-1/2 text-text-tertiary hover:text-primary transition-colors p-1"
           aria-label={visible ? 'Hide password' : 'Show password'}
         >
           {visible ? (
@@ -64,22 +64,22 @@ function ResetPasswordContent() {
 
   if (!hasToken) {
     return (
-      <div className="min-h-screen flex bg-[#faf6f0]">
+      <div className="min-h-screen flex bg-board">
         <div className="flex-1 flex items-center justify-center p-6 lg:p-12">
           <div className="w-full max-w-md">
-            <div className="bg-white rounded-3xl shadow-xl shadow-[#4a7c59]/10 p-8 text-center">
+            <div className="bg-white rounded-3xl shadow-xl shadow-primary/10 p-8 text-center">
               <div className="w-16 h-16 rounded-2xl bg-amber-100 flex items-center justify-center mx-auto mb-6">
                 <Lock className="w-8 h-8 text-amber-600" />
               </div>
-              <h2 className="text-2xl font-bold text-[#2e3230] font-['Literata',serif] mb-2">
+              <h2 className="text-2xl font-bold text-text-primary font-['Literata',serif] mb-2">
                 Invalid or Expired Link
               </h2>
-              <p className="text-[#78716c] mb-6">
+              <p className="text-text-tertiary mb-6">
                 This password reset link is invalid or has expired. Please request a new one.
               </p>
               <Link
                 href="/forgot-password"
-                className="inline-flex items-center gap-2 px-6 py-3.5 bg-[#4a7c59] hover:bg-[#3f664a] text-white rounded-xl font-semibold text-sm transition-all"
+                className="inline-flex items-center gap-2 px-6 py-3.5 bg-primary hover:bg-primary-hover text-white rounded-xl font-semibold text-sm transition-all"
               >
                 Request New Link
                 <ArrowRight className="w-4 h-4" />
@@ -93,22 +93,22 @@ function ResetPasswordContent() {
 
   if (state?.success) {
     return (
-      <div className="min-h-screen flex bg-[#faf6f0]">
+      <div className="min-h-screen flex bg-board">
         <div className="flex-1 flex items-center justify-center p-6 lg:p-12">
           <div className="w-full max-w-md">
-            <div className="bg-white rounded-3xl shadow-xl shadow-[#4a7c59]/10 p-8 text-center">
+            <div className="bg-white rounded-3xl shadow-xl shadow-primary/10 p-8 text-center">
               <div className="w-16 h-16 rounded-2xl bg-green-100 flex items-center justify-center mx-auto mb-6">
                 <CheckCircle2 className="w-8 h-8 text-green-600" />
               </div>
-              <h2 className="text-2xl font-bold text-[#2e3230] font-['Literata',serif] mb-2">
+              <h2 className="text-2xl font-bold text-text-primary font-['Literata',serif] mb-2">
                 Password Updated!
               </h2>
-              <p className="text-[#78716c] mb-6">
+              <p className="text-text-tertiary mb-6">
                 {state.success}
               </p>
               <Link
                 href="/login"
-                className="inline-flex items-center gap-2 px-6 py-3.5 bg-[#4a7c59] hover:bg-[#3f664a] text-white rounded-xl font-semibold text-sm transition-all"
+                className="inline-flex items-center gap-2 px-6 py-3.5 bg-primary hover:bg-primary-hover text-white rounded-xl font-semibold text-sm transition-all"
               >
                 Sign In
                 <ArrowRight className="w-4 h-4" />
@@ -121,9 +121,9 @@ function ResetPasswordContent() {
   }
 
   return (
-    <div className="min-h-screen flex bg-[#faf6f0]">
+    <div className="min-h-screen flex bg-board">
       {/* Left decorative panel */}
-      <div className="hidden lg:flex lg:w-1/2 flex-col items-center justify-center bg-gradient-to-br from-[#4a7c59] via-[#3f664a] to-[#2a6038] p-12 relative overflow-hidden">
+      <div className="hidden lg:flex lg:w-1/2 flex-col items-center justify-center bg-linear-to-br from-primary via-primary-hover to-status-green p-12 relative overflow-hidden">
         <div className="absolute -top-24 -left-24 w-96 h-96 rounded-full bg-white/5" />
         <div className="absolute -bottom-16 -right-16 w-72 h-72 rounded-full bg-white/5" />
         
@@ -143,17 +143,17 @@ function ResetPasswordContent() {
         <div className="w-full max-w-md">
           {/* Mobile logo */}
           <div className="lg:hidden text-center mb-8">
-            <div className="w-12 h-12 rounded-2xl bg-[#4a7c59] flex items-center justify-center mx-auto mb-3">
+            <div className="w-12 h-12 rounded-2xl bg-primary flex items-center justify-center mx-auto mb-3">
               <Lock className="w-6 h-6 text-white" />
             </div>
-            <h1 className="text-2xl font-bold font-['Literata',serif] text-[#2e3230]">New Password</h1>
+            <h1 className="text-2xl font-bold font-['Literata',serif] text-text-primary">New Password</h1>
           </div>
 
-          <div className="bg-white rounded-3xl shadow-xl shadow-[#4a7c59]/10 p-8">
-            <h2 className="text-2xl font-bold text-[#2e3230] font-['Literata',serif] mb-2">
+          <div className="bg-white rounded-3xl shadow-xl shadow-primary/10 p-8">
+            <h2 className="text-2xl font-bold text-text-primary font-['Literata',serif] mb-2">
               Create new password
             </h2>
-            <p className="text-[#78716c] text-sm mb-7">
+            <p className="text-text-tertiary text-sm mb-7">
               Your new password must be at least 8 characters long.
             </p>
 
@@ -173,7 +173,7 @@ function ResetPasswordContent() {
               />
 
               {state?.error && (
-                <p className="text-sm text-[#690005] bg-[#ffdad8] rounded-xl px-4 py-3 flex items-start gap-2">
+                <p className="text-sm text-coral-text bg-coral-bg rounded-xl px-4 py-3 flex items-start gap-2">
                   <span className="mt-0.5 shrink-0">⚠</span>
                   {state.error}
                 </p>
@@ -182,7 +182,7 @@ function ResetPasswordContent() {
               <button
                 type="submit"
                 disabled={pending}
-                className="w-full flex items-center justify-center gap-2 px-6 py-3.5 bg-[#4a7c59] hover:bg-[#3f664a] disabled:opacity-60 text-white rounded-xl font-semibold text-sm transition-all shadow-sm hover:shadow-md active:scale-[0.98]"
+                className="w-full flex items-center justify-center gap-2 px-6 py-3.5 bg-primary hover:bg-primary-hover disabled:opacity-60 text-white rounded-xl font-semibold text-sm transition-all shadow-sm hover:shadow-md active:scale-[0.98]"
               >
                 {pending ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
@@ -194,7 +194,7 @@ function ResetPasswordContent() {
             </form>
           </div>
 
-          <p className="text-center text-xs text-[#78716c] mt-6">
+          <p className="text-center text-xs text-text-tertiary mt-6">
             Protected by Supabase Auth · End-to-end encrypted
           </p>
         </div>
@@ -206,8 +206,8 @@ function ResetPasswordContent() {
 export default function ResetPasswordPage() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center bg-[#faf6f0]">
-        <Loader2 className="w-8 h-8 animate-spin text-[#4a7c59]" />
+      <div className="min-h-screen flex items-center justify-center bg-board">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
       </div>
     }>
       <ResetPasswordContent />

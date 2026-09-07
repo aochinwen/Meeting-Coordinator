@@ -77,13 +77,13 @@ export function EventChip({
             <Video className={cn(compact ? 'h-3 w-3' : 'h-3.5 w-3.5', 'shrink-0')} />
             {time && <span className="font-medium tabular-nums shrink-0">{time}</span>}
           </div>
-          <span className={cn('font-light text-left flex-1 min-w-0', isExpandedState ? 'whitespace-normal break-words mt-1 mb-2' : (compact ? 'line-clamp-2' : 'line-clamp-3'))}>
+          <span className={cn('font-light text-left flex-1 min-w-0', isExpandedState ? 'whitespace-normal wrap-break-word mt-1 mb-2' : (compact ? 'line-clamp-2' : 'line-clamp-3'))}>
             {event.title}
           </span>
           {isExpandedState && (
             <div className="flex flex-col gap-1.5 mt-2 border-t border-status-green/20 pt-2 text-xs opacity-80">
               {event.description && (
-                <div className="font-normal italic break-words line-clamp-3 mb-1">
+                <div className="font-normal italic wrap-break-word line-clamp-3 mb-1">
                   {event.description}
                 </div>
               )}
@@ -106,7 +106,7 @@ export function EventChip({
           <div className="flex items-center gap-1.5 shrink-0">
             <Icon className={cn(compact ? 'h-3 w-3' : 'h-3.5 w-3.5', 'shrink-0')} />
           </div>
-          <span className={cn('font-light text-left flex-1 min-w-0', isExpandedState ? 'whitespace-normal break-words' : (compact ? 'line-clamp-2' : 'line-clamp-3'), event.isCompleted && 'line-through opacity-70')}>
+          <span className={cn('font-light text-left flex-1 min-w-0', isExpandedState ? 'whitespace-normal wrap-break-word' : (compact ? 'line-clamp-2' : 'line-clamp-3'), event.isCompleted && 'line-through opacity-70')}>
             {event.title}
           </span>
         </>
@@ -138,7 +138,7 @@ export function EventChip({
       'flex-col gap-0.5',
       'px-2 py-1 text-xs',
       isExpandedState
-        ? 'w-full max-h-[200px] ring-1 ring-black/5 shadow-xl z-[100] scale-[1.02] opacity-100'
+        ? 'w-full max-h-[200px] ring-1 ring-black/5 shadow-xl z-100 scale-[1.02] opacity-100'
         : cn('w-full', compact ? 'max-h-[48px]' : 'max-h-[80px]'),
       isGroupExpanded && isExpandedState && 'mb-1',
       isAbsolute ? 'absolute top-0 left-0' : 'relative',
@@ -164,7 +164,7 @@ export function EventChip({
 
   return (
     <div
-      className={cn("relative w-full", isHoveredOnly && "z-[100]")}
+      className={cn("relative w-full", isHoveredOnly && "z-100")}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
     >

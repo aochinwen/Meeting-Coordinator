@@ -52,7 +52,7 @@ export function InitiativePresentClient({ initiativeId, initiativeTitle, slides 
 
   if (!current) {
     return (
-      <div className="max-w-[960px] mx-auto py-16 text-center">
+      <div className="max-w-240 mx-auto py-16 text-center">
         <p className="text-text-secondary">No slides available.</p>
         <Link href={`/demo/${initiativeId}`} className="inline-flex mt-4 px-4 py-2 rounded-full border border-border">
           Back to Initiative
@@ -70,13 +70,13 @@ export function InitiativePresentClient({ initiativeId, initiativeTitle, slides 
         </Link>
       </div>
 
-      <div className="max-w-[1100px] mx-auto h-full flex flex-col gap-6">
+      <div className="max-w-275 mx-auto h-full flex flex-col gap-6">
         <div className="pt-12">
           <p className="text-sm uppercase tracking-widest text-white/70">Present Mode</p>
           <h1 className="text-3xl md:text-4xl font-bold font-literata mt-2 text-white">{initiativeTitle}</h1>
         </div>
 
-        <div className="flex-1 rounded-2xl border border-white/20 bg-black/30 p-3 flex items-center justify-center min-h-[420px]">
+        <div className="flex-1 rounded-2xl border border-white/20 bg-black/30 p-3 flex items-center justify-center min-h-105">
           {current.media_type === 'video_upload' || current.media_type === 'video_url' ? (
             <video src={mediaUrl} controls className="w-full max-h-[65vh] rounded-xl" />
           ) : (

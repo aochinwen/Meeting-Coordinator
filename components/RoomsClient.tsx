@@ -41,7 +41,7 @@ export function RoomsClient() {
 
   return (
     <>
-      <div className="max-w-[1280px] mx-auto pb-24 pt-8 space-y-8 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-7xl mx-auto pb-24 pt-8 space-y-8 px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="flex flex-col gap-6">
           <div className="flex flex-col gap-4 sm:gap-6 sm:flex-row sm:items-end sm:justify-between shrink-0">
@@ -82,7 +82,7 @@ export function RoomsClient() {
         </div>
 
         {/* Room Calendar */}
-        <div className="bg-white border border-border/20 rounded-[24px] p-4 sm:p-6 shadow-sm">
+        <div className="bg-white border border-border/20 rounded-3xl p-4 sm:p-6 shadow-sm">
           <RoomCalendar
             pendingSlot={pendingSlot}
             onPendingSlotChange={setPendingSlot}
@@ -113,7 +113,7 @@ export function RoomsClient() {
               </button>
               <button
                 onClick={handleProceed}
-                className="flex-[2] sm:flex-none flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl bg-primary text-white text-sm font-bold hover:bg-primary/90 transition-all shadow-sm hover:shadow-md active:scale-[0.98]"
+                className="flex-2 sm:flex-none flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl bg-primary text-white text-sm font-bold hover:bg-primary/90 transition-all shadow-sm hover:shadow-md active:scale-[0.98]"
               >
                 Next
                 <ArrowRight className="h-4 w-4" />
@@ -123,7 +123,7 @@ export function RoomsClient() {
         )}
 
         {/* Instructions */}
-        <div className="bg-surface border border-border/30 rounded-[24px] p-5 sm:p-6">
+        <div className="bg-surface border border-border/30 rounded-3xl p-5 sm:p-6">
           <div className="flex items-start gap-4">
             <div className="h-12 w-12 rounded-2xl bg-primary/10 flex items-center justify-center shrink-0">
               <CalendarIcon className="h-6 w-6 text-primary" />

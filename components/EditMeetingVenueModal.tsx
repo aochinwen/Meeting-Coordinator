@@ -594,7 +594,7 @@ function SingleOccurrenceSelector({
             )}
           >
             <DoorOpen className="h-4 w-4" />
-            <span className="truncate max-w-[120px]">{room.name}</span>
+            <span className="truncate max-w-30">{room.name}</span>
             <span className={cn(
               'flex items-center gap-1 text-xs font-medium',
               room.id === selectedRoomId ? 'text-white/80' : 'text-text-secondary'
@@ -629,7 +629,7 @@ function SingleOccurrenceSelector({
               <div
                 key={format(day, 'yyyy-MM-dd')}
                 className={cn(
-                  'flex-1 min-w-[100px] p-2 text-center border-r border-border/30 last:border-r-0',
+                  'flex-1 min-w-25 p-2 text-center border-r border-border/30 last:border-r-0',
                   isToday && 'bg-primary/5',
                   isMeetingDay && 'bg-amber/10'
                 )}
@@ -648,7 +648,7 @@ function SingleOccurrenceSelector({
         </div>
 
         {/* Calendar Body */}
-        <div ref={calendarBodyRef} className="overflow-auto max-h-[400px]">
+        <div ref={calendarBodyRef} className="overflow-auto max-h-100">
           {isLoading ? (
             <div className="flex items-center justify-center py-20">
               <div className="h-8 w-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
@@ -959,7 +959,7 @@ function SimpleCalendarGrid({
             ref={dayColumnRef}
             key={format(day, 'yyyy-MM-dd')}
             data-day-index={dayIndex}
-            className="flex-1 min-w-[100px] relative border-r border-border/30 last:border-r-0 bg-white/50"
+            className="flex-1 min-w-25 relative border-r border-border/30 last:border-r-0 bg-white/50"
             style={{ height: HOURS.length * SLOT_HEIGHT }}
             onMouseUp={() => { if (selectedRoom) handleMouseUp(); }}
           >

@@ -628,7 +628,7 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
   const recurrenceDisplay = isRecurring ? formatRecurrencePattern(frequency, selectedDays, startDate ? new Date(startDate + 'T00:00:00') : undefined) : 'One-time meeting';
 
   return (
-    <div className="max-w-[1280px] mx-auto pb-24 pt-8 space-y-8 px-4 sm:px-6 lg:px-8">
+    <div className="max-w-7xl mx-auto pb-24 pt-8 space-y-8 px-4 sm:px-6 lg:px-8">
       {/* Header */}
           <div className="flex flex-col gap-6">
             <div className="flex flex-col gap-4 sm:gap-6 sm:flex-row sm:items-end sm:justify-between shrink-0">
@@ -687,10 +687,10 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
       <div className="flex flex-col sm:flex-row gap-6 sm:gap-8 shrink-0 w-full">
 
         {/* Left Column - Configuration */}
-        <div className="w-full sm:flex-[2] flex flex-col gap-6 sm:gap-8 min-w-0">
+        <div className="w-full sm:flex-2 flex flex-col gap-6 sm:gap-8 min-w-0">
 
           {/* Meeting Details */}
-          <div className="bg-white border border-border/20 rounded-[24px] p-6 flex flex-col gap-6 shadow-sm">
+          <div className="bg-white border border-border/20 rounded-3xl p-6 flex flex-col gap-6 shadow-sm">
             <div className="flex items-center gap-3">
               <CalendarIcon className="h-5 w-5 text-text-primary" />
               <h2 className="text-xl font-bold text-text-primary font-literata">
@@ -724,7 +724,7 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
           </div>
 
           {/* Recurrence Settings */}
-          <div className="bg-white border border-border/20 rounded-[24px] p-6 flex flex-col gap-6 shadow-sm">
+          <div className="bg-white border border-border/20 rounded-3xl p-6 flex flex-col gap-6 shadow-sm">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <Repeat className="h-5 w-5 text-text-primary" />
@@ -754,7 +754,7 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 sm:gap-8">
                   <div className="flex flex-col gap-3">
                     <label className="text-xs font-bold text-text-secondary uppercase tracking-widest">Frequency</label>
-                    <div className="flex bg-status-grey-bg rounded-[16px] p-1">
+                    <div className="flex bg-status-grey-bg rounded-2xl p-1">
                       {(['daily', 'weekly', 'bi-weekly', 'monthly'] as const).map((freq) => {
                         const isMonthly = freq === 'monthly';
                         const active = isMonthly
@@ -773,7 +773,7 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
                               }
                             }}
                             className={cn(
-                              "flex-1 py-1.5 rounded-[12px] text-sm font-bold transition-all capitalize",
+                              "flex-1 py-1.5 rounded-xl text-sm font-bold transition-all capitalize",
                               active ? "bg-white text-text-primary shadow-sm" : "text-text-primary hover:bg-white/50"
                             )}
                           >
@@ -1035,7 +1035,7 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
           </div>
 
           {/* Template Selection */}
-          <div className="bg-surface border border-border/30 rounded-[24px] p-6 flex flex-col gap-6">
+          <div className="bg-surface border border-border/30 rounded-3xl p-6 flex flex-col gap-6">
             <div className="flex items-center gap-3">
               <Sparkles className="h-5 w-5 text-text-primary" />
               <h2 className="text-xl font-bold text-text-primary font-literata">
@@ -1049,7 +1049,7 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
                   key={template.id}
                   onClick={() => handleTemplateSelect(template.id)}
                   className={cn(
-                    "relative rounded-[24px] p-5 cursor-pointer transition-all border-2",
+                    "relative rounded-3xl p-5 cursor-pointer transition-all border-2",
                     selectedTemplate === template.id
                       ? "bg-cream border-primary shadow-sm" 
                       : "bg-white border-border/50 hover:border-primary/50"
@@ -1071,7 +1071,7 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
               <div 
                 onClick={() => handleTemplateSelect(null)}
                 className={cn(
-                  "relative rounded-[24px] p-5 cursor-pointer transition-all border-2 border-dashed flex flex-col items-center justify-center text-center",
+                  "relative rounded-3xl p-5 cursor-pointer transition-all border-2 border-dashed flex flex-col items-center justify-center text-center",
                   selectedTemplate === null
                     ? "bg-cream border-primary shadow-sm" 
                     : "bg-transparent border-border/50 hover:border-primary/50"
@@ -1084,7 +1084,7 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
           </div>
 
           {/* Meeting Roles - Chairman, Coordinator & Invitees */}
-          <div className="bg-white border border-border/20 rounded-[24px] p-6 flex flex-col gap-6 shadow-sm">
+          <div className="bg-white border border-border/20 rounded-3xl p-6 flex flex-col gap-6 shadow-sm">
             <div className="flex items-center gap-3">
               <Users className="h-5 w-5 text-text-primary" />
               <h2 className="text-xl font-bold text-text-primary font-literata">
@@ -1160,7 +1160,7 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
           </div>
 
           {/* Checklist Tasks */}
-          <div className="bg-white border border-border/20 rounded-[24px] p-6 flex flex-col gap-6 shadow-sm">
+          <div className="bg-white border border-border/20 rounded-3xl p-6 flex flex-col gap-6 shadow-sm">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <svg className="h-5 w-5 text-text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1274,8 +1274,8 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
         <div className="w-full sm:flex-1 flex flex-col gap-6 min-w-0">
           
           {/* Schedule Summary Card */}
-          <div className="bg-primary rounded-[24px] p-8 flex flex-col gap-6 text-white shadow-lg relative overflow-hidden">
-            <div className="absolute top-[-20px] right-[-20px] h-32 w-32 bg-white/10 blur-[30px] rounded-full point-events-none"></div>
+          <div className="bg-primary rounded-3xl p-8 flex flex-col gap-6 text-white shadow-lg relative overflow-hidden">
+            <div className="absolute -top-5 -right-5 h-32 w-32 bg-white/10 blur-[30px] rounded-full point-events-none"></div>
             
             <h3 className="text-2xl font-bold tracking-tight font-literata">
               Schedule Summary
@@ -1348,7 +1348,7 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
           </div>
 
           {/* Participant Selection */}
-          <div className="bg-white border border-border/20 rounded-[24px] p-6 flex flex-col gap-4">
+          <div className="bg-white border border-border/20 rounded-3xl p-6 flex flex-col gap-4">
             <div className="flex items-center gap-2">
               <Users className="h-5 w-5 text-text-primary" />
               <h3 className="text-base font-bold text-text-primary font-literata">
@@ -1393,7 +1393,7 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
           </div>
 
           {/* Organizer Tips */}
-          <div className="bg-amber border border-amber-border/30 rounded-[24px] p-6 flex flex-col gap-4">
+          <div className="bg-amber border border-amber-border/30 rounded-3xl p-6 flex flex-col gap-4">
             <div className="flex items-center gap-2">
               <Lightbulb className="h-5 w-5 text-text-primary" />
               <h3 className="text-base font-bold text-text-primary font-literata">
@@ -1451,7 +1451,7 @@ export function ScheduleClient({ initialTemplates = [], currentUser }: ScheduleC
           </div>
 
           {/* Live Preview */}
-          <div className="bg-white border border-border/30 rounded-[24px] p-6 flex items-center justify-between cursor-pointer hover:bg-surface transition-colors shadow-sm">
+          <div className="bg-white border border-border/30 rounded-3xl p-6 flex items-center justify-between cursor-pointer hover:bg-surface transition-colors shadow-sm">
             <div className="flex items-center gap-4">
               <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
                 <Eye className="h-5 w-5 text-primary" />

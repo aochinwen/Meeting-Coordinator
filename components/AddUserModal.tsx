@@ -46,7 +46,7 @@ export function AddUserModal({ isOpen, onClose, onAdd }: AddUserModalProps) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
       <div 
-        className="bg-white rounded-[32px] w-full max-w-lg shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200"
+        className="bg-white rounded-4xl w-full max-w-lg shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="px-8 py-6 border-b border-border/30 flex items-center justify-between bg-surface">

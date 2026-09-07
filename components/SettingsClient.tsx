@@ -22,7 +22,7 @@ function StatusMessage({ state }: { state: { error?: string; success?: string } 
       className={`flex items-start gap-2 rounded-xl px-4 py-3 text-sm ${
         isError
           ? 'bg-coral-bg text-coral-text'
-          : 'bg-[#d8f0de] text-[#2a6038]'
+          : 'bg-status-green-bg text-status-green'
       }`}
     >
       {isError ? (
@@ -47,7 +47,7 @@ function SectionCard({
   children: React.ReactNode;
 }) {
   return (
-    <div className="bg-white border border-border rounded-[24px] p-6 flex flex-col gap-5 shadow-sm">
+    <div className="bg-white border border-border rounded-3xl p-6 flex flex-col gap-5 shadow-sm">
       <div className="flex items-start gap-3">
         <div className="w-9 h-9 rounded-xl bg-surface flex items-center justify-center shrink-0">
           <Icon className="w-4 h-4 text-primary" />

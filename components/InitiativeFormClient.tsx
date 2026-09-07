@@ -343,7 +343,7 @@ export function InitiativeFormClient({ mode, initiativeId }: InitiativeFormClien
   }
 
   return (
-    <form onSubmit={handleSubmit} className="max-w-[1080px] mx-auto space-y-8 pb-12">
+    <form onSubmit={handleSubmit} className="max-w-270 mx-auto space-y-8 pb-12">
       <div>
         <h1 className="text-4xl font-bold text-text-primary font-literata">
           {mode === 'create' ? 'Create Initiative' : 'Edit Initiative'}

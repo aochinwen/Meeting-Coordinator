@@ -385,7 +385,7 @@ function ChecklistClientComponent({ meetingId, currentUser }: ChecklistClientPro
 
   if (loading) {
     return (
-      <div className="max-w-[1280px] mx-auto pb-24 h-full flex flex-col pt-8 space-y-8 pl-8 pr-8">
+      <div className="max-w-7xl mx-auto pb-24 h-full flex flex-col pt-8 space-y-8 pl-8 pr-8">
         <div className="flex items-center justify-center h-64">
           <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full"></div>
         </div>
@@ -394,7 +394,7 @@ function ChecklistClientComponent({ meetingId, currentUser }: ChecklistClientPro
   }
 
   return (
-    <div className="max-w-[1280px] mx-auto pb-24 h-full flex flex-col pt-8 space-y-8 pl-8 pr-8">
+    <div className="max-w-7xl mx-auto pb-24 h-full flex flex-col pt-8 space-y-8 pl-8 pr-8">
       {/* Header */}
       <div className="flex items-end justify-between shrink-0">
         <div className="flex flex-col gap-2">
@@ -424,7 +424,7 @@ function ChecklistClientComponent({ meetingId, currentUser }: ChecklistClientPro
       {/* Top Overview Stats */}
       <div className="grid grid-cols-3 gap-6 shrink-0 pt-4">
         {/* Completion */}
-        <div className="bg-status-grey-bg border border-border/30 rounded-3xl p-6 flex justify-between items-center h-[114px]">
+        <div className="bg-status-grey-bg border border-border/30 rounded-3xl p-6 flex justify-between items-center h-28.5">
           <div className="flex flex-col">
             <span className="text-sm font-bold text-text-secondary tracking-wide uppercase mb-1">Completion</span>
             <span className="text-3xl font-bold text-primary">{progress}%</span>
@@ -435,7 +435,7 @@ function ChecklistClientComponent({ meetingId, currentUser }: ChecklistClientPro
         </div>
 
         {/* Due Date */}
-        <div className="bg-amber border border-amber-border/30 rounded-3xl p-6 flex justify-between items-center h-[114px]">
+        <div className="bg-amber border border-amber-border/30 rounded-3xl p-6 flex justify-between items-center h-28.5">
           <div className="flex flex-col">
             <span className="text-sm font-bold text-text-primary tracking-wide uppercase mb-1">Tasks</span>
             <span className="text-3xl font-bold text-status-amber">{tasks.length}</span>
@@ -446,7 +446,7 @@ function ChecklistClientComponent({ meetingId, currentUser }: ChecklistClientPro
         </div>
 
         {/* Collaborators */}
-        <div className="bg-mint border border-sage/30 rounded-3xl p-6 flex justify-between items-center h-[114px]">
+        <div className="bg-mint border border-sage/30 rounded-3xl p-6 flex justify-between items-center h-28.5">
           <div className="flex flex-col">
             <span className="text-sm font-bold text-status-green tracking-wide uppercase mb-2">Completed</span>
             <div className="flex -space-x-2">
@@ -726,12 +726,12 @@ function ChecklistClientComponent({ meetingId, currentUser }: ChecklistClientPro
             
             {/* Input Block */}
             <div className="flex flex-col gap-2 relative z-10 p-1">
-              <div className="bg-status-grey-bg border border-border/20 rounded-2xl p-[5px]">
+              <div className="bg-status-grey-bg border border-border/20 rounded-2xl p-1.25">
                  <textarea 
                    value={commentInput}
                    onChange={(e) => setCommentInput(e.target.value)}
                    placeholder="Post to the activity stream"
-                   className="w-full bg-transparent border-none p-3 resize-none outline-none text-sm text-text-secondary min-h-[50px]"
+                   className="w-full bg-transparent border-none p-3 resize-none outline-none text-sm text-text-secondary min-h-12.5"
                  />
               </div>
               <div className="flex justify-between items-center px-1 mt-1 gap-2">
@@ -762,7 +762,7 @@ function ChecklistClientComponent({ meetingId, currentUser }: ChecklistClientPro
             {/* Thread */}
             <div className="flex flex-col gap-8 relative pb-2 pt-1 pl-1">
               {/* Vertical line connecting threads */}
-              <div className="absolute left-[17px] top-6 bottom-4 w-0.5 bg-border/20"></div>
+              <div className="absolute left-4.25 top-6 bottom-4 w-0.5 bg-border/20"></div>
 
               {activities.length === 0 ? (
                 <div className="text-sm text-text-tertiary">No activities yet.</div>
@@ -806,14 +806,14 @@ function ChecklistClientComponent({ meetingId, currentUser }: ChecklistClientPro
           </div>
 
           {/* Location Map Card */}
-          <div className="bg-white border border-border/20 rounded-3xl overflow-hidden shadow-sm flex flex-col relative h-[220px]">
+          <div className="bg-white border border-border/20 rounded-3xl overflow-hidden shadow-sm flex flex-col relative h-55">
              {/* Map Image Base */}
-             <div className="h-[128px] w-full bg-taupe relative overflow-hidden">
+             <div className="h-32 w-full bg-taupe relative overflow-hidden">
                 <div className="absolute inset-0 bg-[url('data:image/svg+xml;utf8,<svg width=\'400\' height=\'200\' viewBox=\'0 0 400 200\' fill=\'none\' xmlns=\'http://www.w3.org/2000/svg\'><rect width=\'400\' height=\'200\' fill=\'%23E5E7EB\'/><path d=\'M0 50L400 150M0 100L400 200M0 150L400 250\' stroke=\'%23D1D5DB\' stroke-width=\'4\'/><path d=\'M100 0L200 200M200 0L300 200M300 0L400 200\' stroke=\'%23D1D5DB\' stroke-width=\'4\'/></svg>')] bg-cover bg-center mix-blend-multiply opacity-50"></div>
                 
                 {/* Pin Placeholder */}
                 <div className="absolute inset-x-0 bottom-4 flex justify-center">
-                   <div className="w-10 h-14 bg-white/30 backdrop-blur-sm shadow flex items-center justify-center rounded-t-full rounded-b-[4px] relative -bottom-2 z-10 border border-white/50">
+                   <div className="w-10 h-14 bg-white/30 backdrop-blur-sm shadow flex items-center justify-center rounded-t-full rounded-b-sm relative -bottom-2 z-10 border border-white/50">
                       <div className="w-6 h-6 rounded-full bg-white/80 shadow-inner flex items-center justify-center">
                          <div className="w-2 h-2 rounded-full bg-primary/40"></div>
                       </div>

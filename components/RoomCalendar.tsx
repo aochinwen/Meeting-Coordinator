@@ -487,7 +487,7 @@ export function RoomCalendar({ onBookingClick, onTimeSlotClick, onPendingSlotCha
                   )}
                 >
                   <DoorOpen className="h-4 w-4" />
-                  <span className="truncate max-w-[160px]">{room.name}</span>
+                  <span className="truncate max-w-40">{room.name}</span>
                   <span
                     className={cn(
                       'flex items-center gap-1 text-xs font-medium',
@@ -502,8 +502,8 @@ export function RoomCalendar({ onBookingClick, onTimeSlotClick, onPendingSlotCha
             })}
           </div>
 
-          <div className="bg-white border border-border/30 rounded-3xl shadow-sm overflow-auto max-h-[700px]">
-            <div className="min-w-[720px]">
+          <div className="bg-white border border-border/30 rounded-3xl shadow-sm overflow-auto max-h-175">
+            <div className="min-w-180">
             {/* Column Headers: time + 7 days for the selected room */}
             <div className="flex border-b border-border/50 sticky top-0 z-30 bg-white">
               <div className="sticky left-0 z-40 w-16 sm:w-20 shrink-0 p-3 sm:p-4 border-r border-border/50 bg-surface">
@@ -517,7 +517,7 @@ export function RoomCalendar({ onBookingClick, onTimeSlotClick, onPendingSlotCha
                 <div
                   key={format(day, 'yyyy-MM-dd')}
                   className={cn(
-                    'flex-1 min-w-[90px] sm:min-w-[120px] p-2 sm:p-3 text-center border-r border-border/50 last:border-r-0 bg-surface/50',
+                    'flex-1 min-w-22.5 sm:min-w-30 p-2 sm:p-3 text-center border-r border-border/50 last:border-r-0 bg-surface/50',
                     isToday && 'bg-primary/5 border-l-2 border-l-primary border-r-0'
                   )}
                 >
@@ -581,9 +581,9 @@ export function RoomCalendar({ onBookingClick, onTimeSlotClick, onPendingSlotCha
                           columnRefs.current[dateKey] = el;
                         }}
                         className={cn(
-                          'flex-1 min-w-[90px] sm:min-w-[120px] relative cursor-pointer select-none transition-colors hover:bg-surface/40',
+                          'flex-1 min-w-22.5 sm:min-w-30 relative cursor-pointer select-none transition-colors hover:bg-surface/40',
                           isEvenColumn ? 'bg-white' : 'bg-surface/30',
-                          isToday && 'bg-primary/[0.03] hover:bg-primary/[0.05]',
+                          isToday && 'bg-primary/3 hover:bg-primary/5',
                           'border-r border-border/40 last:border-r-0'
                         )}
 

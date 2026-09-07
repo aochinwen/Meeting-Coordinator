@@ -121,7 +121,7 @@ export function Sidebar() {
                 {route.label}
                 {route.label === 'Inbox' && inboxCount > 0 && (
                   <span className={cn(
-                    'ml-auto flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold leading-none transition-colors',
+                    'ml-auto flex items-center justify-center min-w-4.5 h-4.5 px-1 rounded-full text-[10px] font-bold leading-none transition-colors',
                     route.active ? 'bg-white text-primary' : 'bg-coral-text text-white'
                   )}>
                     {inboxCount > 99 ? '99+' : inboxCount}

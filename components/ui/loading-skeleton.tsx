@@ -18,7 +18,7 @@ export function Skeleton({ className }: SkeletonProps) {
 // Dashboard loading skeleton
 export function DashboardSkeleton() {
   return (
-    <div className="max-w-[1280px] mx-auto space-y-8 pb-12 h-full flex flex-col pt-8 px-4 sm:px-6 lg:px-8">
+    <div className="max-w-7xl mx-auto space-y-8 pb-12 h-full flex flex-col pt-8 px-4 sm:px-6 lg:px-8">
       {/* Header skeleton */}
       <div className="flex flex-col gap-4 sm:gap-6 sm:flex-row sm:items-end sm:justify-between">
         <div className="flex flex-col gap-2">
@@ -31,7 +31,7 @@ export function DashboardSkeleton() {
       {/* Stats cards skeleton */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 shrink-0">
         {[...Array(3)].map((_, i) => (
-          <div key={i} className="bg-surface border border-border/30 rounded-3xl p-6 flex flex-col justify-between h-[178px]">
+          <div key={i} className="bg-surface border border-border/30 rounded-3xl p-6 flex flex-col justify-between h-44.5">
             <div className="flex items-start justify-between">
               <Skeleton className="h-11 w-11 rounded-full" />
               <Skeleton className="h-6 w-24 rounded-full" />
@@ -54,7 +54,7 @@ export function DashboardSkeleton() {
       </div>
 
       {/* Table skeleton */}
-      <div className="bg-white rounded-[24px] shadow-sm border border-border overflow-hidden flex-1 flex-col min-h-0 hidden md:flex">
+      <div className="bg-white rounded-3xl shadow-sm border border-border overflow-hidden flex-1 flex-col min-h-0 hidden md:flex">
         <div className="grid grid-cols-12 gap-4 px-6 py-4 bg-surface/50 border-b border-border">
           {[...Array(5)].map((_, i) => (
             <Skeleton key={i} className="h-4 col-span-2" />
@@ -129,7 +129,7 @@ export function DashboardSkeleton() {
 export function DashboardContentSkeleton() {
   return (
     <>
-      <div className="bg-white rounded-[24px] shadow-sm border border-border overflow-hidden hidden md:flex flex-col">
+      <div className="bg-white rounded-3xl shadow-sm border border-border overflow-hidden hidden md:flex flex-col">
         <div className="grid grid-cols-12 gap-4 px-6 py-4 bg-surface/50 border-b border-border">
           {[...Array(5)].map((_, i) => (
             <Skeleton key={i} className="h-4 col-span-2" />
@@ -185,7 +185,7 @@ export function DashboardContentSkeleton() {
 // Directory page loading skeleton
 export function DirectorySkeleton() {
   return (
-    <div className="max-w-[1280px] mx-auto pb-12 pt-8 space-y-8 px-4 sm:px-6 lg:px-8">
+    <div className="max-w-7xl mx-auto pb-12 pt-8 space-y-8 px-4 sm:px-6 lg:px-8">
       {/* Header */}
       <div className="flex flex-col gap-4 sm:gap-6 sm:flex-row sm:items-end sm:justify-between shrink-0">
         <div className="flex flex-col gap-2">
@@ -197,13 +197,13 @@ export function DirectorySkeleton() {
 
       {/* Controls */}
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 shrink-0">
-        <Skeleton className="h-12 col-span-1 sm:col-span-2 rounded-[24px]" />
-        <Skeleton className="h-12 rounded-[24px] hidden sm:block" />
-        <Skeleton className="h-12 rounded-[24px] hidden sm:block" />
+        <Skeleton className="h-12 col-span-1 sm:col-span-2 rounded-3xl" />
+        <Skeleton className="h-12 rounded-3xl hidden sm:block" />
+        <Skeleton className="h-12 rounded-3xl hidden sm:block" />
       </div>
 
       {/* Table - Desktop */}
-      <div className="bg-white rounded-[24px] shadow-sm overflow-hidden hidden md:block">
+      <div className="bg-white rounded-3xl shadow-sm overflow-hidden hidden md:block">
         <div className="grid grid-cols-12 gap-4 px-6 py-4 bg-surface border-b border-border/30">
           {[...Array(5)].map((_, i) => (
             <Skeleton key={i} className="h-4" />
@@ -258,7 +258,7 @@ export function DirectorySkeleton() {
       {/* Stats cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 shrink-0">
         {[...Array(3)].map((_, i) => (
-          <div key={i} className="rounded-[24px] p-6 flex flex-col gap-4 border">
+          <div key={i} className="rounded-3xl p-6 flex flex-col gap-4 border">
             <div className="flex items-start justify-between">
               <div className="space-y-2">
                 <Skeleton className="h-3 w-28" />
@@ -277,7 +277,7 @@ export function DirectorySkeleton() {
 // Meeting detail loading skeleton
 export function MeetingDetailSkeleton() {
   return (
-    <div className="max-w-[1280px] mx-auto pb-24 flex flex-col pt-8 space-y-8 px-8">
+    <div className="max-w-7xl mx-auto pb-24 flex flex-col pt-8 space-y-8 px-8">
       {/* Header */}
       <div className="flex items-start justify-between shrink-0">
         <div className="flex flex-col gap-3">
@@ -336,7 +336,7 @@ export function CardSkeleton({ className }: { className?: string }) {
 // Stats card skeleton
 export function StatsCardSkeleton() {
   return (
-    <div className="bg-surface border border-border/30 rounded-3xl p-6 flex flex-col justify-between h-[178px]">
+    <div className="bg-surface border border-border/30 rounded-3xl p-6 flex flex-col justify-between h-44.5">
       <div className="flex items-start justify-between">
         <Skeleton className="h-11 w-11 rounded-full" />
         <Skeleton className="h-6 w-24 rounded-full" />

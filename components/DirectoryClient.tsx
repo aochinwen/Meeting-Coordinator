@@ -149,7 +149,7 @@ function DirectoryClientComponent({ initialUsers, activeTeamsCount }: DirectoryC
   };
 
   return (
-    <div className="max-w-[1280px] mx-auto pb-12 pt-8 space-y-8 px-4 sm:px-6 lg:px-8">
+    <div className="max-w-7xl mx-auto pb-12 pt-8 space-y-8 px-4 sm:px-6 lg:px-8">
       {/* Header */}
       <div className="flex flex-col gap-4 sm:gap-6 sm:flex-row sm:items-end sm:justify-between shrink-0">
         <div className="flex flex-col gap-2">
@@ -173,7 +173,7 @@ function DirectoryClientComponent({ initialUsers, activeTeamsCount }: DirectoryC
       {/* Controls */}
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 shrink-0">
         <div className="col-span-1 sm:col-span-2 relative">
-          <div className="bg-white rounded-[24px] shadow-sm flex items-center px-4 py-3 border border-transparent focus-within:ring-2 focus-within:ring-primary/20 transition-all">
+          <div className="bg-white rounded-3xl shadow-sm flex items-center px-4 py-3 border border-transparent focus-within:ring-2 focus-within:ring-primary/20 transition-all">
             <Search className="h-4 w-4 text-gray-500 shrink-0" />
             <input 
               type="text" 
@@ -185,13 +185,13 @@ function DirectoryClientComponent({ initialUsers, activeTeamsCount }: DirectoryC
           </div>
         </div>
         <div className="col-span-1 hidden sm:block">
-          <div className="bg-white rounded-[24px] shadow-sm flex items-center justify-between px-4 py-3 cursor-pointer">
+          <div className="bg-white rounded-3xl shadow-sm flex items-center justify-between px-4 py-3 cursor-pointer">
             <span className="text-base text-text-primary font-light">{organizationFilter}</span>
             <ChevronDown className="h-4 w-4 text-text-primary" />
           </div>
         </div>
         <div className="col-span-1 hidden sm:block">
-          <div className="bg-white rounded-[24px] shadow-sm flex items-center justify-between px-4 py-3 cursor-pointer">
+          <div className="bg-white rounded-3xl shadow-sm flex items-center justify-between px-4 py-3 cursor-pointer">
             <span className="text-base text-text-primary font-light">{rankFilter}</span>
             <ChevronDown className="h-4 w-4 text-text-primary" />
           </div>
@@ -199,7 +199,7 @@ function DirectoryClientComponent({ initialUsers, activeTeamsCount }: DirectoryC
       </div>
 
       {/* Directory Table - Desktop */}
-      <div className="bg-white rounded-[24px] shadow-sm overflow-hidden border border-border/20 hidden md:block">
+      <div className="bg-white rounded-3xl shadow-sm overflow-hidden border border-border/20 hidden md:block">
         {/* Table Header */}
         <div className="grid grid-cols-12 gap-4 px-6 py-4 bg-surface border-b border-border/30 text-xs tracking-[0.6px] uppercase text-text-secondary font-bold shrink-0">
           <div className="col-span-3">Name</div>
@@ -394,7 +394,7 @@ function DirectoryClientComponent({ initialUsers, activeTeamsCount }: DirectoryC
 
       {/* Stats OVERLAY CARDS */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 shrink-0 mt-6">
-        <div className="bg-sage/20 border border-primary/10 rounded-[24px] p-6 flex flex-col gap-4">
+        <div className="bg-sage/20 border border-primary/10 rounded-3xl p-6 flex flex-col gap-4">
           <div className="flex items-start justify-between">
             <div>
               <h3 className="text-sm tracking-widest uppercase text-text-secondary font-light">Total Members</h3>
@@ -405,7 +405,7 @@ function DirectoryClientComponent({ initialUsers, activeTeamsCount }: DirectoryC
           <p className="text-xs text-status-green font-medium">Active directory</p>
         </div>
         
-        <div className="bg-amber/20 border border-status-amber/10 rounded-[24px] p-6 flex flex-col gap-4">
+        <div className="bg-amber/20 border border-status-amber/10 rounded-3xl p-6 flex flex-col gap-4">
           <div className="flex items-start justify-between">
             <div>
               <h3 className="text-sm tracking-widest uppercase text-text-secondary font-light">Active Teams</h3>
@@ -416,7 +416,7 @@ function DirectoryClientComponent({ initialUsers, activeTeamsCount }: DirectoryC
           <p className="text-xs text-status-amber font-medium">Across divisions</p>
         </div>
         
-        <div className="bg-warm border border-text-secondary/10 rounded-[24px] p-6 flex flex-col gap-4">
+        <div className="bg-warm border border-text-secondary/10 rounded-3xl p-6 flex flex-col gap-4">
           <div className="flex items-start justify-between">
             <div>
               <h3 className="text-sm tracking-widest uppercase text-text-secondary font-light">Pending Invites</h3>
